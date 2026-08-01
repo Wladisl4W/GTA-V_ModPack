@@ -259,7 +259,7 @@ namespace RemoveDroppedPedsMod
                     if (settings != null)
                     {
                         settings.ScanRadius = Math.Max(MinScanRadius, Math.Min(MaxScanRadius, settings.ScanRadius));
-                        ModLogger.Info(string.Format("Настройки загружены: Enabled={0}, Radius={1}", settings.ModEnabled, settings.ScanRadius));
+                        ModLogger.Info(string.Format("Настройки загружены: Enabled={0}, Radius={1}, Interval={2}мс", settings.ModEnabled, settings.ScanRadius, settings.ScanIntervalMs));
                         return settings;
                     }
                 }
