@@ -17,12 +17,18 @@ namespace RemoveDroppedPedsMod
         // Настройки
         private bool _modEnabled = true;
         private float _scanRadius = 500f;
+        private int _scanIntervalMs = 5000;
 
         // LemonUI
         private readonly ObjectPool _pool = new ObjectPool();
         private NativeMenu _mainMenu;
         private NativeCheckboxItem _enableCheckbox;
         private NativeListItem<int> _radiusList;
+        private NativeListItem<string> _intervalList;
+
+        // Варианты частоты сканирования: мс и названия пунктов (по индексу _intervalList)
+        private static readonly int[] IntervalOptionsMs = { 2000, 5000, 10000, 20000 };
+        private static readonly string[] IntervalNames = { "Часто (2с)", "Нормально (5с)", "Редко (10с)", "Очень редко (20с)" };
 
         // Таймеры (GameTime - быстрее чем DateTime.Now)
         private int _lastScanGameTime = 0;
@@ -43,26 +49,18 @@ namespace RemoveDroppedPedsMod
             return elapsed >= (uint)intervalMs;
         }
 
-        // Интервал сканирования зависит от радиуса: чем больше радиус,
-        // тем дороже скан (GetNearbyPeds) и тем реже его надо запускать
-        private int GetScanIntervalMs()
-        {
-            if (_scanRadius <= 300f) return 3000;
-            if (_scanRadius <= 1000f) return 6000;
-            if (_scanRadius <= 2000f) return 10000;
-            return 15000;
-        }
-
         // Сохранение настроек
         private class ModSettings
         {
             public bool ModEnabled { get; set; }
             public float ScanRadius { get; set; }
+            public int ScanIntervalMs { get; set; }
 
             public ModSettings()
             {
                 ModEnabled = true;
                 ScanRadius = 500f;
+                ScanIntervalMs = 5000;
             }
         }
 
@@ -82,6 +80,9 @@ namespace RemoveDroppedPedsMod
             // Применение загруженных настроек
             _modEnabled = _settings.ModEnabled;
             _scanRadius = Math.Max(MinScanRadius, Math.Min(MaxScanRadius, _settings.ScanRadius));
+            _scanIntervalMs = Array.IndexOf(IntervalOptionsMs, _settings.ScanIntervalMs) >= 0
+                ? _settings.ScanIntervalMs
+                : 5000;
 
             // Инициализация таймеров
             _lastScanGameTime = Game.GameTime;
@@ -108,9 +109,19 @@ namespace RemoveDroppedPedsMod
             else
                 _radiusList.SelectedItem = 500;
 
+            // Список — частота сканирования
+            int intervalIdx = Array.IndexOf(IntervalOptionsMs, _scanIntervalMs);
+            if (intervalIdx < 0) intervalIdx = 1;
+            _intervalList = new NativeListItem<string>(
+                "Частота сканирования",
+                "Текущий: " + IntervalNames[intervalIdx],
+                IntervalNames);
+            _intervalList.SelectedIndex = intervalIdx;
+
             // Добавление элементов в меню
             _mainMenu.Add(_enableCheckbox);
             _mainMenu.Add(_radiusList);
+            _mainMenu.Add(_intervalList);
 
             // Добавление меню в пул
             _pool.Add(_mainMenu);
@@ -128,6 +139,14 @@ namespace RemoveDroppedPedsMod
                 _scanRadius = _radiusList.SelectedItem;
                 _radiusList.Description = "Текущий: " + ((int)_scanRadius).ToString() + "м";
                 _settings.ScanRadius = _scanRadius;
+                MarkSettingsDirty();
+            };
+
+            _intervalList.ItemChanged += (s, e) =>
+            {
+                _scanIntervalMs = IntervalOptionsMs[e.Index];
+                _intervalList.Description = "Текущий: " + IntervalNames[e.Index];
+                _settings.ScanIntervalMs = _scanIntervalMs;
                 MarkSettingsDirty();
             };
 
@@ -150,7 +169,7 @@ namespace RemoveDroppedPedsMod
             // Автосканирование если мод включен. В меню и на паузе не сканируем —
             // незачем тратить нативы, когда игрок не в мире
             if (_modEnabled && !_mainMenu.Visible && !Game.IsPaused &&
-                HasElapsed(_lastScanGameTime, GetScanIntervalMs()))
+                HasElapsed(_lastScanGameTime, _scanIntervalMs))
             {
                 ScanAndRemoveUnderwaterPeds();
                 _lastScanGameTime = Game.GameTime;
