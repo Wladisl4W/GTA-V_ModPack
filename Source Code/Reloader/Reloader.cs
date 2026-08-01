@@ -137,6 +137,19 @@ public class Reloader : Script
         _plugins.Clear();
     }
 
+    // Добавляет ссылку по пути, пропуская дубликаты одной и той же сборки
+    // (например, Newtonsoft.Json.dll лежит и в scripts, и в ReloaderPlugins).
+    private static void AddReference(Dictionary<string, string> refs, string path)
+    {
+        try
+        {
+            string name = AssemblyName.GetAssemblyName(path).Name;
+            if (!refs.ContainsKey(name))
+                refs[name] = path;
+        }
+        catch { }
+    }
+
     private void LoadPlugins()
     {
         var csFiles = Directory.GetFiles(_pluginsDir, "*.cs");
@@ -163,28 +176,34 @@ public class Reloader : Script
             TempFiles = new TempFileCollection(Path.GetTempPath(), keepFiles: false)
         };
 
-        var scriptsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts");
-        var pluginsRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ReloaderPlugins");
-        var refs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // BaseDirectory в SHVDN — это папка scripts, а не корень игры.
+        // Старый загрузчик жил в scripts\scripts, поэтому для надёжности
+        // перебираем оба варианта. Дубликаты одной сборки исключаем по имени.
+        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        var refs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var dll in Directory.GetFiles(scriptsDir, "*.dll"))
-            refs.Add(dll);
+        foreach (var dir in new[] { baseDir, Path.Combine(baseDir, "scripts") })
+        {
+            if (!Directory.Exists(dir)) continue;
+            foreach (var dll in Directory.GetFiles(dir, "*.dll"))
+                AddReference(refs, dll);
+        }
+
+        var pluginsRoot = Path.Combine(baseDir, "ReloaderPlugins");
         if (Directory.Exists(pluginsRoot))
             foreach (var dll in Directory.GetFiles(pluginsRoot, "*.dll", SearchOption.AllDirectories))
-                refs.Add(dll);
+                AddReference(refs, dll);
 
-        refs.Add("System.dll");
-        refs.Add("System.Core.dll");
-        refs.Add("System.Data.dll");
-        refs.Add("System.Drawing.dll");
-        refs.Add("System.Windows.Forms.dll");
-        refs.Add("System.Xml.dll");
-        refs.Add("System.Web.Extensions.dll");
-        refs.Add(typeof(Script).Assembly.Location);
-        refs.Add(typeof(LemonUI.ObjectPool).Assembly.Location);
+        AddReference(refs, typeof(Script).Assembly.Location);
+        AddReference(refs, typeof(LemonUI.ObjectPool).Assembly.Location);
 
-        foreach (var r in refs) options.ReferencedAssemblies.Add(r);
-        Log("References: " + refs.Count + " (" + refs.Count(r => r.EndsWith(".dll")) + " dlls)");
+        foreach (var systemRef in new[] {
+            "System.dll", "System.Core.dll", "System.Data.dll", "System.Drawing.dll",
+            "System.Windows.Forms.dll", "System.Xml.dll", "System.Web.Extensions.dll" })
+            refs[systemRef] = systemRef;
+
+        foreach (var r in refs.Values) options.ReferencedAssemblies.Add(r);
+        Log("References: " + refs.Count + " (" + refs.Values.Count(r => r.EndsWith(".dll")) + " dlls)");
 
         var results = provider.CompileAssemblyFromFile(options, csFiles);
 
