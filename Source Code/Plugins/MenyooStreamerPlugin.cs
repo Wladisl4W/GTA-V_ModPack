@@ -38,10 +38,18 @@ namespace MenyooStreamer
 
             _pool = new ObjectPool();
             _menu = new MenuManager(_pool);
-            _menu.SetValues((int)_config.ScanRadius, (int)_config.LoadRadius, (int)_config.ClearRadius);
+            _menu.SetValues((int)_config.ScanRadius, (int)_config.LoadRadius, (int)_config.ClearRadius, _config.MaxPeds);
             _menu.StartRequested += () => _startPending = true;
             _menu.RescanRequested += () => _rescanPending = true;
             _menu.StopRequested += ExecuteStop;
+            _menu.ValuesChanged += () =>
+            {
+                _config.ScanRadius = _menu.ScanRadius;
+                _config.LoadRadius = _menu.LoadRadius;
+                _config.ClearRadius = _menu.UnloadRadius;
+                _config.MaxPeds = _menu.MaxPeds;
+                _config.Save();
+            };
 
             GTA.UI.Notification.PostTicker("~b~MenyooStreamer~w~ мод загружен~n~Нажми ~y~U~w~ для меню", false, false);
         }
@@ -155,6 +163,7 @@ namespace MenyooStreamer
 
                 _config.LoadRadius = _menu.LoadRadius;
                 _config.ClearRadius = _menu.UnloadRadius;
+                _config.MaxPeds = _menu.MaxPeds;
                 _config.Save();
 
                 Log("Перезапуск стрима с " + _cachedPeds.Count + " сохранёнными педами");
@@ -196,6 +205,7 @@ namespace MenyooStreamer
                 _config.ScanRadius = _menu.ScanRadius;
                 _config.LoadRadius = _menu.LoadRadius;
                 _config.ClearRadius = _menu.UnloadRadius;
+                _config.MaxPeds = _menu.MaxPeds;
                 _config.Save();
 
                 Log("Сканирование педов: скан=" + _config.ScanRadius + "м загрузка=" + _config.LoadRadius + "м выгрузка=" + _config.ClearRadius + "м");
@@ -256,11 +266,12 @@ namespace MenyooStreamer
         public float ScanRadius { get; set; }
         public int CheckInterval { get; set; }
         public int BatchSize { get; set; }
+        public int MaxPeds { get; set; }
         public float ChunkSize { get; set; }
         public string DataDirectory { get; set; }
 
         private readonly string _configPath;
-        private const int CurrentVersion = 2;
+        private const int CurrentVersion = 3;
 
         public Config()
         {
@@ -269,6 +280,7 @@ namespace MenyooStreamer
             ScanRadius = 3000f;
             CheckInterval = 1000;
             BatchSize = 20;
+            MaxPeds = 150;
             ChunkSize = 50f;
 
             try
@@ -324,6 +336,8 @@ namespace MenyooStreamer
                             CheckInterval = ci;
                         else if (key == "batchsize" && int.TryParse(val, out bs))
                             BatchSize = bs;
+                        else if (key == "maxpeds" && int.TryParse(val, out v))
+                            MaxPeds = v;
                         else if (key == "chunksize" && float.TryParse(val, out cs))
                             ChunkSize = cs;
                     }
@@ -380,6 +394,8 @@ namespace MenyooStreamer
                     "CheckInterval=" + CheckInterval,
                     "; Максимум чанков за тик (больше = быстрее, но лаги)",
                     "BatchSize=" + BatchSize,
+                    "; Максимум одновременно загруженных педов",
+                    "MaxPeds=" + MaxPeds,
                     "; Размер ячейки сетки (метры)",
                     "ChunkSize=" + ChunkSize,
                 };
@@ -401,6 +417,7 @@ namespace MenyooStreamer
                 ScanRadius = Math.Max(100f, Math.Min(ScanRadius, 5000f));
                 CheckInterval = Math.Max(100, Math.Min(CheckInterval, 10000));
                 BatchSize = Math.Max(1, Math.Min(BatchSize, 100));
+                MaxPeds = Math.Max(50, Math.Min(MaxPeds, 1000));
                 ChunkSize = Math.Max(10f, Math.Min(ChunkSize, 1000f));
             }
             catch (Exception ex)
@@ -436,6 +453,7 @@ namespace MenyooStreamer
         private NativeListItem<int> _scanList;
         private NativeListItem<int> _loadList;
         private NativeListItem<int> _unloadList;
+        private NativeListItem<int> _maxPedsList;
         private NativeItem _startItem;
         private NativeItem _rescanItem;
         private NativeItem _stopItem;
@@ -454,10 +472,15 @@ namespace MenyooStreamer
         {
             get { try { return _unloadList.SelectedItem; } catch { return 100; } }
         }
+        public int MaxPeds
+        {
+            get { try { return _maxPedsList.SelectedItem; } catch { return 150; } }
+        }
 
         public event Action StartRequested;
         public event Action RescanRequested;
         public event Action StopRequested;
+        public event Action ValuesChanged;
 
         public MenuManager(ObjectPool pool)
         {
@@ -468,6 +491,7 @@ namespace MenyooStreamer
                 _scanList = CreateNumberList("Радиус сканирования", 100, 5000, 100);
                 _loadList = CreateNumberList("Радиус загрузки", 5, 2000, 5);
                 _unloadList = CreateNumberList("Радиус выгрузки", 10, 2500, 5);
+                _maxPedsList = CreateNumberList("Лимит педов", 50, 1000, 50);
 
                 _startItem = new NativeItem(
                     "~g~Перезапустить стрим",
@@ -485,6 +509,7 @@ namespace MenyooStreamer
                 _menu.Add(_scanList);
                 _menu.Add(_loadList);
                 _menu.Add(_unloadList);
+                _menu.Add(_maxPedsList);
                 _menu.Add(_startItem);
                 _menu.Add(_rescanItem);
                 _menu.Add(_stopItem);
@@ -506,6 +531,11 @@ namespace MenyooStreamer
                 {
                     try { UpdateDebugInfo(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: UpdateDebugInfo", ex); }
                 };
+
+                _scanList.ItemChanged += (s, e) => { try { if (ValuesChanged != null) ValuesChanged(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: ValuesChanged", ex); } };
+                _loadList.ItemChanged += (s, e) => { try { if (ValuesChanged != null) ValuesChanged(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: ValuesChanged", ex); } };
+                _unloadList.ItemChanged += (s, e) => { try { if (ValuesChanged != null) ValuesChanged(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: ValuesChanged", ex); } };
+                _maxPedsList.ItemChanged += (s, e) => { try { if (ValuesChanged != null) ValuesChanged(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: ValuesChanged", ex); } };
 
                 _menu.Closing += (s, e) => IsOpen = false;
                 _menu.Closed += (s, e) => IsOpen = false;
@@ -535,13 +565,14 @@ namespace MenyooStreamer
             }
         }
 
-        public void SetValues(int scanRadius, int loadRadius, int unloadRadius)
+        public void SetValues(int scanRadius, int loadRadius, int unloadRadius, int maxPeds)
         {
             try
             {
                 SetListValue(_scanList, scanRadius);
                 SetListValue(_loadList, loadRadius);
                 SetListValue(_unloadList, unloadRadius);
+                SetListValue(_maxPedsList, maxPeds);
             }
             catch
             {
@@ -783,6 +814,7 @@ namespace MenyooStreamer
                     if (ped == null || !ped.Exists()) continue;
                     if (ped == player) continue;
                     if (ped.IsInVehicle()) continue;
+                    if (ped.IsDead) continue;
 
                     var pos = ped.Position;
                     float dx = pos.X - playerPos.X;
@@ -851,8 +883,12 @@ namespace MenyooStreamer
         private Dictionary<string, List<PedRecord>> _chunks;
         private Dictionary<string, List<Ped>> _loadedChunks;
         private Dictionary<int, PedRecord> _handleMap;
+        private Dictionary<string, int> _failedLoads;
         private DateTime _lastCheck;
         private bool _isStreaming;
+
+        private const int PedsPerChunkTick = 10;
+        private const int MaxLoadAttempts = 20;
 
         public bool IsStreaming { get { return _isStreaming; } }
         public int LoadedPedCount
@@ -891,6 +927,7 @@ namespace MenyooStreamer
             _chunks = new Dictionary<string, List<PedRecord>>();
             _loadedChunks = new Dictionary<string, List<Ped>>();
             _handleMap = new Dictionary<int, PedRecord>();
+            _failedLoads = new Dictionary<string, int>();
             _lastCheck = DateTime.MinValue;
             _isStreaming = false;
         }
@@ -903,6 +940,7 @@ namespace MenyooStreamer
 
                 _chunks.Clear();
                 _handleMap.Clear();
+                _failedLoads.Clear();
 
                 foreach (var ped in peds)
                 {
@@ -953,6 +991,7 @@ namespace MenyooStreamer
 
             _loadedChunks.Clear();
             _handleMap.Clear();
+            _failedLoads.Clear();
         }
 
         public void Update(Vector3 playerPosition)
@@ -997,12 +1036,38 @@ namespace MenyooStreamer
                 foreach (var key in toUnload)
                     UnloadChunk(key);
 
-                int loaded = 0;
+                int processed = 0;
                 foreach (var key in toLoad)
                 {
-                    if (loaded >= _config.BatchSize) break;
-                    if (LoadChunk(key))
-                        loaded++;
+                    if (processed >= _config.BatchSize) break;
+                    if (_handleMap.Count >= _config.MaxPeds) break;
+                    LoadChunk(key);
+                    processed++;
+                }
+
+                foreach (var kvp in _loadedChunks)
+                {
+                    if (processed >= _config.BatchSize) break;
+                    if (_handleMap.Count >= _config.MaxPeds) break;
+
+                    List<PedRecord> records;
+                    if (!_chunks.TryGetValue(kvp.Key, out records)) continue;
+
+                    bool hasPending = false;
+                    foreach (var record in records)
+                    {
+                        if (record.DeletedByMod)
+                        {
+                            hasPending = true;
+                            break;
+                        }
+                    }
+
+                    if (hasPending)
+                    {
+                        LoadChunk(kvp.Key);
+                        processed++;
+                    }
                 }
             }
             catch
@@ -1018,14 +1083,14 @@ namespace MenyooStreamer
                 if (!_chunks.TryGetValue(key, out records)) return false;
 
                 var recordsToSpawn = records
-                    .Select((r, idx) => new { Record = r, Index = idx })
-                    .Where(x => x.Record.DeletedByMod)
+                    .Where(r => r.DeletedByMod)
+                    .Take(PedsPerChunkTick)
                     .ToList();
 
                 if (recordsToSpawn.Count == 0) return false;
 
                 var modelHashes = recordsToSpawn
-                    .Select(x => x.Record.ModelHash)
+                    .Select(r => r.ModelHash)
                     .Distinct()
                     .ToList();
 
@@ -1040,15 +1105,24 @@ namespace MenyooStreamer
                     }
                 }
 
-                if (models.Count == 0) return false;
-                if (models.Any(m => !m.IsLoaded)) return false;
+                if (models.Count == 0)
+                {
+                    FailChunk(key);
+                    return false;
+                }
+                if (models.Any(m => !m.IsLoaded))
+                {
+                    FailChunk(key);
+                    return false;
+                }
 
                 var peds = new List<Ped>();
                 foreach (var entry in recordsToSpawn)
                 {
+                    if (_handleMap.Count >= _config.MaxPeds) break;
                     try
                     {
-                        var record = entry.Record;
+                        var record = entry;
                         var model = new Model(record.ModelHash);
                         if (!model.IsValid || !model.IsInCdImage) continue;
 
@@ -1073,15 +1147,41 @@ namespace MenyooStreamer
 
                 if (peds.Count > 0)
                 {
-                    _loadedChunks[key] = peds;
+                    List<Ped> existing;
+                    if (!_loadedChunks.TryGetValue(key, out existing))
+                    {
+                        existing = new List<Ped>();
+                        _loadedChunks[key] = existing;
+                    }
+                    existing.AddRange(peds);
+                    _failedLoads.Remove(key);
                     return true;
                 }
 
+                FailChunk(key);
                 return false;
             }
             catch
             {
                 return false;
+            }
+        }
+
+        private void FailChunk(string key)
+        {
+            int fails;
+            if (!_failedLoads.TryGetValue(key, out fails))
+                fails = 0;
+            fails++;
+
+            if (fails >= MaxLoadAttempts)
+            {
+                _chunks.Remove(key);
+                _failedLoads.Remove(key);
+            }
+            else
+            {
+                _failedLoads[key] = fails;
             }
         }
 
