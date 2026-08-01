@@ -32,7 +32,6 @@ namespace RemoveDroppedPedsMod
         // Константы
         private const float MinScanRadius = 50f;
         private const float MaxScanRadius = 5000f;
-        private const int ScanIntervalMs = 5000; // Фиксированный интервал 5 секунд
 
         /// <summary>
         /// Проверяет, прошло ли достаточно времени с учётом переполнения Game.GameTime.
@@ -42,6 +41,16 @@ namespace RemoveDroppedPedsMod
             int currentTime = Game.GameTime;
             uint elapsed = unchecked((uint)(currentTime - lastTime));
             return elapsed >= (uint)intervalMs;
+        }
+
+        // Интервал сканирования зависит от радиуса: чем больше радиус,
+        // тем дороже скан (GetNearbyPeds) и тем реже его надо запускать
+        private int GetScanIntervalMs()
+        {
+            if (_scanRadius <= 300f) return 3000;
+            if (_scanRadius <= 1000f) return 6000;
+            if (_scanRadius <= 2000f) return 10000;
+            return 15000;
         }
 
         // Сохранение настроек
@@ -121,6 +130,8 @@ namespace RemoveDroppedPedsMod
                 _settings.ScanRadius = _scanRadius;
                 MarkSettingsDirty();
             };
+
+            GTA.UI.Notification.PostTicker("~b~Remove Dropped Peds ~w~загружен. Меню — ~y~H", false, false);
         }
 
         public void OnTick()
@@ -136,8 +147,10 @@ namespace RemoveDroppedPedsMod
                 _lastSaveGameTime = Game.GameTime;
             }
 
-            // Автосканирование если мод включен
-            if (_modEnabled && HasElapsed(_lastScanGameTime, ScanIntervalMs))
+            // Автосканирование если мод включен. В меню и на паузе не сканируем —
+            // незачем тратить нативы, когда игрок не в мире
+            if (_modEnabled && !_mainMenu.Visible && !Game.IsPaused &&
+                HasElapsed(_lastScanGameTime, GetScanIntervalMs()))
             {
                 ScanAndRemoveUnderwaterPeds();
                 _lastScanGameTime = Game.GameTime;
