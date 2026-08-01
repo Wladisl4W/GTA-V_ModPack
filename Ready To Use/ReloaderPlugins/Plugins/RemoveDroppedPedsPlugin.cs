@@ -33,6 +33,7 @@ namespace RemoveDroppedPedsMod
         private const float MinScanRadius = 50f;
         private const float MaxScanRadius = 5000f;
         private const int ScanIntervalMs = 5000; // Фиксированный интервал 5 секунд
+        private const float FallDepth = 3f;      // Насколько пед ниже уровня земли, чтобы считаться упавшим
 
         /// <summary>
         /// Проверяет, прошло ли достаточно времени с учётом переполнения Game.GameTime.
@@ -79,12 +80,12 @@ namespace RemoveDroppedPedsMod
             _lastSaveGameTime = Game.GameTime;
 
             // Создание меню
-            _mainMenu = new NativeMenu("Remove Dropped Peds", "Удаление педов под водой");
+            _mainMenu = new NativeMenu("Remove Dropped Peds", "Удаление педов, провалившихся под карту");
 
             // Checkbox — вкл/выкл мод
             _enableCheckbox = new NativeCheckboxItem(
                 "Включить мод",
-                "Автоматически удалять педов под водой (Z <= 0)",
+                "Удалять педов, оказавшихся заметно ниже уровня земли в этой точке",
                 _modEnabled);
 
             // Список — радиус сканирования (конкретные числа)
@@ -196,8 +197,14 @@ namespace RemoveDroppedPedsMod
                         if (ped.IsInVehicle())
                             continue;
 
-                        // Простая проверка: Z <= 1 = удалять
-                        if (ped.Position.Z > 1f)
+                        // Умная проверка: пед упал под карту, если он заметно ниже
+                        // уровня земли в этой точке. Землю ищем сверху (z=100),
+                        // иначе под картой запрос её не найдёт.
+                        Vector3 pedPos = ped.Position;
+                        float groundZ;
+                        if (!World.GetGroundHeight(new Vector3(pedPos.X, pedPos.Y, 100f), out groundZ, GetGroundHeightMode.Normal))
+                            continue; // земля не загружена — не трогаем
+                        if (pedPos.Z > groundZ - FallDepth)
                             continue;
 
                         ped.MarkAsNoLongerNeeded();
