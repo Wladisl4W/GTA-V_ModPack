@@ -86,7 +86,12 @@ namespace RainbowPaintMod
         private int _lastHueStep = -1;
         private int _lastHueGameTime;
         private int _lastKeyGameTime;
-        private int _lastMarkerGameTime;
+
+        // Кэш маркера: рейкаст редкий, а рисуем каждый кадр — чтобы не мигал
+        private Vehicle _markerVehicle;
+        private Vector3 _markerPos;
+        private int _markerMissCount;
+        private int _lastMarkerRaycastTime;
 
         // Полный цикл перелива в секундах (по индексу _speedList)
         private static readonly float[] CycleSeconds = { 12f, 6f, 3f };
@@ -248,7 +253,7 @@ namespace RainbowPaintMod
             _lastHueGameTime = Game.GameTime;
             _lastHueStep = -1;
             _lastKeyGameTime = Game.GameTime;
-            _lastMarkerGameTime = Game.GameTime;
+            _lastMarkerRaycastTime = Game.GameTime;
         }
 
         public void OnTick()
@@ -719,27 +724,49 @@ namespace RainbowPaintMod
             try
             {
                 if (_currentVehicle == null || !_currentVehicle.Exists())
+                {
+                    _markerVehicle = null;
                     return;
+                }
 
                 // Выделение машин работает только в Object Spooner (Menyoo)
                 if (!IsSpoonerModeActive())
+                {
+                    _markerVehicle = null;
                     return;
+                }
 
-                // Рейкаст дорогой — обновляем маркер ~15 раз в секунду, разница не видна
+                // Рейкаст дорогой — обновляем прицел ~20 раз в секунду
                 int now = Game.GameTime;
-                if ((uint)(now - _lastMarkerGameTime) < 66u) return;
-                _lastMarkerGameTime = now;
+                if ((uint)(now - _lastMarkerRaycastTime) >= 50u)
+                {
+                    _lastMarkerRaycastTime = now;
 
-                float dist;
-                Vehicle veh = RaycastVehicle(out dist);
-                if (veh == null || veh != _currentVehicle)
+                    float dist;
+                    Vehicle veh = RaycastVehicle(out dist);
+                    if (veh != null && veh.Handle == _currentVehicle.Handle)
+                    {
+                        _markerVehicle = veh;
+                        _markerMissCount = 0;
+                        var dims = veh.Model.Dimensions;
+                        float vehicleHeight = dims.Item2.Z - dims.Item1.Z;
+                        _markerPos = veh.GetOffsetPosition(new Vector3(0f, 0f, vehicleHeight / 2f + 0.8f));
+                    }
+                    else
+                    {
+                        // Прячем маркер только после нескольких промахов подряд,
+                        // иначе он мигает на границах кузова
+                        _markerMissCount++;
+                        if (_markerMissCount >= 3)
+                            _markerVehicle = null;
+                    }
+                }
+
+                if (_markerVehicle == null || _markerVehicle.Handle != _currentVehicle.Handle)
                     return;
 
-                var dims = veh.Model.Dimensions;
-                float vehicleHeight = dims.Item2.Z - dims.Item1.Z;
-                Vector3 markerPos = veh.GetOffsetPosition(new Vector3(0f, 0f, vehicleHeight / 2f + 0.8f));
-
-                World.DrawMarker(MarkerType.ThickChevronUp, markerPos, Vector3.Zero, Vector3.Zero,
+                // Рисуем каждый кадр из кэша — маркер не мигает
+                World.DrawMarker(MarkerType.ThickChevronUp, _markerPos, Vector3.Zero, Vector3.Zero,
                     new Vector3(0.35f, 0.35f, 0.35f), Color.FromArgb(220, 0, 255, 100));
             }
             catch
