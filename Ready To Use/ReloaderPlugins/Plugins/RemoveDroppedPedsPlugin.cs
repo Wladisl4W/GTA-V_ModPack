@@ -150,7 +150,7 @@ namespace RemoveDroppedPedsMod
                 MarkSettingsDirty();
             };
 
-            GTA.UI.Notification.PostTicker("~b~Remove Dropped Peds ~w~загружен. Меню — ~y~H", false, false);
+            GTA.UI.Notification.PostTicker("~r~R~o~e~y~m~g~o~b~v~p~e~r~D~o~r~y~o~g~p~b~p~p~e~r~d~o~P~y~e~g~d~b~s~w~ мод загружен~n~Нажми ~y~H~w~ для меню", false, false);
         }
 
         public void OnTick()
