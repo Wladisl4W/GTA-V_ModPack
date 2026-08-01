@@ -94,8 +94,8 @@ namespace RainbowPaintMod
         private int _markerMissCount;
         private int _lastMarkerRaycastTime;
 
-        // Полный цикл перелива в секундах (по индексу _speedList)
-        private static readonly float[] CycleSeconds = { 12f, 6f, 3f };
+        // Полный цикл перелива в секундах (по индексу _speedList): быстро/средне/медленно
+        private static readonly float[] CycleSeconds = { 3f, 6f, 12f };
 
         // Квантование оттенка: машины перекрашиваются только при реальной смене
         // цвета. 256 шагов на цикл — плавно, но без нативных вызовов каждый кадр.
@@ -196,10 +196,10 @@ namespace RainbowPaintMod
             _paintTypeList.SelectedIndex = 0;
             _menu.Add(_paintTypeList);
 
-            _speedList = new NativeListItem<string>(
+            _speedList = new ClampedSpeedList(
                 "Скорость перелива",
-                "Медленно (12с) / Нормально (6с) / Быстро (3с)",
-                new[] { "Медленно (12с)", "Нормально (6с)", "Быстро (3с)" });
+                "Быстро / Средне / Медленно",
+                "Быстро", "Средне", "Медленно");
             _speedList.SelectedIndex = 1;
             _speedList.ItemChanged += (s, e) =>
             {
@@ -684,6 +684,28 @@ namespace RainbowPaintMod
             if (idx < 0 || idx >= CycleSeconds.Length)
                 idx = 1;
             return CycleSeconds[idx];
+        }
+
+        // Ползунок без зацикливания: на краях списка стрелки не переносят
+        // на противоположный конец, как в стандартном LemonUI
+        private class ClampedSpeedList : NativeListItem<string>
+        {
+            public ClampedSpeedList(string title, string description, params string[] items)
+                : base(title, description, items)
+            {
+            }
+
+            public override void GoLeft()
+            {
+                if (SelectedIndex <= 0) return;
+                SelectedIndex--;
+            }
+
+            public override void GoRight()
+            {
+                if (SelectedIndex >= Items.Count - 1) return;
+                SelectedIndex++;
+            }
         }
 
         private int GetPaintTypeIndex()
