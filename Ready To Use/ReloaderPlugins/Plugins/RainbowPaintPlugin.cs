@@ -83,11 +83,17 @@ namespace RainbowPaintMod
 
         // Общий оттенок радуги (по времени)
         private float _rainbowHue;
+        private int _lastHueStep = -1;
         private int _lastHueGameTime;
         private int _lastKeyGameTime;
+        private int _lastMarkerGameTime;
 
         // Полный цикл перелива в секундах (по индексу _speedList)
         private static readonly float[] CycleSeconds = { 12f, 6f, 3f };
+
+        // Квантование оттенка: машины перекрашиваются только при реальной смене
+        // цвета. 256 шагов на цикл — плавно, но без нативных вызовов каждый кадр.
+        private const int HueSteps = 256;
 
         // Индекс "Радужный (перелив)" в _rainbowColors — должен оставаться последним
         private const int RainbowIndex = 8;
@@ -240,7 +246,9 @@ namespace RainbowPaintMod
             _menu.Add(exceptionsItem);
 
             _lastHueGameTime = Game.GameTime;
+            _lastHueStep = -1;
             _lastKeyGameTime = Game.GameTime;
+            _lastMarkerGameTime = Game.GameTime;
         }
 
         public void OnTick()
@@ -258,6 +266,12 @@ namespace RainbowPaintMod
                 _rainbowHue += (float)elapsed / 1000f / cycleSeconds;
                 if (_rainbowHue >= 1f)
                     _rainbowHue -= (float)Math.Floor(_rainbowHue);
+
+                // Перекрашиваем только когда оттенок перешёл на новый шаг
+                int step = (int)(_rainbowHue * HueSteps);
+                if (step == _lastHueStep)
+                    return;
+                _lastHueStep = step;
 
                 Color c = ColorFromHSV(_rainbowHue);
 
@@ -702,6 +716,11 @@ namespace RainbowPaintMod
             {
                 if (_currentVehicle == null || !_currentVehicle.Exists())
                     return;
+
+                // Рейкаст дорогой — обновляем маркер ~15 раз в секунду, разница не видна
+                int now = Game.GameTime;
+                if ((uint)(now - _lastMarkerGameTime) < 66u) return;
+                _lastMarkerGameTime = now;
 
                 float dist;
                 Vehicle veh = RaycastVehicle(out dist);
