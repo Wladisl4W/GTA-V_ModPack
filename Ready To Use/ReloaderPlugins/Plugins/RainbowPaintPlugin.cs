@@ -10,6 +10,7 @@ using GTA.Native;
 using GTA.UI;
 using LemonUI;
 using LemonUI.Menus;
+using PluginLogging;
 
 namespace RainbowPaintMod
 {
@@ -140,7 +141,7 @@ namespace RainbowPaintMod
             // Загрузка сохранённых исключений рандомайзера
             LoadExclusions();
 
-            GTA.UI.Notification.Show("~r~R~o~a~y~i~g~n~b~b~p~o~r~w~o~P~y~a~g~i~b~n~p~t~w~ мод загружен~n~Нажми ~b~I~w~ для меню покраски");
+            GTA.UI.Notification.PostTicker("~r~R~o~a~y~i~g~n~b~b~p~o~r~w~o~P~y~a~g~i~b~n~p~t~w~ мод загружен~n~Нажми ~b~I~w~ для меню покраски", false, false);
 
             _menu = new NativeMenu("Радужная Покраска", "Выбери цвет");
             _pool.Add(_menu);
@@ -507,8 +508,9 @@ namespace RainbowPaintMod
                     veh.DirtLevel = 0f;
                     count++;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    PluginLog.Error("RainbowPaint: PaintVehicles", ex);
                 }
             }
 
@@ -555,8 +557,9 @@ namespace RainbowPaintMod
                 SaveExclusions();
                 GTA.UI.Screen.ShowSubtitle("~g~Модель '" + displayName + "' добавлена в исключения.~n~~w~Все такие машины рандомайзер не красит.", 4000);
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: AddAimedModel", ex);
             }
         }
 
@@ -600,8 +603,9 @@ namespace RainbowPaintMod
                 if (_exceptionsMenu != null)
                     _exceptionsMenu.Visible = false;
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: OnAbort", ex);
             }
 
             SaveExclusions();
@@ -628,8 +632,9 @@ namespace RainbowPaintMod
                     _excludedModels.Add(new ModelExclusion(list[i].Name, list[i].Hash));
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: LoadExclusions", ex);
             }
         }
 
@@ -641,8 +646,9 @@ namespace RainbowPaintMod
                 Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath));
                 File.WriteAllText(_settingsPath, _serializer.Serialize(_excludedModels));
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: SaveExclusions", ex);
             }
         }
 
@@ -699,8 +705,9 @@ namespace RainbowPaintMod
                 if (typeIdx == 0)
                     Function.Call(Hash.SET_VEHICLE_EXTRA_COLOURS, v.Handle, stock, stock);
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: ApplyPaintTypeToVehicle", ex);
             }
         }
 
@@ -712,8 +719,9 @@ namespace RainbowPaintMod
                 if (!string.IsNullOrEmpty(localized) && localized != v.DisplayName)
                     return localized;
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: GetVehicleName", ex);
             }
             return v.DisplayName;
         }
@@ -766,11 +774,12 @@ namespace RainbowPaintMod
                     return;
 
                 // Рисуем каждый кадр из кэша — маркер не мигает
-                World.DrawMarker(MarkerType.ThickChevronUp, _markerPos, Vector3.Zero, Vector3.Zero,
+                World.DrawMarker(MarkerType.Arrow, _markerPos, Vector3.Zero, Vector3.Zero,
                     new Vector3(0.35f, 0.35f, 0.35f), Color.FromArgb(220, 0, 255, 100));
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: DrawAimedMarker", ex);
             }
         }
 
@@ -796,8 +805,9 @@ namespace RainbowPaintMod
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: RaycastVehicle", ex);
             }
             return null;
         }
@@ -817,8 +827,9 @@ namespace RainbowPaintMod
                 if (Game.IsPaused) return false;
                 return ScriptCameraDirector.RenderingCam != null;
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("RainbowPaint: IsSpoonerModeActive", ex);
                 return false;
             }
         }

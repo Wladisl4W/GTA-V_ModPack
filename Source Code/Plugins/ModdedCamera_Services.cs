@@ -102,14 +102,14 @@ namespace ModdedCamera.Services
             {
                 if (PositionSelector == null || SplineCamera == null)
                 {
-                    GTA.UI.Notification.Show("~r~Cameras not initialized!");
+                    GTA.UI.Notification.PostTicker("~r~Cameras not initialized!", false, false);
                     Logger.Warn("CameraService: EnterPointSelector called but cameras not initialized");
                     return;
                 }
 
                 if (IsSelectorActive || IsSplineCamActive)
                 {
-                    GTA.UI.Notification.Show("Camera is Active.");
+                    GTA.UI.Notification.PostTicker("Camera is Active.", false, false);
                     Logger.Warn("CameraService: EnterPointSelector rejected - camera already active");
                     return;
                 }
@@ -121,7 +121,7 @@ namespace ModdedCamera.Services
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.Show("~r~Error!");
+                GTA.UI.Notification.PostTicker("~r~Error!", false, false);
                 Logger.Error(ex, "CameraService: Error in EnterPointSelector");
             }
         }
@@ -169,13 +169,13 @@ namespace ModdedCamera.Services
             {
                 if (SplineCamera == null)
                 {
-                    GTA.UI.Notification.Show("~r~Camera not initialized!");
+                    GTA.UI.Notification.PostTicker("~r~Camera not initialized!", false, false);
                     return false;
                 }
 
                 if (SplineCamera.Nodes.Count < 2)
                 {
-                    GTA.UI.Notification.Show("Setup at least 2 nodes first!");
+                    GTA.UI.Notification.PostTicker("Setup at least 2 nodes first!", false, false);
                     Logger.Warn("CameraService: StartPlayback rejected - only " + SplineCamera.Nodes.Count + " nodes");
                     return false;
                 }
@@ -188,7 +188,7 @@ namespace ModdedCamera.Services
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.Show("~r~Error!");
+                GTA.UI.Notification.PostTicker("~r~Error!", false, false);
                 Logger.Error(ex, "CameraService: Error in StartPlayback");
                 return false;
             }
@@ -381,7 +381,7 @@ namespace ModdedCamera.Services
                     PositionSelector = null;
                 }
 
-                World.RenderingCamera = null;
+                ScriptCameraDirector.StopRendering(false);
                 Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
 
                 Game.Player.Character.IsPositionFrozen = false;
@@ -427,7 +427,7 @@ namespace ModdedCamera.Services
                     PositionSelector = null;
                 }
 
-                World.RenderingCamera = null;
+                ScriptCameraDirector.StopRendering(false);
                 Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
                 CameraRenderer.ClearFocus();
                 RestorePlayerState();
@@ -467,7 +467,7 @@ namespace ModdedCamera.Services
         {
             if (_cameraService.SplineCamera != null && _cameraService.SplineCamera.Nodes.Count < 2)
             {
-                GTA.UI.Notification.Show("Need at least 2 nodes!");
+                GTA.UI.Notification.PostTicker("Need at least 2 nodes!", false, false);
                 return false;
             }
 
@@ -527,7 +527,7 @@ namespace ModdedCamera.Services
             {
                 _pendingPathName = text;
                 State = SaveState.ConfirmOverwrite;
-                GTA.UI.Notification.Show("~r~Name exists! Space=overwrite, B=rename");
+                GTA.UI.Notification.PostTicker("~r~Name exists! Space=overwrite, B=rename", false, false);
                 return;
             }
 
@@ -537,7 +537,7 @@ namespace ModdedCamera.Services
 
         private void UpdateConfirmOverwriteState()
         {
-            GTA.UI.Notification.Show("~r~'" + _pendingPathName + "' exists! ~y~Space~w~=overwrite, ~r~B~w~=rename");
+            GTA.UI.Notification.PostTicker("~r~'" + _pendingPathName + "' exists! ~y~Space~w~=overwrite, ~r~B~w~=rename", false, false);
             if (Game.IsControlJustPressed((GTA.Control)223))
             {
                 DoSave(_pendingPathName);
@@ -563,7 +563,7 @@ namespace ModdedCamera.Services
             {
                 if (_cameraService.SplineCamera == null)
                 {
-                    GTA.UI.Notification.Show("~r~SplineCamera is null!");
+                    GTA.UI.Notification.PostTicker("~r~SplineCamera is null!", false, false);
                     Logger.Error("DoSave: SplineCamera is null");
                     return;
                 }
@@ -575,7 +575,7 @@ namespace ModdedCamera.Services
 
                 if (positions.Count < 2)
                 {
-                    GTA.UI.Notification.Show("~r~Need at least 2 nodes!");
+                    GTA.UI.Notification.PostTicker("~r~Need at least 2 nodes!", false, false);
                     Logger.Warn("DoSave: Insufficient nodes");
                     return;
                 }
@@ -591,21 +591,21 @@ namespace ModdedCamera.Services
                 string result = PathManager.SavePath(cp);
                 if (result != null)
                 {
-                    GTA.UI.Notification.Show("~g~Saved: " + name);
+                    GTA.UI.Notification.PostTicker("~g~Saved: " + name, false, false);
                     _pendingPathName = "";
                     Logger.Info("SaveService: Path saved: " + result);
                     if (OnPathSaved != null) OnPathSaved(name);
                 }
                 else
                 {
-                    GTA.UI.Notification.Show("~r~Save failed! Check log.");
+                    GTA.UI.Notification.PostTicker("~r~Save failed! Check log.", false, false);
                     Logger.Error("DoSave: PathManager.SavePath returned null");
                     if (OnError != null) OnError("Save failed");
                 }
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.Show("~r~Error: " + ex.Message);
+                GTA.UI.Notification.PostTicker("~r~Error: " + ex.Message, false, false);
                 Logger.Error(ex, "SaveService: Error in DoSave");
                 if (OnError != null) OnError(ex.Message);
             }
@@ -618,7 +618,7 @@ namespace ModdedCamera.Services
                 CameraPath cp = PathManager.LoadPath(pathName);
                 if (cp == null)
                 {
-                    GTA.UI.Notification.Show("~r~Failed to load!");
+                    GTA.UI.Notification.PostTicker("~r~Failed to load!", false, false);
                     if (OnError != null) OnError("Failed to load path");
                     return false;
                 }
@@ -626,20 +626,20 @@ namespace ModdedCamera.Services
                 bool success = _cameraService.LoadPath(cp);
                 if (success)
                 {
-                    GTA.UI.Notification.Show("~g~Loaded: " + pathName);
+                    GTA.UI.Notification.PostTicker("~g~Loaded: " + pathName, false, false);
                     if (OnPathLoaded != null) OnPathLoaded(pathName);
                     Logger.Info("SaveService: Path loaded: " + pathName);
                 }
                 else
                 {
-                    GTA.UI.Notification.Show("~r~Failed to apply path!");
+                    GTA.UI.Notification.PostTicker("~r~Failed to apply path!", false, false);
                     if (OnError != null) OnError("Failed to apply path");
                 }
                 return success;
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.Show("~r~Failed to load!");
+                GTA.UI.Notification.PostTicker("~r~Failed to load!", false, false);
                 Logger.Error(ex, "SaveService: Error loading path");
                 if (OnError != null) OnError("Error loading path: " + ex.Message);
                 return false;
@@ -653,20 +653,20 @@ namespace ModdedCamera.Services
                 bool success = PathManager.DeletePath(pathName);
                 if (success)
                 {
-                    GTA.UI.Notification.Show("~g~Deleted: " + pathName);
+                    GTA.UI.Notification.PostTicker("~g~Deleted: " + pathName, false, false);
                     if (OnPathDeleted != null) OnPathDeleted(pathName);
                     Logger.Info("SaveService: Path deleted: " + pathName);
                 }
                 else
                 {
-                    GTA.UI.Notification.Show("~r~Failed to delete!");
+                    GTA.UI.Notification.PostTicker("~r~Failed to delete!", false, false);
                     if (OnError != null) OnError("Failed to delete path");
                 }
                 return success;
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.Show("~r~Error: " + ex.Message);
+                GTA.UI.Notification.PostTicker("~r~Error: " + ex.Message, false, false);
                 Logger.Error(ex, "SaveService: Error deleting path");
                 if (OnError != null) OnError(ex.Message);
                 return false;
@@ -679,25 +679,25 @@ namespace ModdedCamera.Services
             {
                 if (string.IsNullOrEmpty(newName))
                 {
-                    GTA.UI.Notification.Show("~r~Name cannot be empty!");
+                    GTA.UI.Notification.PostTicker("~r~Name cannot be empty!", false, false);
                     return false;
                 }
                 bool success = PathManager.RenamePath(oldName, newName);
                 if (success)
                 {
-                    GTA.UI.Notification.Show("~g~Renamed: " + oldName + " → " + newName);
+                    GTA.UI.Notification.PostTicker("~g~Renamed: " + oldName + " → " + newName, false, false);
                     Logger.Info("SaveService: Path renamed: " + oldName + " → " + newName);
                 }
                 else
                 {
-                    GTA.UI.Notification.Show("~r~Failed to rename!");
+                    GTA.UI.Notification.PostTicker("~r~Failed to rename!", false, false);
                     if (OnError != null) OnError("Failed to rename path");
                 }
                 return success;
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.Show("~r~Error: " + ex.Message);
+                GTA.UI.Notification.PostTicker("~r~Error: " + ex.Message, false, false);
                 Logger.Error(ex, "SaveService: Error renaming path");
                 if (OnError != null) OnError(ex.Message);
                 return false;
@@ -806,7 +806,6 @@ namespace ModdedCamera.Services
 
         private bool _editingSavedPath = false;
         private CameraPath _editingPath = null;
-        private string _editingPathName = null;
         private NativeMenu _editingPathBackMenu = null;
         private string _savedPathsSearch = "";
         private int _lastSelectedNodeIndex = -1;
@@ -970,7 +969,7 @@ namespace ModdedCamera.Services
                         catch (Exception ex)
                         {
                             Logger.Error(ex, "Error loading: " + pn1);
-                            GTA.UI.Notification.Show("~r~Failed to load: " + ex.Message);
+                            GTA.UI.Notification.PostTicker("~r~Failed to load: " + ex.Message, false, false);
                         }
                     };
                     pathSubMenu.Add(loadBtn);
@@ -1003,7 +1002,7 @@ namespace ModdedCamera.Services
                         catch (Exception ex)
                         {
                             Logger.Error(ex, "Error renaming path");
-                            GTA.UI.Notification.Show("~r~Failed to rename: " + ex.Message);
+                            GTA.UI.Notification.PostTicker("~r~Failed to rename: " + ex.Message, false, false);
                         }
                     };
                     pathSubMenu.Add(renameBtn);
@@ -1028,7 +1027,7 @@ namespace ModdedCamera.Services
                         catch (Exception ex)
                         {
                             Logger.Error(ex, "Error deleting: " + pn2);
-                            GTA.UI.Notification.Show("~r~Failed to delete: " + ex.Message);
+                            GTA.UI.Notification.PostTicker("~r~Failed to delete: " + ex.Message, false, false);
                         }
                         delMenu.Visible = false;
                         pathSubMenu.Visible = true;
@@ -1107,7 +1106,6 @@ namespace ModdedCamera.Services
                         if (_editingPath != null) PathManager.SavePath(_editingPath);
                         _editingSavedPath = false;
                         _editingPath = null;
-                        _editingPathName = null;
                         NativeMenu backMenu = _editingPathBackMenu;
                         _editingPathBackMenu = null;
                         if (backMenu != null) backMenu.Visible = true;
@@ -1204,7 +1202,6 @@ namespace ModdedCamera.Services
             {
                 _editingSavedPath = false;
                 _editingPath = null;
-                _editingPathName = null;
                 _editingPathBackMenu = null;
                 _lastSelectedNodeIndex = -1;
                 RefreshNodeEditorMenu();
@@ -1299,7 +1296,6 @@ namespace ModdedCamera.Services
                         if (_editingPath != null) PathManager.SavePath(_editingPath);
                         _editingSavedPath = false;
                         _editingPath = null;
-                        _editingPathName = null;
                         NativeMenu backMenu = _editingPathBackMenu;
                         _editingPathBackMenu = null;
                         NodeEditorMenu.Visible = false;

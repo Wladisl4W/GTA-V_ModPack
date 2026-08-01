@@ -370,7 +370,7 @@ namespace ModdedCamera
             _fadeMachine = new FadeStateMachine(
                 onActivate: () => {
                     this.MainCamera.IsActive = true;
-                    World.RenderingCamera = this.MainCamera;
+                    ScriptCameraDirector.StartRendering();
                     Function.Call(Hash.RENDER_SCRIPT_CAMS, true, 0, 0, false, false);
                     if (_interpolator != null)
                     {
@@ -387,7 +387,7 @@ namespace ModdedCamera
                         Logger.Info("Interpolator playback STOPPED");
                     }
                     this.MainCamera.IsActive = false;
-                    World.RenderingCamera = null;
+                    ScriptCameraDirector.StopRendering(false);
                     Function.Call(Hash.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
                 },
@@ -617,7 +617,7 @@ namespace ModdedCamera
                 catch (Exception ex)
                 {
                     Logger.Error(ex, "Error in interpolator update");
-                    try { GTA.UI.Notification.Show("~r~Camera Update Error!"); } catch { }
+                    try { GTA.UI.Notification.PostTicker("~r~Camera Update Error!", false, false); } catch { }
                 }
             }
         }
@@ -704,9 +704,9 @@ namespace ModdedCamera
             this.GamepadHandler.RightStickChanged += RightStickChanged;
             this.GamepadHandler.LeftStickPressed += LeftStickPressed;
 
-            _instructionalButtons = new Scaleform("instructional_buttons");
+            _instructionalButtons = Scaleform.RequestMovie("instructional_buttons");
 
-            _mainCamera = World.CreateCamera(position, rotation, 50f);
+            _mainCamera = Camera.Create("DEFAULT_SCRIPTED_CAMERA", position, rotation, 50f);
             _mainCamera.IsActive = false;
             _previousPos = position;
             _renderSceneTimer = new Timer(5000);
@@ -715,12 +715,12 @@ namespace ModdedCamera
             _fadeMachine = new FadeStateMachine(
                 onActivate: () => {
                     this.MainCamera.IsActive = true;
-                    World.RenderingCamera = this.MainCamera;
+                    ScriptCameraDirector.StartRendering();
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
                 },
                 onDeactivate: () => {
                     this.MainCamera.IsActive = false;
-                    World.RenderingCamera = null;
+                    ScriptCameraDirector.StopRendering(false);
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
                 },
                 logPrefix: "PositionSelector"

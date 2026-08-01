@@ -1,5 +1,3 @@
-#pragma warning disable CS0618
-
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,6 +8,7 @@ using GTA.Math;
 using GTA.Native;
 using LemonUI;
 using LemonUI.Menus;
+using PluginLogging;
 
 namespace MenyooStreamer
 {
@@ -44,7 +43,7 @@ namespace MenyooStreamer
             _menu.RescanRequested += () => _rescanPending = true;
             _menu.StopRequested += ExecuteStop;
 
-            GTA.UI.Notification.Show("~b~MenyooStreamer ~w~loaded. Press ~y~U ~w~to open menu.");
+            GTA.UI.Notification.PostTicker("~b~MenyooStreamer ~w~loaded. Press ~y~U ~w~to open menu.", false, false);
         }
 
         public void OnTick()
@@ -162,13 +161,13 @@ namespace MenyooStreamer
                 Script.Yield();
 
                 int chunks = _streamerSystem.TotalChunkCount;
-                GTA.UI.Notification.Show(
-                    "~g~Restarted ~w~" + _cachedPeds.Count + " peds, ~g~" + chunks + " chunks.");
+                GTA.UI.Notification.PostTicker(
+                    "~g~Restarted ~w~" + _cachedPeds.Count + " peds, ~g~" + chunks + " chunks.", false, false);
             }
             catch (Exception ex)
             {
                 Log("Restart error: " + ex);
-                GTA.UI.Notification.Show("~r~Error: ~w~" + ex.Message);
+                GTA.UI.Notification.PostTicker("~r~Error: ~w~" + ex.Message, false, false);
                 try { File.AppendAllText(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
             }
             finally
@@ -206,7 +205,7 @@ namespace MenyooStreamer
 
                 if (peds.Count == 0)
                 {
-                    GTA.UI.Notification.Show("~r~No peds found within scan radius.");
+                    GTA.UI.Notification.PostTicker("~r~No peds found within scan radius.", false, false);
                     return;
                 }
 
@@ -217,13 +216,13 @@ namespace MenyooStreamer
                 int chunks = _streamerSystem.TotalChunkCount;
                 Log("Streaming started: " + peds.Count + " peds, " + chunks + " chunks");
 
-                GTA.UI.Notification.Show(
-                    "~g~Captured ~w~" + peds.Count + " peds, ~g~" + chunks + " chunks. ~b~Streaming.");
+                GTA.UI.Notification.PostTicker(
+                    "~g~Captured ~w~" + peds.Count + " peds, ~g~" + chunks + " chunks. ~b~Streaming.", false, false);
             }
             catch (Exception ex)
             {
                 Log("Rescan error: " + ex);
-                GTA.UI.Notification.Show("~r~Error: ~w~" + ex.Message);
+                GTA.UI.Notification.PostTicker("~r~Error: ~w~" + ex.Message, false, false);
                 try { File.AppendAllText(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
             }
             finally
@@ -238,7 +237,7 @@ namespace MenyooStreamer
             {
                 Log("Stopping stream...");
                 _streamerSystem.Stop();
-                GTA.UI.Notification.Show("~y~Ped stream stopped.");
+                GTA.UI.Notification.PostTicker("~y~Ped stream stopped.", false, false);
             }
             catch (Exception ex)
             {
@@ -349,8 +348,9 @@ namespace MenyooStreamer
                 if (needsSave)
                     Save();
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("MenyooStreamer: Config.Load", ex);
             }
         }
 
@@ -384,8 +384,9 @@ namespace MenyooStreamer
 
                 File.WriteAllLines(_configPath, lines);
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("MenyooStreamer: Config.Save", ex);
             }
         }
 
@@ -400,8 +401,9 @@ namespace MenyooStreamer
                 BatchSize = Math.Max(1, Math.Min(BatchSize, 100));
                 ChunkSize = Math.Max(10f, Math.Min(ChunkSize, 1000f));
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error("MenyooStreamer: Config.Validate", ex);
             }
         }
     }
@@ -488,19 +490,19 @@ namespace MenyooStreamer
 
                 _startItem.Activated += (s, e) =>
                 {
-                    try { if (StartRequested != null) StartRequested(); } catch { }
+                    try { if (StartRequested != null) StartRequested(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: StartRequested", ex); }
                 };
                 _rescanItem.Activated += (s, e) =>
                 {
-                    try { if (RescanRequested != null) RescanRequested(); } catch { }
+                    try { if (RescanRequested != null) RescanRequested(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: RescanRequested", ex); }
                 };
                 _stopItem.Activated += (s, e) =>
                 {
-                    try { if (StopRequested != null) StopRequested(); } catch { }
+                    try { if (StopRequested != null) StopRequested(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: StopRequested", ex); }
                 };
                 _debugItem.Activated += (s, e) =>
                 {
-                    try { UpdateDebugInfo(); } catch { }
+                    try { UpdateDebugInfo(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: UpdateDebugInfo", ex); }
                 };
 
                 _menu.Closing += (s, e) => IsOpen = false;
@@ -614,7 +616,7 @@ namespace MenyooStreamer
                     if (allPeds != null)
                         worldPeds = allPeds.Length;
                 }
-                catch { }
+                catch (Exception ex) { PluginLog.Error("MenyooStreamer: GetAllPeds", ex); }
                 string msg = "World peds: " + worldPeds + "\n" +
                              "Scan: " + ScanRadius + "m | Load: " + LoadRadius + "m | Unload: " + UnloadRadius + "m";
 
