@@ -1,0 +1,9 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# Backup files
+*.bak
+
+# Visual Studio
+.vs/
