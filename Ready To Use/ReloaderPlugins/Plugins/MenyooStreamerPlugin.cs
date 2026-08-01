@@ -34,7 +34,7 @@ namespace MenyooStreamer
             _streamerSystem = new PedStreamerSystem(_config);
 
             _logPath = Path.Combine(_config.DataDirectory, "MenyooStreamer.log");
-            Log("Mod initialized (ped streamer)");
+            Log("Мод инициализирован (поток педов)");
 
             _pool = new ObjectPool();
             _menu = new MenuManager(_pool);
@@ -43,7 +43,7 @@ namespace MenyooStreamer
             _menu.RescanRequested += () => _rescanPending = true;
             _menu.StopRequested += ExecuteStop;
 
-            GTA.UI.Notification.PostTicker("~b~MenyooStreamer ~w~loaded. Press ~y~U ~w~to open menu.", false, false);
+            GTA.UI.Notification.PostTicker("~b~MenyooStreamer~w~ мод загружен~n~Нажми ~y~U~w~ для меню", false, false);
         }
 
         public void OnTick()
@@ -78,7 +78,7 @@ namespace MenyooStreamer
             }
             catch (Exception ex)
             {
-                Log("Tick error: " + ex);
+                Log("Ошибка тика: " + ex);
             }
         }
 
@@ -88,13 +88,13 @@ namespace MenyooStreamer
             {
                 if (key == Keys.U)
                 {
-                    Log("Toggle menu (streaming=" + _streamerSystem.IsStreaming + ")");
+                    Log("Переключение меню (стрим=" + _streamerSystem.IsStreaming + ")");
                     _menu.Toggle();
                 }
             }
             catch (Exception ex)
             {
-                Log("KeyDown error: " + ex);
+                Log("Ошибка клавиши: " + ex);
             }
         }
 
@@ -102,13 +102,13 @@ namespace MenyooStreamer
         {
             try
             {
-                Log("Aborting, stopping stream...");
+                Log("Завершение, остановка стрима...");
                 if (_streamerSystem != null)
                     _streamerSystem.Stop();
             }
             catch (Exception ex)
             {
-                Log("Abort error: " + ex);
+                Log("Ошибка завершения: " + ex);
             }
         }
 
@@ -155,19 +155,20 @@ namespace MenyooStreamer
 
                 _config.LoadRadius = _menu.LoadRadius;
                 _config.ClearRadius = _menu.UnloadRadius;
+                _config.Save();
 
-                Log("Restarting stream with " + _cachedPeds.Count + " cached peds");
+                Log("Перезапуск стрима с " + _cachedPeds.Count + " сохранёнными педами");
                 _streamerSystem.Start(_cachedPeds);
                 Script.Yield();
 
                 int chunks = _streamerSystem.TotalChunkCount;
                 GTA.UI.Notification.PostTicker(
-                    "~g~Restarted ~w~" + _cachedPeds.Count + " peds, ~g~" + chunks + " chunks.", false, false);
+                    "~g~Перезапуск~w~: " + _cachedPeds.Count + " педов, ~g~" + chunks + " чанков.", false, false);
             }
             catch (Exception ex)
             {
-                Log("Restart error: " + ex);
-                GTA.UI.Notification.PostTicker("~r~Error: ~w~" + ex.Message, false, false);
+                Log("Ошибка перезапуска: " + ex);
+                GTA.UI.Notification.PostTicker("~r~Ошибка: ~w~" + ex.Message, false, false);
                 try { File.AppendAllText(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
             }
             finally
@@ -195,17 +196,18 @@ namespace MenyooStreamer
                 _config.ScanRadius = _menu.ScanRadius;
                 _config.LoadRadius = _menu.LoadRadius;
                 _config.ClearRadius = _menu.UnloadRadius;
+                _config.Save();
 
-                Log("Scanning peds: scan=" + _config.ScanRadius + "m load=" + _config.LoadRadius + "m unload=" + _config.ClearRadius + "m");
-                GTA.UI.Screen.ShowSubtitle("~b~Scanning peds...", 2000);
+                Log("Сканирование педов: скан=" + _config.ScanRadius + "м загрузка=" + _config.LoadRadius + "м выгрузка=" + _config.ClearRadius + "м");
+                GTA.UI.Screen.ShowSubtitle("~b~Сканирование педов...", 2000);
                 Script.Yield();
 
                 var peds = _captureSystem.CaptureAllPeds(_config.ScanRadius);
-                Log("Captured " + peds.Count + " peds");
+                Log("Захвачено педов: " + peds.Count);
 
                 if (peds.Count == 0)
                 {
-                    GTA.UI.Notification.PostTicker("~r~No peds found within scan radius.", false, false);
+                    GTA.UI.Notification.PostTicker("~r~В радиусе сканирования педы не найдены.", false, false);
                     return;
                 }
 
@@ -214,15 +216,15 @@ namespace MenyooStreamer
                 Script.Yield();
 
                 int chunks = _streamerSystem.TotalChunkCount;
-                Log("Streaming started: " + peds.Count + " peds, " + chunks + " chunks");
+                Log("Стрим запущен: " + peds.Count + " педов, " + chunks + " чанков");
 
                 GTA.UI.Notification.PostTicker(
-                    "~g~Captured ~w~" + peds.Count + " peds, ~g~" + chunks + " chunks. ~b~Streaming.", false, false);
+                    "~g~Захвачено~w~: " + peds.Count + " педов, ~g~" + chunks + " чанков. ~b~Стрим запущен.", false, false);
             }
             catch (Exception ex)
             {
-                Log("Rescan error: " + ex);
-                GTA.UI.Notification.PostTicker("~r~Error: ~w~" + ex.Message, false, false);
+                Log("Ошибка сканирования: " + ex);
+                GTA.UI.Notification.PostTicker("~r~Ошибка: ~w~" + ex.Message, false, false);
                 try { File.AppendAllText(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
             }
             finally
@@ -235,13 +237,13 @@ namespace MenyooStreamer
         {
             try
             {
-                Log("Stopping stream...");
+                Log("Остановка стрима...");
                 _streamerSystem.Stop();
-                GTA.UI.Notification.PostTicker("~y~Ped stream stopped.", false, false);
+                GTA.UI.Notification.PostTicker("~y~Стрим педов остановлен.", false, false);
             }
             catch (Exception ex)
             {
-                Log("Stop error: " + ex);
+                Log("Ошибка остановки: " + ex);
                 try { File.AppendAllText(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
             }
         }
@@ -368,17 +370,17 @@ namespace MenyooStreamer
                     "Version=" + CurrentVersion,
                     "",
                     "[Streaming]",
-                    "; Load peds within this distance from player (meters)",
+                    "; Загружать педов в этом радиусе от игрока (метры)",
                     "LoadRadius=" + LoadRadius,
-                    "; Unload peds beyond this distance (meters)",
+                    "; Выгружать педов за этим радиусом (метры)",
                     "ClearRadius=" + ClearRadius,
-                    "; Scan peds within this distance when capturing (meters)",
+                    "; Радиус сканирования при захвате (метры)",
                     "ScanRadius=" + ScanRadius,
-                    "; How often to check player position (milliseconds)",
+                    "; Как часто проверять позицию игрока (миллисекунды)",
                     "CheckInterval=" + CheckInterval,
-                    "; Max chunks to load per tick (higher = faster, more lag)",
+                    "; Максимум чанков за тик (больше = быстрее, но лаги)",
                     "BatchSize=" + BatchSize,
-                    "; Grid chunk size (meters)",
+                    "; Размер ячейки сетки (метры)",
                     "ChunkSize=" + ChunkSize,
                 };
 
@@ -461,24 +463,24 @@ namespace MenyooStreamer
         {
             try
             {
-                _menu = new NativeMenu("MenyooStreamer", "Ped Streamer");
+                _menu = new NativeMenu("MenyooStreamer", "Потоковая загрузка педов");
 
-                _scanList = CreateNumberList("Scan Radius", 100, 5000, 100);
-                _loadList = CreateNumberList("Load Radius", 5, 2000, 5);
-                _unloadList = CreateNumberList("Unload Radius", 10, 2500, 5);
+                _scanList = CreateNumberList("Радиус сканирования", 100, 5000, 100);
+                _loadList = CreateNumberList("Радиус загрузки", 5, 2000, 5);
+                _unloadList = CreateNumberList("Радиус выгрузки", 10, 2500, 5);
 
                 _startItem = new NativeItem(
-                    "~g~Restart Stream",
-                    "Restart streaming with captured peds (no rescan)");
+                    "~g~Перезапустить стрим",
+                    "Перезапустить поток с сохранёнными педами (без повторного сканирования)");
                 _rescanItem = new NativeItem(
-                    "~y~Rescan & Stream",
-                    "Scan the world for peds again and restart streaming");
+                    "~y~Сканировать заново",
+                    "Сканировать мир заново и перезапустить поток");
                 _stopItem = new NativeItem(
-                    "~r~Stop Stream",
-                    "Stop streaming and clean up all spawned peds");
+                    "~r~Остановить стрим",
+                    "Остановить поток и удалить всех созданных педов");
                 _debugItem = new NativeItem(
-                    "Debug Info",
-                    "Show current streaming status");
+                    "Отладка",
+                    "Показать текущий статус потока");
 
                 _menu.Add(_scanList);
                 _menu.Add(_loadList);
@@ -617,8 +619,8 @@ namespace MenyooStreamer
                         worldPeds = allPeds.Length;
                 }
                 catch (Exception ex) { PluginLog.Error("MenyooStreamer: GetAllPeds", ex); }
-                string msg = "World peds: " + worldPeds + "\n" +
-                             "Scan: " + ScanRadius + "m | Load: " + LoadRadius + "m | Unload: " + UnloadRadius + "m";
+                string msg = "Педы в мире: " + worldPeds + "\n" +
+                             "Скан: " + ScanRadius + "м | Загрузка: " + LoadRadius + "м | Выгрузка: " + UnloadRadius + "м";
 
                 if (_menu != null)
                     _menu.Name = msg;
@@ -745,6 +747,9 @@ namespace MenyooStreamer
             new AnimPair("anim@amb@nightclub@lazlow@hi_railing@", "ambclub_12_mi_hi_bootyshake_laz"),
         };
 
+        private static readonly HashSet<string> KnownAnimsSet = new HashSet<string>(
+            KnownAnims.Select(a => a.Dict + "@" + a.Anim));
+
         public PedCaptureSystem(float chunkSize)
         {
             _chunkSize = chunkSize;
@@ -777,6 +782,7 @@ namespace MenyooStreamer
                 {
                     if (ped == null || !ped.Exists()) continue;
                     if (ped == player) continue;
+                    if (ped.IsInVehicle()) continue;
 
                     var pos = ped.Position;
                     float dx = pos.X - playerPos.X;
@@ -825,11 +831,11 @@ namespace MenyooStreamer
                 if (Function.Call<bool>(Hash.IS_PED_USING_ANY_SCENARIO, ped.Handle))
                     return true;
 
-                foreach (var anim in KnownAnims)
-                {
-                    if (Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, ped.Handle, anim.Dict, anim.Anim, 7))
-                        return true;
-                }
+                string dict = Function.Call<string>((Hash)0x840F03E904F4E5C1, ped.Handle);
+                string name = Function.Call<string>((Hash)0x4E4A5A9F21BB650E, ped.Handle);
+                if (!string.IsNullOrEmpty(dict) && !string.IsNullOrEmpty(name) &&
+                    KnownAnimsSet.Contains(dict + "@" + name))
+                    return true;
             }
             catch
             {
@@ -1061,6 +1067,9 @@ namespace MenyooStreamer
                     {
                     }
                 }
+
+                foreach (var model in models)
+                    model.MarkAsNoLongerNeeded();
 
                 if (peds.Count > 0)
                 {
