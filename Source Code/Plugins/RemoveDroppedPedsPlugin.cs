@@ -27,8 +27,8 @@ namespace RemoveDroppedPedsMod
         private NativeListItem<string> _intervalList;
 
         // Варианты частоты сканирования: мс и названия пунктов (по индексу _intervalList)
-        private static readonly int[] IntervalOptionsMs = { 2000, 5000, 10000, 20000 };
-        private static readonly string[] IntervalNames = { "Часто (2с)", "Нормально (5с)", "Редко (10с)", "Очень редко (20с)" };
+        private static readonly int[] IntervalOptionsMs = { 1000, 2000, 3000, 5000, 10000 };
+        private static readonly string[] IntervalNames = { "1с", "2с", "3с", "5с", "10с" };
 
         // Таймеры (GameTime - быстрее чем DateTime.Now)
         private int _lastScanGameTime = 0;
@@ -111,7 +111,7 @@ namespace RemoveDroppedPedsMod
 
             // Список — частота сканирования
             int intervalIdx = Array.IndexOf(IntervalOptionsMs, _scanIntervalMs);
-            if (intervalIdx < 0) intervalIdx = 1;
+            if (intervalIdx < 0) intervalIdx = 3;
             _intervalList = new NativeListItem<string>(
                 "Частота сканирования",
                 "Текущий: " + IntervalNames[intervalIdx],
