@@ -33,7 +33,6 @@ namespace RemoveDroppedPedsMod
         private const float MinScanRadius = 50f;
         private const float MaxScanRadius = 5000f;
         private const int ScanIntervalMs = 5000; // Фиксированный интервал 5 секунд
-        private const float FallDepth = 3f;      // Насколько пед ниже уровня земли, чтобы считаться упавшим
 
         /// <summary>
         /// Проверяет, прошло ли достаточно времени с учётом переполнения Game.GameTime.
@@ -80,12 +79,12 @@ namespace RemoveDroppedPedsMod
             _lastSaveGameTime = Game.GameTime;
 
             // Создание меню
-            _mainMenu = new NativeMenu("Remove Dropped Peds", "Удаление педов, провалившихся под карту");
+            _mainMenu = new NativeMenu("Remove Dropped Peds", "Удаление педов, упавших в воду");
 
             // Checkbox — вкл/выкл мод
             _enableCheckbox = new NativeCheckboxItem(
                 "Включить мод",
-                "Удалять педов, оказавшихся заметно ниже уровня земли в этой точке",
+                "Удалять педов в воде, включая мёртвых",
                 _modEnabled);
 
             // Список — радиус сканирования (конкретные числа)
@@ -191,20 +190,11 @@ namespace RemoveDroppedPedsMod
                         if (ped == null || !ped.Exists())
                             continue;
 
-                        if (ped.IsPlayer || !ped.IsAlive)
+                        if (ped.IsPlayer || ped.IsInVehicle())
                             continue;
 
-                        if (ped.IsInVehicle())
-                            continue;
-
-                        // Умная проверка: пед упал под карту, если он заметно ниже
-                        // уровня земли в этой точке. Землю ищем сверху (z=100),
-                        // иначе под картой запрос её не найдёт.
-                        Vector3 pedPos = ped.Position;
-                        float groundZ;
-                        if (!World.GetGroundHeight(new Vector3(pedPos.X, pedPos.Y, 100f), out groundZ, GetGroundHeightMode.Normal))
-                            continue; // земля не загружена — не трогаем
-                        if (pedPos.Z > groundZ - FallDepth)
+                        // Пед упал в воду (в том числе мёртвый, утонувший) — удаляем
+                        if (!ped.IsInWater)
                             continue;
 
                         ped.MarkAsNoLongerNeeded();
