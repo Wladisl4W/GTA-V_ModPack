@@ -201,6 +201,10 @@ namespace RainbowPaintMod
                 "Медленно (12с) / Нормально (6с) / Быстро (3с)",
                 new[] { "Медленно (12с)", "Нормально (6с)", "Быстро (3с)" });
             _speedList.SelectedIndex = 1;
+            _speedList.ItemChanged += (s, e) =>
+            {
+                _speedList.Description = "Текущая скорость: " + e.Object;
+            };
             _menu.Add(_speedList);
 
             var resetItem = new NativeItem("Сбросить цвет (заводской)");
@@ -273,27 +277,29 @@ namespace RainbowPaintMod
                 if (_rainbowHue >= 1f)
                     _rainbowHue -= (float)Math.Floor(_rainbowHue);
 
-                // Перекрашиваем только когда оттенок перешёл на новый шаг
+                // Перекрашиваем только когда оттенок перешёл на новый шаг.
+                // Без раннего return: маркер и остальное рисуются каждый кадр
                 int step = (int)(_rainbowHue * HueSteps);
-                if (step == _lastHueStep)
-                    return;
-                _lastHueStep = step;
-
-                Color c = ColorFromHSV(_rainbowHue);
-
-                for (int i = _rainbowSlots.Count - 1; i >= 0; i--)
+                if (step != _lastHueStep)
                 {
-                    var slot = _rainbowSlots[i];
-                    if (slot.Vehicle == null || !slot.Vehicle.Exists())
-                    {
-                        _rainbowSlots.RemoveAt(i);
-                        continue;
-                    }
+                    _lastHueStep = step;
 
-                    if (slot.Primary)
-                        slot.Vehicle.Mods.CustomPrimaryColor = c;
-                    if (slot.Secondary)
-                        slot.Vehicle.Mods.CustomSecondaryColor = c;
+                    Color c = ColorFromHSV(_rainbowHue);
+
+                    for (int i = _rainbowSlots.Count - 1; i >= 0; i--)
+                    {
+                        var slot = _rainbowSlots[i];
+                        if (slot.Vehicle == null || !slot.Vehicle.Exists())
+                        {
+                            _rainbowSlots.RemoveAt(i);
+                            continue;
+                        }
+
+                        if (slot.Primary)
+                            slot.Vehicle.Mods.CustomPrimaryColor = c;
+                        if (slot.Secondary)
+                            slot.Vehicle.Mods.CustomSecondaryColor = c;
+                    }
                 }
             }
 
