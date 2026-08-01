@@ -141,7 +141,7 @@ namespace RainbowPaintMod
             // Загрузка сохранённых исключений рандомайзера
             LoadExclusions();
 
-            GTA.UI.Notification.PostTicker("~r~R~o~a~y~i~g~n~b~b~p~o~r~w~o~P~y~a~g~i~b~n~p~t~w~ мод загружен~n~Нажми ~b~I~w~ для меню покраски", false, false);
+            GTA.UI.Notification.PostTicker("~r~R~o~a~y~i~g~n~b~b~p~o~r~w~o~P~y~a~g~i~b~n~p~t~w~ мод загружен~n~Нажми ~y~I~w~ для меню покраски", false, false);
 
             _menu = new NativeMenu("Радужная Покраска", "Выбери цвет");
             _pool.Add(_menu);
