@@ -312,7 +312,8 @@ namespace RainbowPaintMod
             if (sinceLast < 300) return;
             _lastKeyGameTime = now;
 
-            Vehicle v = GetVehiclePlayerIsLookingAt();
+            // Выделение машин работает только в Object Spooner (Menyoo)
+            Vehicle v = IsSpoonerModeActive() ? GetVehiclePlayerIsLookingAt() : null;
 
             // Меню открыто: навёлся на машину — переключаемся на неё, иначе — закрываем
             bool menuOpen = _menu.Visible || (_exceptionsMenu != null && _exceptionsMenu.Visible);
@@ -344,7 +345,9 @@ namespace RainbowPaintMod
                 _menu.Name = "Машина не выделена";
                 SetMenuEnabled(false);
                 _menu.Visible = true;
-                GTA.UI.Screen.ShowSubtitle("~y~Машина не выделена. Наведись на машину и нажми ~b~I~w~.", 4000);
+                GTA.UI.Screen.ShowSubtitle(IsSpoonerModeActive()
+                    ? "~y~Машина не выделена. Наведись на машину и нажми ~b~I~w~."
+                    : "~y~Выделение машин работает только в Object Spooner (Menyoo).", 4000);
                 return;
             }
 
@@ -523,10 +526,11 @@ namespace RainbowPaintMod
         {
             try
             {
-                Vehicle v = GetVehiclePlayerIsLookingAt();
+                // Рейкаст работает только в Object Spooner (Menyoo)
+                Vehicle v = IsSpoonerModeActive() ? GetVehiclePlayerIsLookingAt() : null;
                 if (v == null || !v.Exists())
                 {
-                    GTA.UI.Screen.ShowSubtitle("~r~Наведись на машину и попробуй снова.", 3000);
+                    GTA.UI.Screen.ShowSubtitle("~r~Наведись на машину в Object Spooner и попробуй снова.", 3000);
                     return;
                 }
 
@@ -717,6 +721,10 @@ namespace RainbowPaintMod
                 if (_currentVehicle == null || !_currentVehicle.Exists())
                     return;
 
+                // Выделение машин работает только в Object Spooner (Menyoo)
+                if (!IsSpoonerModeActive())
+                    return;
+
                 // Рейкаст дорогой — обновляем маркер ~15 раз в секунду, разница не видна
                 int now = Game.GameTime;
                 if ((uint)(now - _lastMarkerGameTime) < 66u) return;
@@ -771,6 +779,21 @@ namespace RainbowPaintMod
         {
             float dist;
             return RaycastVehicle(out dist);
+        }
+
+        // Menyoo Object Spooner: рендерится скриптовая камера, игра не на паузе.
+        // Внешних флагов у Menyoo нет, поэтому определяем режим по камере.
+        private bool IsSpoonerModeActive()
+        {
+            try
+            {
+                if (Game.IsPaused) return false;
+                return ScriptCameraDirector.RenderingCam != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private RainbowSlot FindSlot(Vehicle v)
