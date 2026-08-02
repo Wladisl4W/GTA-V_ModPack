@@ -667,117 +667,8 @@ namespace MenyooStreamer
     {
         private readonly float _chunkSize;
 
-        private struct AnimPair
-        {
-            public string Dict;
-            public string Anim;
-
-            public AnimPair(string dict, string anim)
-            {
-                Dict = dict;
-                Anim = anim;
-            }
-        }
-
-        private static readonly AnimPair[] KnownAnims = new[]
-        {
-            new AnimPair("anim@mp_player_intcelebrationmale", "idle_a"),
-            new AnimPair("anim@mp_player_intcelebrationmale", "idle_b"),
-            new AnimPair("anim@mp_player_intcelebrationmale", "idle_c"),
-            new AnimPair("anim@mp_player_intcelebrationmale", "idle_d"),
-            new AnimPair("anim@mp_player_intcelebrationmale", "idle_e"),
-            new AnimPair("anim@mp_player_intcelebrationmale", "idle_f"),
-            new AnimPair("anim@mp_player_intcelebrationfemale", "idle_a"),
-            new AnimPair("anim@mp_player_intcelebrationfemale", "idle_b"),
-            new AnimPair("anim@mp_player_intcelebrationfemale", "idle_c"),
-            new AnimPair("anim@mp_player_intcelebrationfemale", "idle_d"),
-            new AnimPair("anim@mp_player_intcelebrationfemale", "idle_e"),
-            new AnimPair("anim@mp_player_intcelebrationfemale", "idle_f"),
-            new AnimPair("move_clown@p_m_zero_idles@", "fidget_short_dance"),
-            new AnimPair("move_clown@p_m_one_idles@", "fidget_short_dance"),
-            new AnimPair("move_clown@p_m_zero_idles@", "fidget_dance_enter"),
-            new AnimPair("move_clown@p_m_one_idles@", "fidget_dance_enter"),
-            new AnimPair("amb@world_human_dancing@male@base", "base"),
-            new AnimPair("amb@world_human_dancing@female@base", "base"),
-            new AnimPair("mini@strip_club@pole_dance@pole_a_2_stage", "pd_a2_stage"),
-            new AnimPair("mini@strip_club@pole_dance@pole_a_1_stage", "pd_a1_stage"),
-            new AnimPair("mini@strip_club@pole_dance@pole_b_2_stage", "pd_b2_stage"),
-            new AnimPair("mini@strip_club@pole_dance@pole_b_1_stage", "pd_b1_stage"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_01@dance@", "solo"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_02@dance@", "solo"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_03@dance@", "solo"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_04@dance@", "solo"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_05@dance@", "solo"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_06@dance@", "solo"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_01@", "couple_dance"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_02@", "couple_dance"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_03@", "couple_dance"),
-            new AnimPair("anim@mp_player_intupperair_shagging", "idle_a"),
-            new AnimPair("anim@mp_player_intupperuncle_disco", "idle_a"),
-            new AnimPair("anim@mp_player_intupperfind_the_tensor", "idle_a"),
-            new AnimPair("anim@mp_player_intupperpeace", "idle_a"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_groups_transitions@from_low_intensity", "trans_dance_crowd_li_to_mi_09_v1_male^4"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_single_props_transitions@from_med_intensity", "trans_dance_prop_mi_to_hi_11_v1_male^1"),
-            new AnimPair("anim@amb@nightclub@dancers@club_ambientpeds@med-hi_intensity", "mi-hi_amb_club_12_v1_male^4"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_facedj_transitions@", "trans_dance_facedj_mi_to_hi_09_v1_female^3"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_single_props@med_intensity", "mi_dance_prop_17_v1_female^3"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_groups_transitions@from_med_intensity", "trans_dance_crowd_mi_to_li_12_v1_female^5"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_facedj@hi_intensity", "hi_dance_facedj_15_v1_male^6"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_facedj_transitions@from_hi_intensity", "trans_dance_facedj_hi_to_li_09_v1_female^6"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_groups@hi_intensity", "hi_dance_crowd_13_v2_male^4"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_facedj@hi_intensity", "hi_dance_facedj_15_v2_male^4"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_groups@hi_intensity", "hi_dance_crowd_17_v2_male^5"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_facedj@hi_intensity", "hi_dance_facedj_17_v2_female^3"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_groups@hi_intensity", "hi_dance_crowd_13_v2_male^6"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_single_props@hi_intensity", "hi_dance_prop_17_v1_female^5"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_single_props@hi_intensity", "hi_dance_prop_15_v1_male^6"),
-            new AnimPair("anim@amb@nightclub@dancers@crowddance_single_props@hi_intensity", "hi_dance_prop_11_v1_female^6"),
-            new AnimPair("anim@amb@nightclub@dancers@tale_of_us_entourage@", "mi_dance_prop_13_v2_male^4"),
-            new AnimPair("anim@amb@nightclub@lazlow@hi_dancefloor@", "dancecrowd_hi_05_dlg_havingit_laz"),
-            new AnimPair("anim@amb@nightclub@lazlow@hi_dancefloor@", "dancecrowd_trans_07_hi_to_mi_laz"),
-            new AnimPair("anim@amb@nightclub@lazlow@hi_podium@", "danceidle_hi_11_buttwiggle_b_laz"),
-            new AnimPair("anim@amb@nightclub@lazlow@hi_podium@", "danceidle_hi_15_crazyrobot_laz"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_b@", "ped_b_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_d@", "ped_b_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_f@", "ped_b_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_h@", "ped_b_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_j@", "ped_b_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@female@var_b@", "med_center_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@shuffle@", "high_left_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@shuffle@", "med_center"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@techno_karate@", "high_left_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@techno_monkey@", "med_center"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@techno_monkey@", "high_left_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@male@var_b@", "med_center"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@jumper@", "high_left_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@female@var_b@", "low_left_down"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@female@var_b@", "high_left_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_k@", "ped_b_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_k@", "ped_a_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_l@", "ped_b_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_l@", "ped_a_dance_idle"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_paired@dance_m@", "ped_a_dance_idle"),
-            new AnimPair("amb@world_human_paparazzi@male@idle_a", "idle_a"),
-            new AnimPair("anim@arena@celeb@podium@no_prop@", "hands_air_b_1st"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@techno_karate@", "med_right_down"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@techno_monkey@", "high_right"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@techno_monkey@", "high_center_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@techno_monkey@", "high_center"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@techno_monkey@", "med_center_down"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@shuffle@", "high_center"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@male@var_b@", "high_left_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@male@var_b@", "high_center_down"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@male@var_a@", "high_left_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@male@var_a@", "high_center_down"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@male@var_a@", "high_center_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@jumper@", "high_left_down"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@jumper@", "med_center"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@jumper@", "high_center_down"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@jumper@", "med_center_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@female@var_a@", "high_center_up"),
-            new AnimPair("anim@amb@nightclub@mini@dance@dance_solo@beach_boxing@", "high_left_up"),
-            new AnimPair("anim@amb@nightclub@lazlow@hi_railing@", "ambclub_12_mi_hi_bootyshake_laz"),
-        };
+        private const int TaskScriptedAnimation = 134;
+        private const int TaskSynchronizedScene = 135;
 
         public PedCaptureSystem(float chunkSize)
         {
@@ -865,11 +756,14 @@ namespace MenyooStreamer
                 if (Function.Call<bool>(Hash.IS_PED_USING_ANY_SCENARIO, ped.Handle))
                     return true;
 
-                foreach (var anim in KnownAnims)
-                {
-                    if (Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, ped.Handle, anim.Dict, anim.Anim, 7))
-                        return true;
-                }
+                if (Function.Call<bool>(Hash.IS_PED_ACTIVE_IN_SCENARIO, ped.Handle))
+                    return true;
+
+                if (Function.Call<bool>(Hash.GET_IS_TASK_ACTIVE, ped.Handle, TaskScriptedAnimation))
+                    return true;
+
+                if (Function.Call<bool>(Hash.GET_IS_TASK_ACTIVE, ped.Handle, TaskSynchronizedScene))
+                    return true;
             }
             catch
             {
