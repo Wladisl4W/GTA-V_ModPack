@@ -713,6 +713,8 @@ namespace ModdedCamera.Services
 
     public class InputService
     {
+        private static readonly int[] WeaponControls = { 24, 25, 26, 45, 138, 140, 141, 142, 143, 241, 242 };
+
         public event Action OnToggleMenu;
         public event Action OnBackNavigation;
         public event Action OnAddNode;
@@ -740,19 +742,21 @@ namespace ModdedCamera.Services
 
         public void ProcessPointSelectorInput()
         {
-            if (Game.IsControlJustPressed(GTA.Control.Attack))
+            if (Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 24))
             {
                 if (OnAddNode != null) OnAddNode();
             }
 
             Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 241, true);
             Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 242, true);
+            Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 241, true);
+            Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 242, true);
 
             float scrollUp = Function.Call<float>(NativeHashes.GET_DISABLED_CONTROL_NORMAL, 0, 241);
             float scrollDown = Function.Call<float>(NativeHashes.GET_DISABLED_CONTROL_NORMAL, 0, 242);
 
-            bool scrollUpPressed = scrollUp > 0.5f || Game.IsControlJustPressed((GTA.Control)241);
-            bool scrollDownPressed = scrollDown > 0.5f || Game.IsControlJustPressed((GTA.Control)242);
+            bool scrollUpPressed = scrollUp > 0.5f || Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 241);
+            bool scrollDownPressed = scrollDown > 0.5f || Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 242);
 
             if (scrollUpPressed)
             {
@@ -763,7 +767,7 @@ namespace ModdedCamera.Services
                 if (OnScrollDurationDown != null) OnScrollDurationDown();
             }
 
-            if (Game.IsControlJustPressed(GTA.Control.Aim))
+            if (Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 25))
             {
                 if (OnExitPointSelector != null) OnExitPointSelector();
             }
@@ -773,10 +777,21 @@ namespace ModdedCamera.Services
             }
         }
 
+        public void DisableWeaponControls()
+        {
+            foreach (int control in WeaponControls)
+            {
+                Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, control, true);
+                Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, control, true);
+            }
+        }
+
         public void DisableInterferingControls()
         {
             Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 199, true);
             Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 200, true);
+            Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 199, true);
+            Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 200, true);
         }
     }
 

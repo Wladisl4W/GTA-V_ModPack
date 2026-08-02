@@ -683,7 +683,7 @@ namespace ModdedCamera
         private float _currentLerpTime;
         private readonly float LerpTime = 0.5f;
         private readonly float RotationSpeed = 0.7f;
-        private static readonly int[] ControlsToDisable = { 80, 20, 140, 142, 264, 27, 79, 210, 209, 203, 311, 309, 233, 187, 173, 48, 43, 19, 301, 288, 289, 298, 31, 30, 34, 35, 32, 33 };
+        private static readonly int[] ControlsToDisable = { 24, 25, 26, 45, 138, 140, 141, 142, 143, 241, 242, 21, 22, 23, 44, 51, 54, 80, 20, 264, 27, 79, 210, 209, 203, 311, 309, 233, 187, 173, 48, 43, 19, 301, 288, 289, 298, 31, 30, 34, 35, 32, 33 };
 
         public GamepadHandler GamepadHandler;
 
@@ -819,13 +819,19 @@ namespace ModdedCamera
         private void DisablePlayerControls()
         {
             foreach (int control in ControlsToDisable)
+            {
+                Function.Call(NativeHashes.DISABLE_CONTROL_ACTION, 0, control, true);
                 Function.Call(NativeHashes.DISABLE_CONTROL_ACTION, 2, control, true);
+            }
         }
 
         private void EnablePlayerControls()
         {
             foreach (int control in ControlsToDisable)
+            {
+                Function.Call(Hash.ENABLE_CONTROL_ACTION, 0, control, true);
                 Function.Call(Hash.ENABLE_CONTROL_ACTION, 2, control, true);
+            }
         }
 
         public void Update()

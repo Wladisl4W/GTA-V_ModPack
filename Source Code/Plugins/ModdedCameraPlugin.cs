@@ -83,6 +83,8 @@ namespace ModdedCamera
                 bool modActive = _cameraService.IsAnyCameraActive || menusVisible;
                 if (modActive)
                 {
+                    if (_cameraService.IsAnyCameraActive)
+                        _inputService.DisableWeaponControls();
                     _inputService.DisableInterferingControls();
                 }
 
