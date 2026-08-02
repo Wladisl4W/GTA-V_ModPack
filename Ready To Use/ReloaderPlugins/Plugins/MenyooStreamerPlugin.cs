@@ -32,6 +32,7 @@ namespace MenyooStreamer
 
             _captureSystem = new PedCaptureSystem((float)_config.ChunkSize);
             _streamerSystem = new PedStreamerSystem(_config);
+            _streamerSystem.Log = Log;
 
             _logPath = Path.Combine(_config.DataDirectory, "MenyooStreamer.log");
             Log("Мод инициализирован (поток педов)");
@@ -887,6 +888,9 @@ namespace MenyooStreamer
         private Dictionary<string, int> _failedLoads;
         private DateTime _lastCheck;
         private bool _isStreaming;
+        private int _statusLogCount;
+
+        public Action<string> Log;
 
         private const int PedsPerChunkTick = 20;
         private const int MaxLoadAttempts = 20;
@@ -1070,6 +1074,13 @@ namespace MenyooStreamer
                         processed++;
                     }
                 }
+
+                if (++_statusLogCount % 30 == 0)
+                {
+                    if (Log != null)
+                        Log("Статус: педов=" + _handleMap.Count + "/" + _config.MaxPeds +
+                            ", чанков=" + _chunks.Count + ", загружено=" + _loadedChunks.Count);
+                }
             }
             catch
             {
@@ -1108,11 +1119,12 @@ namespace MenyooStreamer
 
                 if (models.Count == 0)
                 {
-                    FailChunk(key);
+                    FailChunk(key, "нет валидных моделей");
                     return false;
                 }
                 if (models.Any(m => !m.IsLoaded))
                 {
+                    FailChunk(key, "модели не загрузились");
                     return false;
                 }
 
@@ -1159,7 +1171,7 @@ namespace MenyooStreamer
                     return true;
                 }
 
-                FailChunk(key);
+                FailChunk(key, "не удалось создать педов");
                 return false;
             }
             catch
@@ -1168,17 +1180,22 @@ namespace MenyooStreamer
             }
         }
 
-        private void FailChunk(string key)
+        private void FailChunk(string key, string reason)
         {
             int fails;
             if (!_failedLoads.TryGetValue(key, out fails))
                 fails = 0;
             fails++;
 
+            if (Log != null)
+                Log("Чанк " + key + ": " + reason + " (попытка " + fails + "/" + MaxLoadAttempts + ")");
+
             if (fails >= MaxLoadAttempts)
             {
                 _chunks.Remove(key);
                 _failedLoads.Remove(key);
+                if (Log != null)
+                    Log("Чанк " + key + " удалён (исчерпаны попытки)");
             }
             else
             {
