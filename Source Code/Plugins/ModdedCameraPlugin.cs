@@ -33,11 +33,12 @@ namespace ModdedCamera
                 _menuService.SyncCameraOptionsWithMenu();
 
                 Logger.Info("=== ModdedCamera Mod Started Successfully ===");
+                GTA.UI.Notification.PostTicker("~b~ModdedCamera~w~ мод загружен~n~Нажми ~y~T~w~ для меню", false, false);
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, "CRITICAL: Error during mod initialization");
-                GTA.UI.Notification.PostTicker("~r~ModdedCamera: Initialization failed! Check log.", false, false);
+                GTA.UI.Notification.PostTicker("~r~ModdedCamera: ошибка инициализации! Смотрите лог.", false, false);
             }
         }
 
@@ -143,7 +144,7 @@ namespace ModdedCamera
             {
                 Vector3 pos = _cameraService.GetActiveCameraPosition();
                 int durationMs = _menuService.GetNodeDuration();
-                GTA.UI.Notification.PostTicker("Node added\nPos: (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")\nDuration: " + ((float)durationMs / 1000f).ToString("F2") + "s", false, false);
+                GTA.UI.Notification.PostTicker("Узел добавлен\nПоз: (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")\nДлительность: " + ((float)durationMs / 1000f).ToString("F2") + "с", false, false);
             }
         }
 
@@ -162,7 +163,7 @@ namespace ModdedCamera
         private void ShowDurationNotification()
         {
             int durationMs = _menuService.GetNodeDuration();
-            GTA.UI.Screen.ShowSubtitle("Duration: " + ((float)durationMs / 1000f).ToString("F2") + "s", 1500);
+            GTA.UI.Screen.ShowSubtitle("Длительность: " + ((float)durationMs / 1000f).ToString("F2") + "с", 1500);
         }
     }
 }

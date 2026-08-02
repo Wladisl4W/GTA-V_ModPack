@@ -102,14 +102,14 @@ namespace ModdedCamera.Services
             {
                 if (PositionSelector == null || SplineCamera == null)
                 {
-                    GTA.UI.Notification.PostTicker("~r~Cameras not initialized!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Камеры не инициализированы!", false, false);
                     Logger.Warn("CameraService: EnterPointSelector called but cameras not initialized");
                     return;
                 }
 
                 if (IsSelectorActive || IsSplineCamActive)
                 {
-                    GTA.UI.Notification.PostTicker("Camera is Active.", false, false);
+                    GTA.UI.Notification.PostTicker("Камера уже активна.", false, false);
                     Logger.Warn("CameraService: EnterPointSelector rejected - camera already active");
                     return;
                 }
@@ -121,7 +121,7 @@ namespace ModdedCamera.Services
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.PostTicker("~r~Error!", false, false);
+                GTA.UI.Notification.PostTicker("~r~Ошибка!", false, false);
                 Logger.Error(ex, "CameraService: Error in EnterPointSelector");
             }
         }
@@ -169,13 +169,13 @@ namespace ModdedCamera.Services
             {
                 if (SplineCamera == null)
                 {
-                    GTA.UI.Notification.PostTicker("~r~Camera not initialized!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Камера не инициализирована!", false, false);
                     return false;
                 }
 
                 if (SplineCamera.Nodes.Count < 2)
                 {
-                    GTA.UI.Notification.PostTicker("Setup at least 2 nodes first!", false, false);
+                    GTA.UI.Notification.PostTicker("Сначала создайте минимум 2 узла!", false, false);
                     Logger.Warn("CameraService: StartPlayback rejected - only " + SplineCamera.Nodes.Count + " nodes");
                     return false;
                 }
@@ -188,7 +188,7 @@ namespace ModdedCamera.Services
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.PostTicker("~r~Error!", false, false);
+                GTA.UI.Notification.PostTicker("~r~Ошибка!", false, false);
                 Logger.Error(ex, "CameraService: Error in StartPlayback");
                 return false;
             }
@@ -467,7 +467,7 @@ namespace ModdedCamera.Services
         {
             if (_cameraService.SplineCamera != null && _cameraService.SplineCamera.Nodes.Count < 2)
             {
-                GTA.UI.Notification.PostTicker("Need at least 2 nodes!", false, false);
+                GTA.UI.Notification.PostTicker("Нужно минимум 2 узла!", false, false);
                 return false;
             }
 
@@ -527,7 +527,7 @@ namespace ModdedCamera.Services
             {
                 _pendingPathName = text;
                 State = SaveState.ConfirmOverwrite;
-                GTA.UI.Notification.PostTicker("~r~Name exists! Space=overwrite, B=rename", false, false);
+                GTA.UI.Notification.PostTicker("~r~Имя уже существует! ~y~Пробел~w~=перезаписать, ~b~B~w~=переименовать", false, false);
                 return;
             }
 
@@ -537,7 +537,7 @@ namespace ModdedCamera.Services
 
         private void UpdateConfirmOverwriteState()
         {
-            GTA.UI.Notification.PostTicker("~r~'" + _pendingPathName + "' exists! ~y~Space~w~=overwrite, ~r~B~w~=rename", false, false);
+            GTA.UI.Notification.PostTicker("~r~'" + _pendingPathName + "' уже существует! ~y~Пробел~w~=перезаписать, ~r~B~w~=переименовать", false, false);
             if (Game.IsControlJustPressed((GTA.Control)223))
             {
                 DoSave(_pendingPathName);
@@ -563,7 +563,7 @@ namespace ModdedCamera.Services
             {
                 if (_cameraService.SplineCamera == null)
                 {
-                    GTA.UI.Notification.PostTicker("~r~SplineCamera is null!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~SplineCamera не найдена!", false, false);
                     Logger.Error("DoSave: SplineCamera is null");
                     return;
                 }
@@ -575,7 +575,7 @@ namespace ModdedCamera.Services
 
                 if (positions.Count < 2)
                 {
-                    GTA.UI.Notification.PostTicker("~r~Need at least 2 nodes!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Нужно минимум 2 узла!", false, false);
                     Logger.Warn("DoSave: Insufficient nodes");
                     return;
                 }
@@ -591,21 +591,21 @@ namespace ModdedCamera.Services
                 string result = PathManager.SavePath(cp);
                 if (result != null)
                 {
-                    GTA.UI.Notification.PostTicker("~g~Saved: " + name, false, false);
+                    GTA.UI.Notification.PostTicker("~g~Сохранено: " + name, false, false);
                     _pendingPathName = "";
                     Logger.Info("SaveService: Path saved: " + result);
                     if (OnPathSaved != null) OnPathSaved(name);
                 }
                 else
                 {
-                    GTA.UI.Notification.PostTicker("~r~Save failed! Check log.", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Не удалось сохранить! Смотрите лог.", false, false);
                     Logger.Error("DoSave: PathManager.SavePath returned null");
                     if (OnError != null) OnError("Save failed");
                 }
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.PostTicker("~r~Error: " + ex.Message, false, false);
+                GTA.UI.Notification.PostTicker("~r~Ошибка: " + ex.Message, false, false);
                 Logger.Error(ex, "SaveService: Error in DoSave");
                 if (OnError != null) OnError(ex.Message);
             }
@@ -618,7 +618,7 @@ namespace ModdedCamera.Services
                 CameraPath cp = PathManager.LoadPath(pathName);
                 if (cp == null)
                 {
-                    GTA.UI.Notification.PostTicker("~r~Failed to load!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Не удалось загрузить!", false, false);
                     if (OnError != null) OnError("Failed to load path");
                     return false;
                 }
@@ -626,13 +626,13 @@ namespace ModdedCamera.Services
                 bool success = _cameraService.LoadPath(cp);
                 if (success)
                 {
-                    GTA.UI.Notification.PostTicker("~g~Loaded: " + pathName, false, false);
+                    GTA.UI.Notification.PostTicker("~g~Загружено: " + pathName, false, false);
                     if (OnPathLoaded != null) OnPathLoaded(pathName);
                     Logger.Info("SaveService: Path loaded: " + pathName);
                 }
                 else
                 {
-                    GTA.UI.Notification.PostTicker("~r~Failed to apply path!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Не удалось применить путь!", false, false);
                     if (OnError != null) OnError("Failed to apply path");
                 }
                 return success;
@@ -653,20 +653,20 @@ namespace ModdedCamera.Services
                 bool success = PathManager.DeletePath(pathName);
                 if (success)
                 {
-                    GTA.UI.Notification.PostTicker("~g~Deleted: " + pathName, false, false);
+                    GTA.UI.Notification.PostTicker("~g~Удалено: " + pathName, false, false);
                     if (OnPathDeleted != null) OnPathDeleted(pathName);
                     Logger.Info("SaveService: Path deleted: " + pathName);
                 }
                 else
                 {
-                    GTA.UI.Notification.PostTicker("~r~Failed to delete!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Не удалось удалить!", false, false);
                     if (OnError != null) OnError("Failed to delete path");
                 }
                 return success;
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.PostTicker("~r~Error: " + ex.Message, false, false);
+                GTA.UI.Notification.PostTicker("~r~Ошибка: " + ex.Message, false, false);
                 Logger.Error(ex, "SaveService: Error deleting path");
                 if (OnError != null) OnError(ex.Message);
                 return false;
@@ -679,25 +679,25 @@ namespace ModdedCamera.Services
             {
                 if (string.IsNullOrEmpty(newName))
                 {
-                    GTA.UI.Notification.PostTicker("~r~Name cannot be empty!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Имя не может быть пустым!", false, false);
                     return false;
                 }
                 bool success = PathManager.RenamePath(oldName, newName);
                 if (success)
                 {
-                    GTA.UI.Notification.PostTicker("~g~Renamed: " + oldName + " → " + newName, false, false);
+                    GTA.UI.Notification.PostTicker("~g~Переименовано: " + oldName + " → " + newName, false, false);
                     Logger.Info("SaveService: Path renamed: " + oldName + " → " + newName);
                 }
                 else
                 {
-                    GTA.UI.Notification.PostTicker("~r~Failed to rename!", false, false);
+                    GTA.UI.Notification.PostTicker("~r~Не удалось переименовать!", false, false);
                     if (OnError != null) OnError("Failed to rename path");
                 }
                 return success;
             }
             catch (Exception ex)
             {
-                GTA.UI.Notification.PostTicker("~r~Error: " + ex.Message, false, false);
+                GTA.UI.Notification.PostTicker("~r~Ошибка: " + ex.Message, false, false);
                 Logger.Error(ex, "SaveService: Error renaming path");
                 if (OnError != null) OnError(ex.Message);
                 return false;
@@ -895,7 +895,7 @@ namespace ModdedCamera.Services
 
                 List<string> allPaths = PathManager.GetAllSavedPaths();
 
-                NativeItem searchItem = new NativeItem("~b~Search", string.IsNullOrEmpty(_savedPathsSearch) ? "Tap to enter search text" : "Filtering: \"" + _savedPathsSearch + "\"");
+                NativeItem searchItem = new NativeItem("~b~Поиск", string.IsNullOrEmpty(_savedPathsSearch) ? "Нажмите, чтобы ввести текст" : "Фильтр: \"" + _savedPathsSearch + "\"");
                 searchItem.Activated += delegate
                 {
                     try
@@ -923,7 +923,7 @@ namespace ModdedCamera.Services
 
                 if (!string.IsNullOrEmpty(_savedPathsSearch))
                 {
-                    NativeItem clearSearch = new NativeItem("~y~Clear Search", "Show all saved paths");
+                    NativeItem clearSearch = new NativeItem("~y~Сбросить поиск", "Показать все сохранённые пути");
                     clearSearch.Activated += delegate { _savedPathsSearch = ""; RefreshSavedPathsMenu(); };
                     SavedPathsMenu.Add(clearSearch);
                 }
@@ -936,28 +936,28 @@ namespace ModdedCamera.Services
 
                 if (allPaths.Count == 0)
                 {
-                    SavedPathsMenu.Add(new NativeItem("~y~No saved paths", "Save a path first!"));
+                    SavedPathsMenu.Add(new NativeItem("~y~Нет сохранённых путей", "Сначала сохраните путь!"));
                     return;
                 }
 
                 if (filteredPaths.Count == 0)
                 {
-                    SavedPathsMenu.Add(new NativeItem("~r~No matches", "No paths match \"" + _savedPathsSearch + "\""));
+                    SavedPathsMenu.Add(new NativeItem("~r~Совпадений нет", "Нет путей по запросу \"" + _savedPathsSearch + "\""));
                     return;
                 }
 
                 foreach (string pathName in filteredPaths)
                 {
-                    NativeMenu pathSubMenu = new NativeMenu(pathName, "Actions");
+                    NativeMenu pathSubMenu = new NativeMenu(pathName, "Действия");
                     ActivePool.Add(pathSubMenu);
                     _pathSubMenus.Add(pathSubMenu);
 
-                    NativeItem backBtn = new NativeItem("< Back", "Go back");
+                    NativeItem backBtn = new NativeItem("< Назад", "Вернуться назад");
                     string currentPathName = pathName;
                     backBtn.Activated += delegate { pathSubMenu.Visible = false; SavedPathsMenu.Visible = true; };
                     pathSubMenu.Add(backBtn);
 
-                    NativeItem loadBtn = new NativeItem("~g~Load", "Load and play");
+                    NativeItem loadBtn = new NativeItem("~g~Загрузить", "Загрузить и воспроизвести");
                     string pn1 = pathName;
                     loadBtn.Activated += delegate
                     {
@@ -969,12 +969,12 @@ namespace ModdedCamera.Services
                         catch (Exception ex)
                         {
                             Logger.Error(ex, "Error loading: " + pn1);
-                            GTA.UI.Notification.PostTicker("~r~Failed to load: " + ex.Message, false, false);
+                            GTA.UI.Notification.PostTicker("~r~Не удалось загрузить: " + ex.Message, false, false);
                         }
                     };
                     pathSubMenu.Add(loadBtn);
 
-                    NativeItem renameBtn = new NativeItem("~y~Rename", "Rename this path");
+                    NativeItem renameBtn = new NativeItem("~y~Переименовать", "Переименовать этот путь");
                     string renamePn = pathName;
                     renameBtn.Activated += delegate
                     {
@@ -1002,20 +1002,20 @@ namespace ModdedCamera.Services
                         catch (Exception ex)
                         {
                             Logger.Error(ex, "Error renaming path");
-                            GTA.UI.Notification.PostTicker("~r~Failed to rename: " + ex.Message, false, false);
+                            GTA.UI.Notification.PostTicker("~r~Не удалось переименовать: " + ex.Message, false, false);
                         }
                     };
                     pathSubMenu.Add(renameBtn);
 
-                    NativeMenu delMenu = new NativeMenu("Delete: " + pathName, "Are you sure?");
+                    NativeMenu delMenu = new NativeMenu("Удалить: " + pathName, "Вы уверены?");
                     ActivePool.Add(delMenu);
                     _pathSubMenus.Add(delMenu);
 
-                    NativeItem delBackBtn = new NativeItem("< Back", "Cancel");
+                    NativeItem delBackBtn = new NativeItem("< Назад", "Отмена");
                     delBackBtn.Activated += delegate { delMenu.Visible = false; pathSubMenu.Visible = true; };
                     delMenu.Add(delBackBtn);
 
-                    NativeItem delYesBtn = new NativeItem("~r~Yes, Delete", "Confirm");
+                    NativeItem delYesBtn = new NativeItem("~r~Да, удалить", "Подтвердить");
                     string pn2 = pathName;
                     delYesBtn.Activated += delegate
                     {
@@ -1027,18 +1027,18 @@ namespace ModdedCamera.Services
                         catch (Exception ex)
                         {
                             Logger.Error(ex, "Error deleting: " + pn2);
-                            GTA.UI.Notification.PostTicker("~r~Failed to delete: " + ex.Message, false, false);
+                            GTA.UI.Notification.PostTicker("~r~Не удалось удалить: " + ex.Message, false, false);
                         }
                         delMenu.Visible = false;
                         pathSubMenu.Visible = true;
                     };
                     delMenu.Add(delYesBtn);
 
-                    NativeItem deleteBtn = new NativeItem("~r~Delete", "Remove this path");
+                    NativeItem deleteBtn = new NativeItem("~r~Удалить", "Удалить этот путь");
                     deleteBtn.Activated += delegate { pathSubMenu.Visible = false; delMenu.Visible = true; };
                     pathSubMenu.Add(deleteBtn);
 
-                    NativeItem pathItem = new NativeItem(pathName, "Click to open actions");
+                    NativeItem pathItem = new NativeItem(pathName, "Нажмите, чтобы открыть действия");
                     pathItem.Activated += delegate { SavedPathsMenu.Visible = false; pathSubMenu.Visible = true; };
                     SavedPathsMenu.Add(pathItem);
                 }
@@ -1055,10 +1055,10 @@ namespace ModdedCamera.Services
             {
                 foreach (var m in _pathSubMenus)
                 {
-                    if (m.Visible && m.BannerText.Text.StartsWith("Delete: "))
+                    if (m.Visible && m.BannerText.Text.StartsWith("Удалить: "))
                     {
                         m.Visible = false;
-                        string pathName = m.BannerText.Text.Substring("Delete: ".Length);
+                        string pathName = m.BannerText.Text.Substring("Удалить: ".Length);
                         foreach (var pm in _pathSubMenus)
                         {
                             if (pm.BannerText.Text == pathName && !pm.Visible)
@@ -1163,17 +1163,17 @@ namespace ModdedCamera.Services
 
         private void CreateMainMenu()
         {
-            MainMenu = new NativeMenu("Script Cam Tool", "");
+            MainMenu = new NativeMenu("ModdedCamera", "Кинематографическая камера");
 
-            _startItem = new NativeItem("~g~Start Rendering", "");
+            _startItem = new NativeItem("~g~Воспроизвести путь", "");
             _startItem.Activated += (s, e) => _cameraService.StartPlayback();
             MainMenu.Add(_startItem);
 
-            _stopItem = new NativeItem("~r~Stop Rendering", "");
+            _stopItem = new NativeItem("~r~Остановить воспроизведение", "");
             _stopItem.Activated += (s, e) => _cameraService.StopPlayback();
             MainMenu.Add(_stopItem);
 
-            _setupNodesItem = new NativeItem("Setup Nodes", "");
+            _setupNodesItem = new NativeItem("~y~Настроить узлы", "");
             _setupNodesItem.Activated += (s, e) =>
             {
                 ActivePool.HideAll();
@@ -1181,7 +1181,7 @@ namespace ModdedCamera.Services
             };
             MainMenu.Add(_setupNodesItem);
 
-            _savePathItem = new NativeItem("Save Current Path", "");
+            _savePathItem = new NativeItem("Сохранить текущий путь", "");
             _savePathItem.Activated += (s, e) =>
             {
                 ActivePool.HideAll();
@@ -1189,15 +1189,15 @@ namespace ModdedCamera.Services
             };
             MainMenu.Add(_savePathItem);
 
-            _loadPathItem = new NativeItem("Load Path", "Select a saved path to load");
+            _loadPathItem = new NativeItem("Загрузить путь", "Выберите сохранённый путь для загрузки");
             _loadPathItem.Activated += (s, e) => { MainMenu.Visible = false; SavedPathsMenu.Visible = true; };
             MainMenu.Add(_loadPathItem);
 
-            _cameraOptionsItem = new NativeItem("Camera Options", "Adjust camera settings");
+            _cameraOptionsItem = new NativeItem("Настройки камеры", "Настроить параметры камеры");
             _cameraOptionsItem.Activated += (s, e) => { MainMenu.Visible = false; CameraOptionsMenu.Visible = true; };
             MainMenu.Add(_cameraOptionsItem);
 
-            _editNodesItem = new NativeItem("~y~Edit Nodes", "Change duration and interpolation per node");
+            _editNodesItem = new NativeItem("~y~Редактор узлов", "Изменить длительность и интерполяцию каждого узла");
             _editNodesItem.Activated += (s, e) =>
             {
                 _editingSavedPath = false;
@@ -1210,33 +1210,33 @@ namespace ModdedCamera.Services
             };
             MainMenu.Add(_editNodesItem);
 
-            _resetItem = new NativeItem("Reset All Cams", "");
+            _resetItem = new NativeItem("Сбросить все камеры", "");
             _resetItem.Activated += (s, e) => _cameraService.ResetAll();
             MainMenu.Add(_resetItem);
 
-            _closeItem = new NativeItem("Close", "");
+            _closeItem = new NativeItem("Закрыть", "");
             _closeItem.Activated += (s, e) => ActivePool.HideAll();
             MainMenu.Add(_closeItem);
         }
 
         private void CreateCameraOptionsMenu()
         {
-            CameraOptionsMenu = new NativeMenu("Camera Options", "");
+            CameraOptionsMenu = new NativeMenu("Настройки камеры", "");
 
-            _speedListItem = new NativeListItem<string>("Speed", "Playback speed multiplier");
+            _speedListItem = new NativeListItem<string>("Скорость", "Множитель скорости воспроизведения");
             string[] speedValues = new string[] { "x0.10", "x0.25", "x0.50", "x0.75", "x1.00", "x1.25", "x1.50", "x1.75", "x2.00", "x2.50", "x3.00", "x4.00", "x5.00", "x10.00" };
             foreach (string sv in speedValues)
                 _speedListItem.Items.Add(sv);
             _speedListItem.SelectedItem = "x1.00";
             CameraOptionsMenu.Add(_speedListItem);
 
-            _fovListItem = new NativeListItem<string>("Field Of View", "");
+            _fovListItem = new NativeListItem<string>("Поле зрения (FOV)", "");
             for (int i = 1; i <= 100; i++)
                 _fovListItem.Items.Add(i.ToString());
             _fovListItem.SelectedItem = "50";
             CameraOptionsMenu.Add(_fovListItem);
 
-            _usePlayerViewCheckbox = new NativeCheckboxItem("Use Player View", "(Creates smoother terrain rendering but restricts movement)");
+            _usePlayerViewCheckbox = new NativeCheckboxItem("Вид от игрока", "(Плавнее рендеринг местности, но ограничено движение)");
             CameraOptionsMenu.Add(_usePlayerViewCheckbox);
 
             _speedListItem.ItemChanged += OnSpeedChanged;
@@ -1246,12 +1246,12 @@ namespace ModdedCamera.Services
 
         private void CreateSavedPathsMenu()
         {
-            SavedPathsMenu = new NativeMenu("Saved Paths", "");
+            SavedPathsMenu = new NativeMenu("Сохранённые пути", "");
         }
 
         private void CreateNodeEditorMenu()
         {
-            NodeEditorMenu = new NativeMenu("Node Editor", "Select a node to edit");
+            NodeEditorMenu = new NativeMenu("Редактор узлов", "Выберите узел для редактирования");
         }
 
         public void RefreshNodeEditorMenu()
@@ -1272,7 +1272,7 @@ namespace ModdedCamera.Services
                     if (_editingPath.Positions == null || _editingPath.Positions.Count == 0 ||
                         _editingPath.Rotations == null || _editingPath.Rotations.Count == 0)
                     {
-                        NodeEditorMenu.Add(new NativeItem("~r~Empty or corrupted path", "This path has no nodes"));
+                        NodeEditorMenu.Add(new NativeItem("~r~Пустой или повреждённый путь", "В этом пути нет узлов"));
                         return;
                     }
                     nodeCount = _editingPath.Positions.Count;
@@ -1282,13 +1282,13 @@ namespace ModdedCamera.Services
                     var spline = _cameraService.SplineCamera;
                     if (spline == null || spline.Nodes.Count == 0)
                     {
-                        NodeEditorMenu.Add(new NativeItem("~y~No nodes", "Add nodes first via Setup Nodes"));
+                        NodeEditorMenu.Add(new NativeItem("~y~Нет узлов", "Сначала добавьте узлы (Настроить узлы)"));
                         return;
                     }
                     nodeCount = spline.Nodes.Count;
                 }
 
-                NativeItem backMain = new NativeItem("< Back", _editingSavedPath ? "Back to saved path" : "Return to main menu");
+                NativeItem backMain = new NativeItem("< Назад", _editingSavedPath ? "Вернуться к сохранённому пути" : "Вернуться в главное меню");
                 backMain.Activated += delegate
                 {
                     if (_editingSavedPath)
@@ -1333,22 +1333,22 @@ namespace ModdedCamera.Services
                             nodeMode = (i < spline.GetNodeInterpolationModes().Count) ? spline.GetNodeInterpolationModes()[i] : 2;
                         }
 
-                        string modeLabel = (nodeMode == 0) ? "Linear" : "Smooth";
+                        string modeLabel = (nodeMode == 0) ? "Линейно" : "Плавно";
                         float durSec = (float)duration / 1000f;
-                        string label = "Node " + (i + 1) + "  (" + durSec.ToString("F2") + "s, " + modeLabel + ") | total: " + totalSec.ToString("F2") + "s";
-                        string desc = "Pos: " + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1");
+                        string label = "Узел " + (i + 1) + "  (" + durSec.ToString("F2") + "с, " + modeLabel + ") | всего: " + totalSec.ToString("F2") + "с";
+                        string desc = "Поз: " + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1");
                         totalSec += durSec;
 
-                        NativeMenu nodeMenu = new NativeMenu("Node " + (i + 1), "Edit duration & interpolation");
+                        NativeMenu nodeMenu = new NativeMenu("Узел " + (i + 1), "Длительность и интерполяция");
                         ActivePool.Add(nodeMenu);
                         _nodeSubMenus.Add(nodeMenu);
 
-                        NativeItem nodeBack = new NativeItem("< Back", "Back to node list");
+                        NativeItem nodeBack = new NativeItem("< Назад", "К списку узлов");
                         nodeBack.Activated += delegate { nodeMenu.Visible = false; NodeEditorMenu.Visible = true; if (_lastSelectedNodeIndex >= 0) NodeEditorMenu.SelectedIndex = _lastSelectedNodeIndex + 1; };
                         nodeMenu.Add(nodeBack);
 
                         // Duration list item: 0.00..30.00 in 0.25s steps
-                        NativeListItem<string> durItem = new NativeListItem<string>("Duration", "Node duration in seconds");
+                        NativeListItem<string> durItem = new NativeListItem<string>("Длительность", "Длительность узла в секундах");
                         for (int d = 0; d <= 30000; d += 250)
                             durItem.Items.Add(((float)d / 1000f).ToString("F2"));
                         string foundDur = durSec.ToString("F2");
@@ -1385,14 +1385,14 @@ namespace ModdedCamera.Services
                         nodeMenu.Add(durItem);
 
                         // Interpolation mode
-                        NativeListItem<string> modeItem = new NativeListItem<string>("Interpolation", "Linear or Smooth per node");
-                        modeItem.Items.Add("Linear");
-                        modeItem.Items.Add("Smooth");
-                        modeItem.SelectedItem = (nodeMode == 0) ? "Linear" : "Smooth";
+                        NativeListItem<string> modeItem = new NativeListItem<string>("Интерполяция", "Линейно или плавно для узла");
+                        modeItem.Items.Add("Линейно");
+                        modeItem.Items.Add("Плавно");
+                        modeItem.SelectedItem = (nodeMode == 0) ? "Линейно" : "Плавно";
                         int capturedIndex2 = nodeIndex;
                         modeItem.ItemChanged += delegate(object sender, ItemChangedEventArgs<string> args)
                         {
-                            int newMode = (args.Object == "Smooth") ? 2 : 0;
+                            int newMode = (args.Object == "Плавно") ? 2 : 0;
                             if (_editingSavedPath && _editingPath != null)
                             {
                                 while (_editingPath.NodeInterpolationModes.Count <= capturedIndex2)
@@ -1423,7 +1423,7 @@ namespace ModdedCamera.Services
                     catch (Exception ex)
                     {
                         Logger.Error(ex, "MenuService: Error creating node item " + i);
-                        NodeEditorMenu.Add(new NativeItem("~r~Node " + (i + 1) + " (error)", ex.Message));
+                        NodeEditorMenu.Add(new NativeItem("~r~Узел " + (i + 1) + " (ошибка)", ex.Message));
                     }
                 }
                 int restoreIdx = _lastSelectedNodeIndex + 1;

@@ -617,7 +617,7 @@ namespace ModdedCamera
                 catch (Exception ex)
                 {
                     Logger.Error(ex, "Error in interpolator update");
-                    try { GTA.UI.Notification.PostTicker("~r~Camera Update Error!", false, false); } catch { }
+                    try { GTA.UI.Notification.PostTicker("~r~Ошибка обновления камеры!", false, false); } catch { }
                 }
             }
         }
@@ -896,16 +896,16 @@ namespace ModdedCamera
             _instructionalButtons.CallFunction("TOGGLE_MOUSE_BUTTONS", new object[] { false });
 
             string text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 24, 0);
-            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 4, text, "Select Position" });
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 4, text, "Выбрать позицию" });
 
             text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 3, 17, 0);
-            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 3, text, "Increase Duration" });
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 3, text, "Длительность +" });
 
             text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 1, 16, 0);
-            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 2, text, "Decrease Duration" });
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 2, text, "Длительность -" });
 
             text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 25, 0);
-            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 1, text, "Exit" });
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 1, text, "Выход" });
 
             string[] array = new string[]
             {
@@ -914,7 +914,7 @@ namespace ModdedCamera
                 Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 33, 0),
                 Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 35, 0)
             };
-            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 0, array[3], array[2], array[1], array[0], "Move" });
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 0, array[3], array[2], array[1], array[0], "Движение" });
             _instructionalButtons.CallFunction("SET_BACKGROUND_COLOUR", new object[] { 0, 0, 0, 80 });
             _instructionalButtons.CallFunction("DRAW_INSTRUCTIONAL_BUTTONS", new object[] { 0 });
             _instructionalButtons.Render2D();
