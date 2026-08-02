@@ -778,9 +778,6 @@ namespace MenyooStreamer
             new AnimPair("anim@amb@nightclub@lazlow@hi_railing@", "ambclub_12_mi_hi_bootyshake_laz"),
         };
 
-        private static readonly HashSet<string> KnownAnimsSet = new HashSet<string>(
-            KnownAnims.Select(a => a.Dict + "@" + a.Anim));
-
         public PedCaptureSystem(float chunkSize)
         {
             _chunkSize = chunkSize;
@@ -863,11 +860,11 @@ namespace MenyooStreamer
                 if (Function.Call<bool>(Hash.IS_PED_USING_ANY_SCENARIO, ped.Handle))
                     return true;
 
-                string dict = Function.Call<string>((Hash)0x840F03E904F4E5C1, ped.Handle);
-                string name = Function.Call<string>((Hash)0x4E4A5A9F21BB650E, ped.Handle);
-                if (!string.IsNullOrEmpty(dict) && !string.IsNullOrEmpty(name) &&
-                    KnownAnimsSet.Contains(dict + "@" + name))
-                    return true;
+                foreach (var anim in KnownAnims)
+                {
+                    if (Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, ped.Handle, anim.Dict, anim.Anim, 7))
+                        return true;
+                }
             }
             catch
             {
