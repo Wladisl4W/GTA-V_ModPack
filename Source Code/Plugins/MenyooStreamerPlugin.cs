@@ -280,7 +280,7 @@ namespace MenyooStreamer
             ScanRadius = 3000f;
             CheckInterval = 1000;
             BatchSize = 20;
-            MaxPeds = 150;
+            MaxPeds = 300;
             ChunkSize = 50f;
 
             try
@@ -474,7 +474,7 @@ namespace MenyooStreamer
         }
         public int MaxPeds
         {
-            get { try { return _maxPedsList.SelectedItem; } catch { return 150; } }
+            get { try { return _maxPedsList.SelectedItem; } catch { return 300; } }
         }
 
         public event Action StartRequested;
