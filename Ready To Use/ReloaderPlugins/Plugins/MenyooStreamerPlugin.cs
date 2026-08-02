@@ -1019,18 +1019,44 @@ namespace MenyooStreamer
                 foreach (var kvp in _chunks)
                 {
                     float minDistSq = float.MaxValue;
+                    bool isLoaded = false;
 
-                    foreach (var record in kvp.Value)
+                    List<Ped> loadedPeds;
+                    if (_loadedChunks.TryGetValue(kvp.Key, out loadedPeds))
                     {
-                        float dx = record.PosX - playerPosition.X;
-                        float dy = record.PosY - playerPosition.Y;
-                        float dz = record.PosZ - playerPosition.Z;
-                        float distSq = dx * dx + dy * dy + dz * dz;
-                        if (distSq < minDistSq)
-                            minDistSq = distSq;
-                    }
+                        isLoaded = true;
 
-                    bool isLoaded = _loadedChunks.ContainsKey(kvp.Key);
+                        foreach (var ped in loadedPeds)
+                        {
+                            if (ped == null || !ped.Exists()) continue;
+
+                            var pedPos = ped.Position;
+                            float dx = pedPos.X - playerPosition.X;
+                            float dy = pedPos.Y - playerPosition.Y;
+                            float dz = pedPos.Z - playerPosition.Z;
+                            float distSq = dx * dx + dy * dy + dz * dz;
+                            if (distSq < minDistSq)
+                                minDistSq = distSq;
+                        }
+
+                        if (minDistSq == float.MaxValue)
+                        {
+                            toUnload.Add(kvp.Key);
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        foreach (var record in kvp.Value)
+                        {
+                            float dx = record.PosX - playerPosition.X;
+                            float dy = record.PosY - playerPosition.Y;
+                            float dz = record.PosZ - playerPosition.Z;
+                            float distSq = dx * dx + dy * dy + dz * dz;
+                            if (distSq < minDistSq)
+                                minDistSq = distSq;
+                        }
+                    }
 
                     if (isLoaded && minDistSq > clearSq)
                         toUnload.Add(kvp.Key);
@@ -1145,6 +1171,7 @@ namespace MenyooStreamer
                         {
                             ped.Rotation = new Vector3(record.Pitch, record.Roll, record.Yaw);
                             ped.BlockPermanentEvents = true;
+                            ped.IsPersistent = true;
                             record.DeletedByMod = false;
                             _handleMap[ped.Handle] = record;
                             peds.Add(ped);
