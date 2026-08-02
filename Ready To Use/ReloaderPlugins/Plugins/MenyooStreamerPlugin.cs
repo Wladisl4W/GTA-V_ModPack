@@ -787,9 +787,18 @@ namespace MenyooStreamer
         public Action<string> Log;
 
         private const int PedsPerChunkTick = 20;
-        private const int MaxLoadAttempts = 20;
 
         public bool IsStreaming { get { return _isStreaming; } }
+        public int LivePedCount
+        {
+            get
+            {
+                int count = 0;
+                foreach (var kvp in _loadedChunks)
+                    count += kvp.Value.Count;
+                return count;
+            }
+        }
         public int LoadedPedCount
         {
             get
@@ -904,6 +913,8 @@ namespace MenyooStreamer
                     return;
                 _lastCheck = now;
 
+                PruneDeadPeds();
+
                 float loadSq = _config.LoadRadius * _config.LoadRadius;
                 float clearSq = _config.ClearRadius * _config.ClearRadius;
 
@@ -913,30 +924,25 @@ namespace MenyooStreamer
                 foreach (var kvp in _chunks)
                 {
                     float minDistSq = float.MaxValue;
-                    bool isLoaded = false;
+                    bool isLoaded = _loadedChunks.ContainsKey(kvp.Key);
 
-                    List<Ped> loadedPeds;
-                    if (_loadedChunks.TryGetValue(kvp.Key, out loadedPeds))
+                    if (isLoaded)
                     {
-                        isLoaded = true;
-
-                        foreach (var ped in loadedPeds)
+                        List<Ped> loadedPeds;
+                        if (_loadedChunks.TryGetValue(kvp.Key, out loadedPeds))
                         {
-                            if (ped == null || !ped.Exists()) continue;
+                            foreach (var ped in loadedPeds)
+                            {
+                                if (ped == null || !ped.Exists()) continue;
 
-                            var pedPos = ped.Position;
-                            float dx = pedPos.X - playerPosition.X;
-                            float dy = pedPos.Y - playerPosition.Y;
-                            float dz = pedPos.Z - playerPosition.Z;
-                            float distSq = dx * dx + dy * dy + dz * dz;
-                            if (distSq < minDistSq)
-                                minDistSq = distSq;
-                        }
-
-                        if (minDistSq == float.MaxValue)
-                        {
-                            toUnload.Add(kvp.Key);
-                            continue;
+                                var pedPos = ped.Position;
+                                float dx = pedPos.X - playerPosition.X;
+                                float dy = pedPos.Y - playerPosition.Y;
+                                float dz = pedPos.Z - playerPosition.Z;
+                                float distSq = dx * dx + dy * dy + dz * dz;
+                                if (distSq < minDistSq)
+                                    minDistSq = distSq;
+                            }
                         }
                     }
                     else
@@ -965,15 +971,15 @@ namespace MenyooStreamer
                 foreach (var key in toLoad)
                 {
                     if (processed >= _config.BatchSize) break;
-                    if (_handleMap.Count >= _config.MaxPeds) break;
-                    LoadChunk(key);
-                    processed++;
+                    if (LivePedCount >= _config.MaxPeds) break;
+                    if (LoadChunk(key))
+                        processed++;
                 }
 
                 foreach (var kvp in _loadedChunks)
                 {
                     if (processed >= _config.BatchSize) break;
-                    if (_handleMap.Count >= _config.MaxPeds) break;
+                    if (LivePedCount >= _config.MaxPeds) break;
 
                     List<PedRecord> records;
                     if (!_chunks.TryGetValue(kvp.Key, out records)) continue;
@@ -990,21 +996,46 @@ namespace MenyooStreamer
 
                     if (hasPending)
                     {
-                        LoadChunk(kvp.Key);
-                        processed++;
+                        if (LoadChunk(kvp.Key))
+                            processed++;
                     }
                 }
 
                 if (++_statusLogCount % 30 == 0)
                 {
                     if (Log != null)
-                        Log("Статус: педов=" + _handleMap.Count + "/" + _config.MaxPeds +
+                        Log("Статус: педов=" + LivePedCount + "/" + _config.MaxPeds +
                             ", чанков=" + _chunks.Count + ", загружено=" + _loadedChunks.Count);
                 }
             }
             catch
             {
             }
+        }
+
+        private void PruneDeadPeds()
+        {
+            var empty = new List<string>();
+
+            foreach (var kvp in _loadedChunks)
+            {
+                var list = kvp.Value;
+                for (int i = list.Count - 1; i >= 0; i--)
+                {
+                    var ped = list[i];
+                    if (ped == null || !ped.Exists())
+                    {
+                        list.RemoveAt(i);
+                        _handleMap.Remove(ped == null ? 0 : ped.Handle);
+                    }
+                }
+
+                if (list.Count == 0)
+                    empty.Add(kvp.Key);
+            }
+
+            foreach (var key in empty)
+                _loadedChunks.Remove(key);
         }
 
         private bool LoadChunk(string key)
@@ -1037,23 +1068,23 @@ namespace MenyooStreamer
                     }
                 }
 
-                if (models.Count == 0)
+                if (models.Count == 0) return false;
+                if (models.Any(m => !m.IsLoaded)) return false;
+
+                List<Ped> chunkPeds;
+                if (!_loadedChunks.TryGetValue(key, out chunkPeds))
                 {
-                    FailChunk(key, "нет валидных моделей");
-                    return false;
-                }
-                if (models.Any(m => !m.IsLoaded))
-                {
-                    FailChunk(key, "модели не загрузились");
-                    return false;
+                    chunkPeds = new List<Ped>();
+                    _loadedChunks[key] = chunkPeds;
                 }
 
-                var peds = new List<Ped>();
-                foreach (var entry in recordsToSpawn)
+                var spawned = new List<Ped>();
+                try
                 {
-                    if (_handleMap.Count >= _config.MaxPeds) break;
-                    try
+                    foreach (var entry in recordsToSpawn)
                     {
+                        if (LivePedCount >= _config.MaxPeds) break;
+
                         var record = entry;
                         var model = new Model(record.ModelHash);
                         if (!model.IsValid || !model.IsInCdImage) continue;
@@ -1068,32 +1099,28 @@ namespace MenyooStreamer
                             ped.IsPersistent = true;
                             record.DeletedByMod = false;
                             _handleMap[ped.Handle] = record;
-                            peds.Add(ped);
+                            spawned.Add(ped);
                         }
                     }
-                    catch
-                    {
-                    }
-                }
 
-                foreach (var model in models)
-                    model.MarkAsNoLongerNeeded();
+                    foreach (var model in models)
+                        model.MarkAsNoLongerNeeded();
 
-                if (peds.Count > 0)
-                {
-                    List<Ped> existing;
-                    if (!_loadedChunks.TryGetValue(key, out existing))
-                    {
-                        existing = new List<Ped>();
-                        _loadedChunks[key] = existing;
-                    }
-                    existing.AddRange(peds);
+                    chunkPeds.AddRange(spawned);
                     _failedLoads.Remove(key);
-                    return true;
+                    return spawned.Count > 0;
                 }
-
-                FailChunk(key, "не удалось создать педов");
-                return false;
+                catch
+                {
+                    foreach (var ped in spawned)
+                    {
+                        try { ped.Delete(); } catch { }
+                        _handleMap.Remove(ped.Handle);
+                    }
+                    if (chunkPeds.Count == 0)
+                        _loadedChunks.Remove(key);
+                    throw;
+                }
             }
             catch
             {
@@ -1107,21 +1134,10 @@ namespace MenyooStreamer
             if (!_failedLoads.TryGetValue(key, out fails))
                 fails = 0;
             fails++;
+            _failedLoads[key] = fails;
 
-            if (Log != null)
-                Log("Чанк " + key + ": " + reason + " (попытка " + fails + "/" + MaxLoadAttempts + ")");
-
-            if (fails >= MaxLoadAttempts)
-            {
-                _chunks.Remove(key);
-                _failedLoads.Remove(key);
-                if (Log != null)
-                    Log("Чанк " + key + " удалён (исчерпаны попытки)");
-            }
-            else
-            {
-                _failedLoads[key] = fails;
-            }
+            if (fails % 10 == 1 && Log != null)
+                Log("Чанк " + key + ": " + reason + " (попытка " + fails + ")");
         }
 
         private void UnloadChunk(string key)
@@ -1131,7 +1147,8 @@ namespace MenyooStreamer
                 List<Ped> peds;
                 if (!_loadedChunks.TryGetValue(key, out peds)) return;
 
-                foreach (var ped in peds)
+                var snapshot = new List<Ped>(peds);
+                foreach (var ped in snapshot)
                 {
                     try
                     {
