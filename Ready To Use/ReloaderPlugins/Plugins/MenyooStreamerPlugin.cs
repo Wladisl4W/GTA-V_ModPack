@@ -804,6 +804,8 @@ namespace MenyooStreamer
 
             float scanSq = scanRadius * scanRadius;
 
+            int processed = 0;
+
             foreach (var ped in peds)
             {
                 try
@@ -812,7 +814,6 @@ namespace MenyooStreamer
                     if (ped == player) continue;
                     if (ped.IsInVehicle()) continue;
                     if (ped.IsDead) continue;
-
                     var pos = ped.Position;
                     float dx = pos.X - playerPos.X;
                     float dy = pos.Y - playerPos.Y;
@@ -848,6 +849,9 @@ namespace MenyooStreamer
                 catch
                 {
                 }
+
+                if ((++processed % 40) == 0)
+                    Script.Yield();
             }
 
             return records;
@@ -884,7 +888,7 @@ namespace MenyooStreamer
         private DateTime _lastCheck;
         private bool _isStreaming;
 
-        private const int PedsPerChunkTick = 10;
+        private const int PedsPerChunkTick = 20;
         private const int MaxLoadAttempts = 20;
 
         public bool IsStreaming { get { return _isStreaming; } }
@@ -1109,7 +1113,6 @@ namespace MenyooStreamer
                 }
                 if (models.Any(m => !m.IsLoaded))
                 {
-                    FailChunk(key);
                     return false;
                 }
 
@@ -1130,6 +1133,7 @@ namespace MenyooStreamer
                         {
                             ped.Rotation = new Vector3(record.Pitch, record.Roll, record.Yaw);
                             ped.BlockPermanentEvents = true;
+                            record.DeletedByMod = false;
                             _handleMap[ped.Handle] = record;
                             peds.Add(ped);
                         }
