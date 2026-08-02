@@ -742,38 +742,45 @@ namespace ModdedCamera.Services
 
         public void ProcessPointSelectorInput()
         {
-            if (Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 24))
+            try
             {
-                if (OnAddNode != null) OnAddNode();
+                if (Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 24))
+                {
+                    if (OnAddNode != null) OnAddNode();
+                }
+
+                Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 241, true);
+                Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 242, true);
+                Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 241, true);
+                Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 242, true);
+
+                float scrollUp = Function.Call<float>(NativeHashes.GET_DISABLED_CONTROL_NORMAL, 0, 241);
+                float scrollDown = Function.Call<float>(NativeHashes.GET_DISABLED_CONTROL_NORMAL, 0, 242);
+
+                bool scrollUpPressed = scrollUp > 0.5f || Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 241);
+                bool scrollDownPressed = scrollDown > 0.5f || Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 242);
+
+                if (scrollUpPressed)
+                {
+                    if (OnScrollDurationUp != null) OnScrollDurationUp();
+                }
+                else if (scrollDownPressed)
+                {
+                    if (OnScrollDurationDown != null) OnScrollDurationDown();
+                }
+
+                if (Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 25))
+                {
+                    if (OnExitPointSelector != null) OnExitPointSelector();
+                }
+                else if (Game.IsControlJustPressed(GTA.Control.FrontendAccept))
+                {
+                    if (OnExitPointSelector != null) OnExitPointSelector();
+                }
             }
-
-            Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 241, true);
-            Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 242, true);
-            Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 241, true);
-            Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 242, true);
-
-            float scrollUp = Function.Call<float>(NativeHashes.GET_DISABLED_CONTROL_NORMAL, 0, 241);
-            float scrollDown = Function.Call<float>(NativeHashes.GET_DISABLED_CONTROL_NORMAL, 0, 242);
-
-            bool scrollUpPressed = scrollUp > 0.5f || Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 241);
-            bool scrollDownPressed = scrollDown > 0.5f || Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 242);
-
-            if (scrollUpPressed)
+            catch (Exception ex)
             {
-                if (OnScrollDurationUp != null) OnScrollDurationUp();
-            }
-            else if (scrollDownPressed)
-            {
-                if (OnScrollDurationDown != null) OnScrollDurationDown();
-            }
-
-            if (Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, 25))
-            {
-                if (OnExitPointSelector != null) OnExitPointSelector();
-            }
-            else if (Game.IsControlJustPressed(GTA.Control.FrontendAccept))
-            {
-                if (OnExitPointSelector != null) OnExitPointSelector();
+                Logger.Error(ex, "InputService: Error in ProcessPointSelectorInput");
             }
         }
 
