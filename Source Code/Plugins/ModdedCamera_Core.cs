@@ -683,6 +683,7 @@ namespace ModdedCamera
         private float _currentLerpTime;
         private readonly float LerpTime = 0.5f;
         private readonly float RotationSpeed = 0.7f;
+        private bool _takeoverActive = false;
         private static readonly int[] ControlsToDisable = { 24, 25, 26, 45, 138, 140, 141, 142, 143, 241, 242, 21, 22, 23, 44, 51, 54, 80, 20, 264, 27, 79, 210, 209, 203, 311, 309, 233, 187, 173, 48, 43, 19, 301, 288, 289, 298, 31, 30, 34, 35, 32, 33 };
 
         public GamepadHandler GamepadHandler;
@@ -732,6 +733,11 @@ namespace ModdedCamera
             try
             {
                 CameraRenderer.ClearFocus();
+                if (_takeoverActive)
+                {
+                    _takeoverActive = false;
+                    Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, true, 0);
+                }
                 EnablePlayerControls();
                 if (GamepadHandler != null)
                 {
@@ -806,6 +812,7 @@ namespace ModdedCamera
         {
             _mainCamera.Position = position;
             _fadeMachine.StartFadeOut(1200);
+            _takeoverActive = true;
             DisablePlayerControls();
         }
 
@@ -848,6 +855,10 @@ namespace ModdedCamera
                 bool isActive = _mainCamera.IsActive;
                 if (isActive)
                 {
+                    _takeoverActive = true;
+                    Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, false, 0);
+                    DisablePlayerControls();
+
                     bool shouldRender = _renderSceneTimer.Enabled && _renderSceneTimer.Check();
                     if (shouldRender)
                     {
@@ -865,6 +876,12 @@ namespace ModdedCamera
                     try { RenderInstructionalButtons(); } catch (Exception ex) { Logger.Debug("RenderInstructionalButtons warning: " + ex.Message); }
 
                     if (_currentLerpTime > 0f) _currentLerpTime -= 0.01f;
+                }
+                else if (_takeoverActive)
+                {
+                    _takeoverActive = false;
+                    Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, true, 0);
+                    EnablePlayerControls();
                 }
             }
             catch (Exception ex)
