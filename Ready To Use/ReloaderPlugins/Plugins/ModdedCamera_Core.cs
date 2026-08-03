@@ -739,6 +739,7 @@ namespace ModdedCamera
         private readonly float LerpTime = 0.5f;
         private readonly float RotationSpeed = 0.7f;
         private bool _controlsDisabled = false;
+        private int _lastInstructionalRenderMs = 0;
 
         public GamepadHandler GamepadHandler;
 
@@ -916,7 +917,11 @@ namespace ModdedCamera
 
                     try { GamepadHandler.Update(); } catch (Exception ex) { Logger.Debug("GamepadHandler.Update warning: " + ex.Message); }
 
-                    try { RenderInstructionalButtons(); } catch (Exception ex) { Logger.Debug("RenderInstructionalButtons warning: " + ex.Message); }
+                    if (Game.GameTime - _lastInstructionalRenderMs > 500)
+                    {
+                        try { RenderInstructionalButtons(); } catch (Exception ex) { Logger.Debug("RenderInstructionalButtons warning: " + ex.Message); }
+                        _lastInstructionalRenderMs = Game.GameTime;
+                    }
 
                     if (_currentLerpTime > 0f) _currentLerpTime -= 0.01f;
                 }
