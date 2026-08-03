@@ -113,6 +113,11 @@ namespace ModdedCamera
 
         public void Update(out Vector3 position, out Vector3 rotation)
         {
+            UpdateAt(Game.GameTime, out position, out rotation);
+        }
+
+        public void UpdateAt(long now, out Vector3 position, out Vector3 rotation)
+        {
             position = Vector3.Zero;
             rotation = Vector3.Zero;
 
@@ -121,7 +126,6 @@ namespace ModdedCamera
 
             try
             {
-                long now = Game.GameTime;
                 long elapsedMs = now - (long)_playbackStartTimeMs;
 
                 if (elapsedMs < 0)
@@ -689,7 +693,10 @@ namespace ModdedCamera
 
                 Vector3 interpPos;
                 Vector3 interpRot;
-                _interpolator.Update(out interpPos, out interpRot);
+                int extrapolateMs = (int)(Game.LastFrameTime * 1000f);
+                if (extrapolateMs < 0) extrapolateMs = 0;
+                if (extrapolateMs > 250) extrapolateMs = 250;
+                _interpolator.UpdateAt(Game.GameTime + extrapolateMs, out interpPos, out interpRot);
 
                 _mainCamera.Position = interpPos;
                 _mainCamera.Rotation = interpRot;
