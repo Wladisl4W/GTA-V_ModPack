@@ -216,8 +216,13 @@ namespace ModdedCamera
         private float Ease(int mode, float t)
         {
             if (mode == 0) return t;
-            if (mode == 1) return 0.5f * t + 0.5f * (t * t * (3f - 2f * t));
+            if (mode == 1) return 0.5f * t + 0.5f * Smootherstep(t);
             return t * t * (3f - 2f * t);
+        }
+
+        private float Smootherstep(float t)
+        {
+            return t * t * t * (t * (t * 6f - 15f) + 10f);
         }
 
         public void Clear()
