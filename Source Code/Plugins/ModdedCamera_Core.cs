@@ -216,7 +216,7 @@ namespace ModdedCamera
         private float Ease(int mode, float t)
         {
             if (mode == 0) return t;
-            if (mode == 1) return (1f - (float)Math.Cos(Math.PI * t)) * 0.5f;
+            if (mode == 1) return 0.5f * t + 0.5f * (t * t * (3f - 2f * t));
             return t * t * (3f - 2f * t);
         }
 
