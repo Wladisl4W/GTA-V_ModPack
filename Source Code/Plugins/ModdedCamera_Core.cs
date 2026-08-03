@@ -184,8 +184,20 @@ namespace ModdedCamera
                 float blend = t * t * (3f - 2f * t);
                 float f = fStart + (fEnd - fStart) * blend;
 
-                position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], f);
-                rotation = InterpolateRotationShortest(currentSegment, f);
+                if (modeOut == 1 || modeIn == 1)
+                {
+                    Vector3 p0 = (currentSegment > 0) ? _positions[currentSegment - 1] : _positions[currentSegment];
+                    Vector3 p1 = _positions[currentSegment];
+                    Vector3 p2 = _positions[currentSegment + 1];
+                    Vector3 p3 = (currentSegment + 2 < _positions.Count) ? _positions[currentSegment + 2] : _positions[currentSegment + 1];
+                    position = CatmullRom(p0, p1, p2, p3, f);
+                    rotation = InterpolateRotationSpline(currentSegment, f);
+                }
+                else
+                {
+                    position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], f);
+                    rotation = InterpolateRotationShortest(currentSegment, f);
+                }
             }
             catch (Exception ex)
             {
@@ -211,6 +223,39 @@ namespace ModdedCamera
             while (delta > 180f) delta -= 360f;
             while (delta < -180f) delta += 360f;
             return a + delta * t;
+        }
+
+        private Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+        {
+            float t2 = t * t;
+            float t3 = t2 * t;
+            return 0.5f * ((2f * p1) + (-p0 + p2) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 + (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
+        }
+
+        private Vector3 InterpolateRotationSpline(int segment, float t)
+        {
+            Vector3 r0 = (segment > 0) ? _rotations[segment - 1] : _rotations[segment];
+            Vector3 r1 = _rotations[segment];
+            Vector3 r2 = UnwrapRotation(r1, _rotations[segment + 1]);
+            Vector3 r3 = (segment + 2 < _rotations.Count) ? UnwrapRotation(r2, _rotations[segment + 2]) : r2;
+            r0 = UnwrapRotation(r1, r0);
+            return CatmullRom(r0, r1, r2, r3, t);
+        }
+
+        private Vector3 UnwrapRotation(Vector3 reference, Vector3 target)
+        {
+            return new Vector3(
+                reference.X + DeltaAngle(reference.X, target.X),
+                reference.Y + DeltaAngle(reference.Y, target.Y),
+                reference.Z + DeltaAngle(reference.Z, target.Z));
+        }
+
+        private float DeltaAngle(float a, float b)
+        {
+            float delta = b - a;
+            while (delta > 180f) delta -= 360f;
+            while (delta < -180f) delta += 360f;
+            return delta;
         }
 
         private float Ease(int mode, float t)
