@@ -305,9 +305,7 @@ namespace ModdedCamera.Services
                 _lastFollowTeleportMs = now;
 
                 var cam = SplineCamera.MainCamera;
-                Vector3 dir = Utils.RotationToDirection(cam.Rotation);
-                Vector3 followPos = cam.Position - dir * 2.0f + new Vector3(0f, 0f, 0.5f);
-                Game.Player.Character.Position = followPos;
+                Game.Player.Character.Position = cam.Position;
             }
             catch (Exception ex)
             {
