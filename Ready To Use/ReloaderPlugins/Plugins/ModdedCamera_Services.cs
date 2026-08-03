@@ -1355,7 +1355,7 @@ namespace ModdedCamera.Services
                             nodeMode = (i < spline.GetNodeInterpolationModes().Count) ? spline.GetNodeInterpolationModes()[i] : 2;
                         }
 
-                        string modeLabel = (nodeMode == 0) ? "Линейно" : "Плавно";
+                        string modeLabel = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно (без остановки)" : "Плавно";
                         float durSec = (float)duration / 1000f;
                         string label = "Узел " + (i + 1) + "  (" + durSec.ToString("F2") + "с, " + modeLabel + ") | всего: " + totalSec.ToString("F2") + "с";
                         string desc = "Поз: " + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1");
@@ -1407,14 +1407,15 @@ namespace ModdedCamera.Services
                         nodeMenu.Add(durItem);
 
                         // Interpolation mode
-                        NativeListItem<string> modeItem = new NativeListItem<string>("Интерполяция", "Линейно или плавно для узла");
+                        NativeListItem<string> modeItem = new NativeListItem<string>("Интерполяция", "Режим движения камеры для узла");
                         modeItem.Items.Add("Линейно");
+                        modeItem.Items.Add("Плавно (без остановки)");
                         modeItem.Items.Add("Плавно");
-                        modeItem.SelectedItem = (nodeMode == 0) ? "Линейно" : "Плавно";
+                        modeItem.SelectedItem = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно (без остановки)" : "Плавно";
                         int capturedIndex2 = nodeIndex;
                         modeItem.ItemChanged += delegate(object sender, ItemChangedEventArgs<string> args)
                         {
-                            int newMode = (args.Object == "Плавно") ? 2 : 0;
+                            int newMode = (args.Object == "Линейно") ? 0 : (args.Object == "Плавно (без остановки)") ? 1 : 2;
                             if (_editingSavedPath && _editingPath != null)
                             {
                                 while (_editingPath.NodeInterpolationModes.Count <= capturedIndex2)

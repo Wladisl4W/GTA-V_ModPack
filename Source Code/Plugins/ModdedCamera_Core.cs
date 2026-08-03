@@ -179,8 +179,8 @@ namespace ModdedCamera
                 int modeOut = (currentSegment < _segmentModes.Count) ? _segmentModes[currentSegment] : 2;
                 int modeIn = (currentSegment + 1 < _segmentModes.Count) ? _segmentModes[currentSegment + 1] : modeOut;
 
-                float fStart = (modeOut == 0) ? t : t * t * (3f - 2f * t);
-                float fEnd = (modeIn == 0) ? t : t * t * (3f - 2f * t);
+                float fStart = Ease(modeOut, t);
+                float fEnd = Ease(modeIn, t);
                 float blend = t * t * (3f - 2f * t);
                 float f = fStart + (fEnd - fStart) * blend;
 
@@ -211,6 +211,13 @@ namespace ModdedCamera
             while (delta > 180f) delta -= 360f;
             while (delta < -180f) delta += 360f;
             return a + delta * t;
+        }
+
+        private float Ease(int mode, float t)
+        {
+            if (mode == 0) return t;
+            if (mode == 1) return (1f - (float)Math.Cos(Math.PI * t)) * 0.5f;
+            return t * t * (3f - 2f * t);
         }
 
         public void Clear()
