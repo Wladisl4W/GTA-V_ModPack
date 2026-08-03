@@ -683,8 +683,7 @@ namespace ModdedCamera
         private float _currentLerpTime;
         private readonly float LerpTime = 0.5f;
         private readonly float RotationSpeed = 0.7f;
-        private bool _takeoverActive = false;
-        private static readonly int[] ControlsToDisable = { 24, 25, 26, 45, 138, 140, 141, 142, 143, 241, 242, 21, 22, 23, 44, 51, 54, 80, 20, 264, 27, 79, 210, 209, 203, 311, 309, 233, 187, 173, 48, 43, 19, 301, 288, 289, 298, 31, 30, 34, 35, 32, 33 };
+        private bool _controlsDisabled = false;
 
         public GamepadHandler GamepadHandler;
 
@@ -733,11 +732,6 @@ namespace ModdedCamera
             try
             {
                 CameraRenderer.ClearFocus();
-                if (_takeoverActive)
-                {
-                    _takeoverActive = false;
-                    Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, true, 0);
-                }
                 EnablePlayerControls();
                 if (GamepadHandler != null)
                 {
@@ -812,7 +806,6 @@ namespace ModdedCamera
         {
             _mainCamera.Position = position;
             _fadeMachine.StartFadeOut(1200);
-            _takeoverActive = true;
             DisablePlayerControls();
         }
 
@@ -825,20 +818,14 @@ namespace ModdedCamera
 
         private void DisablePlayerControls()
         {
-            foreach (int control in ControlsToDisable)
-            {
-                Function.Call(NativeHashes.DISABLE_CONTROL_ACTION, 0, control, true);
-                Function.Call(NativeHashes.DISABLE_CONTROL_ACTION, 2, control, true);
-            }
+            Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, 0);
+            Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, 2);
         }
 
         private void EnablePlayerControls()
         {
-            foreach (int control in ControlsToDisable)
-            {
-                Function.Call(Hash.ENABLE_CONTROL_ACTION, 0, control, true);
-                Function.Call(Hash.ENABLE_CONTROL_ACTION, 2, control, true);
-            }
+            Function.Call(Hash.ENABLE_ALL_CONTROL_ACTIONS, 0);
+            Function.Call(Hash.ENABLE_ALL_CONTROL_ACTIONS, 2);
         }
 
         public void Update()
@@ -855,10 +842,11 @@ namespace ModdedCamera
                 bool isActive = _mainCamera.IsActive;
                 if (isActive)
                 {
-                    _takeoverActive = true;
-                    Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, false, 0);
-                    DisablePlayerControls();
-
+                    if (!_controlsDisabled)
+                    {
+                        _controlsDisabled = true;
+                        DisablePlayerControls();
+                    }
                     bool shouldRender = _renderSceneTimer.Enabled && _renderSceneTimer.Check();
                     if (shouldRender)
                     {
@@ -877,10 +865,9 @@ namespace ModdedCamera
 
                     if (_currentLerpTime > 0f) _currentLerpTime -= 0.01f;
                 }
-                else if (_takeoverActive)
+                else if (_controlsDisabled)
                 {
-                    _takeoverActive = false;
-                    Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, true, 0);
+                    _controlsDisabled = false;
                     EnablePlayerControls();
                 }
             }
