@@ -53,6 +53,8 @@ namespace ModdedCamera.Services
         private bool _savedPlayerCollision = true;
         private bool _savedPlayerInvincible = false;
         private bool _savedPlayerPosFrozen = false;
+        private int _lastFollowTeleportMs = 0;
+        private const int FollowTeleportIntervalMs = 500;
 
         public CameraService()
         {
@@ -198,6 +200,7 @@ namespace ModdedCamera.Services
         {
             try
             {
+                TeleportPlayerBehindCamera();
                 RestorePlayerState();
                 if (SplineCamera != null && IsSplineCamActive)
                 {
@@ -209,6 +212,24 @@ namespace ModdedCamera.Services
             catch (Exception ex)
             {
                 Logger.Error(ex, "CameraService: Error in StopPlayback");
+            }
+        }
+
+        private void TeleportPlayerBehindCamera()
+        {
+            try
+            {
+                if (!_isPlayerFollowing || SplineCamera == null || SplineCamera.MainCamera == null || !SplineCamera.MainCamera.Exists())
+                    return;
+                var cam = SplineCamera.MainCamera;
+                Vector3 dir = Utils.RotationToDirection(cam.Rotation);
+                Vector3 followPos = cam.Position - dir * 2.0f + new Vector3(0f, 0f, 0.5f);
+                Game.Player.Character.Position = followPos;
+                _lastFollowTeleportMs = Game.GameTime;
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("TeleportPlayerBehindCamera warning: " + ex.Message);
             }
         }
 
@@ -278,6 +299,11 @@ namespace ModdedCamera.Services
                 return;
             try
             {
+                int now = Game.GameTime;
+                if (now - _lastFollowTeleportMs < FollowTeleportIntervalMs)
+                    return;
+                _lastFollowTeleportMs = now;
+
                 var cam = SplineCamera.MainCamera;
                 Vector3 dir = Utils.RotationToDirection(cam.Rotation);
                 Vector3 followPos = cam.Position - dir * 2.0f + new Vector3(0f, 0f, 0.5f);
