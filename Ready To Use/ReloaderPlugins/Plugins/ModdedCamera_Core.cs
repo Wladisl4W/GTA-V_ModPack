@@ -176,18 +176,16 @@ namespace ModdedCamera
                 float t = (float)segmentElapsedMs / segmentDurationMs;
                 t = Math.Min(Math.Max(t, 0f), 1f);
 
-                int segMode = (currentSegment < _segmentModes.Count) ? _segmentModes[currentSegment] : 2;
-                if (segMode == 0)
-                {
-                    position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], t);
-                    rotation = InterpolateRotationShortest(currentSegment, t);
-                }
-                else
-                {
-                    float et = t * t * (3f - 2f * t);
-                    position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], et);
-                    rotation = InterpolateRotationShortest(currentSegment, et);
-                }
+                int modeOut = (currentSegment < _segmentModes.Count) ? _segmentModes[currentSegment] : 2;
+                int modeIn = (currentSegment + 1 < _segmentModes.Count) ? _segmentModes[currentSegment + 1] : modeOut;
+
+                float fStart = (modeOut == 0) ? t : t * t * (3f - 2f * t);
+                float fEnd = (modeIn == 0) ? t : t * t * (3f - 2f * t);
+                float blend = t * t * (3f - 2f * t);
+                float f = fStart + (fEnd - fStart) * blend;
+
+                position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], f);
+                rotation = InterpolateRotationShortest(currentSegment, f);
             }
             catch (Exception ex)
             {
