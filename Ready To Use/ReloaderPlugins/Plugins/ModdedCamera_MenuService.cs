@@ -38,6 +38,7 @@ namespace ModdedCamera.Services
         private bool _editingSavedPath = false;
         private CameraPath _editingPath = null;
         private NativeMenu _editingPathBackMenu = null;
+        private bool _pickPathForEdit = false;
         private string _savedPathsSearch = "";
         private int _lastSelectedNodeIndex = -1;
 
@@ -244,6 +245,40 @@ namespace ModdedCamera.Services
 
                 foreach (string pathName in filteredPaths)
                 {
+                    string pn = pathName;
+                    if (_pickPathForEdit)
+                    {
+                        NativeItem pickItem = new NativeItem(pathName, "Нажмите, чтобы редактировать узлы");
+                        pickItem.Activated += delegate
+                        {
+                            try
+                            {
+                                CameraPath path = PathManager.LoadPath(pn);
+                                if (path == null || path.Positions == null || path.Positions.Count < 2)
+                                {
+                                    GTA.UI.Notification.PostTicker("~r~Путь повреждён или содержит меньше 2 узлов!", false, false);
+                                    return;
+                                }
+                                _cameraService.LoadPath(path);
+                                _editingSavedPath = true;
+                                _editingPath = path;
+                                _editingPathBackMenu = SavedPathsMenu;
+                                _lastSelectedNodeIndex = -1;
+                                _pickPathForEdit = false;
+                                SavedPathsMenu.Visible = false;
+                                RefreshNodeEditorMenu();
+                                NodeEditorMenu.Visible = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error(ex, "Error opening path editor: " + pn);
+                                GTA.UI.Notification.PostTicker("~r~Не удалось открыть редактор: " + ex.Message, false, false);
+                            }
+                        };
+                        SavedPathsMenu.Add(pickItem);
+                        continue;
+                    }
+
                     NativeMenu pathSubMenu = new NativeMenu(pathName, "Действия");
                     ActivePool.Add(pathSubMenu);
                     _pathSubMenus.Add(pathSubMenu);
@@ -286,35 +321,6 @@ namespace ModdedCamera.Services
                         }
                     };
                     pathSubMenu.Add(renameBtn);
-
-                    NativeItem editBtn = new NativeItem("~b~Редактировать узлы", "Изменить узлы этого сохранённого пути");
-                    string editPn = pathName;
-                    editBtn.Activated += delegate
-                    {
-                        try
-                        {
-                            CameraPath path = PathManager.LoadPath(editPn);
-                            if (path == null || path.Positions == null || path.Positions.Count < 2)
-                            {
-                                GTA.UI.Notification.PostTicker("~r~Путь повреждён или содержит меньше 2 узлов!", false, false);
-                                return;
-                            }
-                            _cameraService.LoadPath(path);
-                            _editingSavedPath = true;
-                            _editingPath = path;
-                            _editingPathBackMenu = pathSubMenu;
-                            _lastSelectedNodeIndex = -1;
-                            pathSubMenu.Visible = false;
-                            RefreshNodeEditorMenu();
-                            NodeEditorMenu.Visible = true;
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Error(ex, "Error opening path editor: " + editPn);
-                            GTA.UI.Notification.PostTicker("~r~Не удалось открыть редактор: " + ex.Message, false, false);
-                        }
-                    };
-                    pathSubMenu.Add(editBtn);
 
                     NativeMenu delMenu = new NativeMenu("Удалить: " + pathName, "Вы уверены?");
                     ActivePool.Add(delMenu);
@@ -393,6 +399,7 @@ namespace ModdedCamera.Services
                 if (SavedPathsMenu.Visible)
                 {
                     SavedPathsMenu.Visible = false;
+                    _pickPathForEdit = false;
                     MainMenu.Visible = true;
                     return true;
                 }
@@ -499,8 +506,12 @@ namespace ModdedCamera.Services
             MainMenu.Add(_savePathItem);
 
             _loadPathItem = new NativeItem("Загрузить путь", "Выберите сохранённый путь для загрузки");
-            _loadPathItem.Activated += (s, e) => { MainMenu.Visible = false; SavedPathsMenu.Visible = true; };
+            _loadPathItem.Activated += (s, e) => { _pickPathForEdit = false; MainMenu.Visible = false; SavedPathsMenu.Visible = true; };
             MainMenu.Add(_loadPathItem);
+
+            NativeItem editSavedPathItem = new NativeItem("~b~Редактировать сохранённый путь", "Изменить узлы выбранного сохранённого пути");
+            editSavedPathItem.Activated += (s, e) => { _pickPathForEdit = true; MainMenu.Visible = false; SavedPathsMenu.Visible = true; };
+            MainMenu.Add(editSavedPathItem);
 
             _cameraOptionsItem = new NativeItem("Настройки камеры", "Настроить параметры камеры");
             _cameraOptionsItem.Activated += (s, e) => { MainMenu.Visible = false; CameraOptionsMenu.Visible = true; };
