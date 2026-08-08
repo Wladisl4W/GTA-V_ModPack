@@ -142,12 +142,7 @@ namespace ModdedCamera
 
         private void OnAddNode()
         {
-            if (_cameraService.AddNodeAtCurrentPosition())
-            {
-                Vector3 pos = _cameraService.GetActiveCameraPosition();
-                int durationMs = _menuService.GetNodeDuration();
-                GTA.UI.Notification.PostTicker("Узел добавлен\nПоз: (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")\nДлительность: " + ((float)durationMs / 1000f).ToString("F2") + "с", false, false);
-            }
+            _cameraService.AddNodeAtCurrentPosition();
         }
 
         private void OnScrollDurationUp()

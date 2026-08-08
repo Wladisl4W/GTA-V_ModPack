@@ -690,6 +690,12 @@ namespace ModdedCamera
             }
         }
 
+        public void SetNodePosition(int index, Vector3 position, Vector3 rotation)
+        {
+            if (index >= 0 && index < _nodes.Count)
+                _nodes[index] = new Tuple<Vector3, Vector3>(position, rotation);
+        }
+
         public void DrawNodeMarkers()
         {
             try

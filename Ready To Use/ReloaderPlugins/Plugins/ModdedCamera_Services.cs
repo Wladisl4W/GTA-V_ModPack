@@ -57,6 +57,8 @@ namespace ModdedCamera.Services
         private const int FollowTeleportIntervalMs = 500;
         private float _lastTimeScale = 1f;
         private long _playbackStartMs = 0;
+        private int _editNodeIndex = -1;
+        private CameraPath _editNodePath = null;
 
         public CameraService()
         {
@@ -130,6 +132,43 @@ namespace ModdedCamera.Services
             }
         }
 
+        public void EnterPointSelectorForNode(int nodeIndex, CameraPath editPath)
+        {
+            try
+            {
+                if (PositionSelector == null || SplineCamera == null)
+                {
+                    GTA.UI.Notification.PostTicker("~r~Камеры не инициализированы!", false, false);
+                    return;
+                }
+                if (nodeIndex < 0 || nodeIndex >= SplineCamera.Nodes.Count)
+                {
+                    GTA.UI.Notification.PostTicker("~r~Узел не найден!", false, false);
+                    return;
+                }
+                if (IsSelectorActive || IsSplineCamActive)
+                {
+                    GTA.UI.Notification.PostTicker("Камера уже активна.", false, false);
+                    return;
+                }
+
+                Logger.Info("CameraService: Entering point selector to edit node " + nodeIndex);
+                _editNodeIndex = nodeIndex;
+                _editNodePath = editPath;
+                Game.Player.Character.IsPositionFrozen = true;
+                _selectorWasUsed = true;
+                var node = SplineCamera.Nodes[nodeIndex];
+                PositionSelector.EnterCameraView(node.Item1);
+                if (PositionSelector.MainCamera != null)
+                    PositionSelector.MainCamera.Rotation = node.Item2;
+            }
+            catch (Exception ex)
+            {
+                GTA.UI.Notification.PostTicker("~r~Ошибка!", false, false);
+                Logger.Error(ex, "CameraService: Error in EnterPointSelectorForNode");
+            }
+        }
+
         public void ExitPointSelector()
         {
             try
@@ -139,6 +178,8 @@ namespace ModdedCamera.Services
                     PositionSelector.ExitCameraView();
                 Game.Player.Character.IsPositionFrozen = false;
                 _selectorWasUsed = false;
+                _editNodeIndex = -1;
+                _editNodePath = null;
             }
             catch (Exception ex)
             {
@@ -155,7 +196,29 @@ namespace ModdedCamera.Services
 
                 Vector3 pos = PositionSelector.MainCamera.Position;
                 Vector3 rot = PositionSelector.MainCamera.Rotation;
+
+                if (_editNodeIndex >= 0)
+                {
+                    if (_editNodeIndex < SplineCamera.Nodes.Count)
+                    {
+                        SplineCamera.SetNodePosition(_editNodeIndex, pos, rot);
+                        if (_editNodePath != null)
+                        {
+                            if (_editNodePath.Positions.Count > _editNodeIndex)
+                                _editNodePath.Positions[_editNodeIndex] = pos;
+                            if (_editNodePath.Rotations.Count > _editNodeIndex)
+                                _editNodePath.Rotations[_editNodeIndex] = rot;
+                            PathManager.SavePath(_editNodePath);
+                        }
+                        Logger.Info("CameraService: Node " + _editNodeIndex + " updated at (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")");
+                    }
+                    ExitPointSelector();
+                    GTA.UI.Notification.PostTicker("~g~Узел обновлён!", false, false);
+                    return true;
+                }
+
                 SplineCamera.AddNode(pos, rot, NodeDuration);
+                GTA.UI.Notification.PostTicker("Узел добавлен\nПоз: (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")\nДлительность: " + ((float)NodeDuration / 1000f).ToString("F2") + "с", false, false);
 
                 Logger.Info("CameraService: Node added at (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")");
                 return true;
@@ -1434,6 +1497,17 @@ namespace ModdedCamera.Services
                         NativeItem nodeBack = new NativeItem("< Назад", "К списку узлов");
                         nodeBack.Activated += delegate { nodeMenu.Visible = false; NodeEditorMenu.Visible = true; if (_lastSelectedNodeIndex >= 0) NodeEditorMenu.SelectedIndex = _lastSelectedNodeIndex + 1; };
                         nodeMenu.Add(nodeBack);
+
+                        // Edit camera of the node
+                        NativeItem editCamItem = new NativeItem("~y~Изменить камеру узла", "Свободная камера в позиции узла. Поменяйте ракурс/позицию, ЛКМ — применить и вернуться");
+                        int editCamIndex = nodeIndex;
+                        editCamItem.Activated += delegate
+                        {
+                            nodeMenu.Visible = false;
+                            NodeEditorMenu.Visible = false;
+                            _cameraService.EnterPointSelectorForNode(editCamIndex, (_editingSavedPath ? _editingPath : null));
+                        };
+                        nodeMenu.Add(editCamItem);
 
                         // Duration list item: 0.00..30.00 in 0.25s steps
                         NativeListItem<string> durItem = new NativeListItem<string>("Длительность", "Длительность узла в секундах");
