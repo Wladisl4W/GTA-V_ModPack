@@ -1418,9 +1418,9 @@ namespace ModdedCamera.Services
 
                         string modeLabel = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно (без остановки)" : "Плавно";
                         float durSec = (float)duration / 1000f;
+                        totalSec += durSec;
                         string label = "Узел " + (i + 1) + "  (" + durSec.ToString("F2") + "с, " + modeLabel + ") | всего: " + totalSec.ToString("F2") + "с";
                         string desc = "Поз: " + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1");
-                        totalSec += durSec;
 
                         NativeMenu nodeMenu = new NativeMenu("Узел " + (i + 1), "Длительность и интерполяция");
                         ActivePool.Add(nodeMenu);
