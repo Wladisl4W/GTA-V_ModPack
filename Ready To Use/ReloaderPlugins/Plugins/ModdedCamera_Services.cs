@@ -1498,17 +1498,6 @@ namespace ModdedCamera.Services
                         nodeBack.Activated += delegate { nodeMenu.Visible = false; NodeEditorMenu.Visible = true; if (_lastSelectedNodeIndex >= 0) NodeEditorMenu.SelectedIndex = _lastSelectedNodeIndex + 1; };
                         nodeMenu.Add(nodeBack);
 
-                        // Edit camera of the node
-                        NativeItem editCamItem = new NativeItem("~y~Изменить камеру узла", "Свободная камера в позиции узла. Поменяйте ракурс/позицию, ЛКМ — применить и вернуться");
-                        int editCamIndex = nodeIndex;
-                        editCamItem.Activated += delegate
-                        {
-                            nodeMenu.Visible = false;
-                            NodeEditorMenu.Visible = false;
-                            _cameraService.EnterPointSelectorForNode(editCamIndex, (_editingSavedPath ? _editingPath : null));
-                        };
-                        nodeMenu.Add(editCamItem);
-
                         // Duration list item: 0.00..30.00 in 0.25s steps
                         NativeListItem<string> durItem = new NativeListItem<string>("Длительность", "Длительность узла в секундах");
                         for (int d = 0; d <= 30000; d += 250)
@@ -1636,6 +1625,17 @@ namespace ModdedCamera.Services
                             }
                         };
                         nodeMenu.Add(colorItem);
+
+                        // Edit camera of the node
+                        NativeItem editCamItem = new NativeItem("~y~Изменить камеру узла", "Свободная камера в позиции узла. Поменяйте ракурс/позицию, ЛКМ — применить и вернуться");
+                        int editCamIndex = nodeIndex;
+                        editCamItem.Activated += delegate
+                        {
+                            nodeMenu.Visible = false;
+                            NodeEditorMenu.Visible = false;
+                            _cameraService.EnterPointSelectorForNode(editCamIndex, (_editingSavedPath ? _editingPath : null));
+                        };
+                        nodeMenu.Add(editCamItem);
 
                         // Duplicate node
                         NativeItem dupItem = new NativeItem("~g~Дублировать узел", "Вставить копию этого узла сразу после него");
