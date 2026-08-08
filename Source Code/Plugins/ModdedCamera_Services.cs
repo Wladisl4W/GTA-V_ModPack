@@ -333,7 +333,8 @@ namespace ModdedCamera.Services
                 {
                     int dur = (path.Durations.Count > i) ? path.Durations[i] : path.DefaultDuration;
                     int nodeMode = (path.NodeInterpolationModes.Count > i) ? path.NodeInterpolationModes[i] : 2;
-                    SplineCamera.AddNode(nodes[i].Item1, nodes[i].Item2, dur, nodeMode);
+                    int nodeColor = path.GetNodeColor(i);
+                    SplineCamera.AddNode(nodes[i].Item1, nodes[i].Item2, dur, nodeMode, nodeColor);
                 }
 
                 NodeDuration = path.DefaultDuration;
@@ -378,6 +379,8 @@ namespace ModdedCamera.Services
 
                 if (IsSelectorActive || _selectorWasUsed)
                 {
+                    if (SplineCamera != null && SplineCamera.Nodes.Count > 0)
+                        SplineCamera.DrawNodeMarkers();
                     if (PositionSelector != null && PositionSelector.MainCamera != null && PositionSelector.MainCamera.Exists())
                         PositionSelector.Update();
                     else if (PositionSelector != null)
@@ -633,6 +636,7 @@ namespace ModdedCamera.Services
                 var rotations = _cameraService.SplineCamera.GetRotations();
                 var durations = _cameraService.SplineCamera.GetDurations();
                 var nodeModes = _cameraService.SplineCamera.GetNodeInterpolationModes();
+                var nodeColors = _cameraService.SplineCamera.GetNodeColors();
 
                 if (positions.Count < 2)
                 {
@@ -648,6 +652,7 @@ namespace ModdedCamera.Services
                     _cameraService.CurrentSpeed,
                     2
                 );
+                cp.NodeColors = new List<int>(nodeColors);
 
                 string result = PathManager.SavePath(cp);
                 if (result != null)
@@ -1498,6 +1503,65 @@ namespace ModdedCamera.Services
                             }
                         };
                         nodeMenu.Add(modeItem);
+
+                        // Node color
+                        string[] colorNames = new string[]
+                        {
+                            "Белый", "Жёлтый", "Красный", "Оранжевый", "Зелёный",
+                            "Голубой", "Синий", "Фиолетовый", "Розовый", "Серый",
+                            "Бирюзовый", "Коричневый"
+                        };
+                        Color[] colorValues = new Color[]
+                        {
+                            Color.White, Color.Yellow, Color.Red, Color.Orange, Color.Lime,
+                            Color.Cyan, Color.DodgerBlue, Color.Purple, Color.DeepPink, Color.Gray,
+                            Color.Turquoise, Color.SaddleBrown
+                        };
+                        int curArgb = _editingSavedPath && _editingPath != null
+                            ? _editingPath.GetNodeColor(nodeIndex)
+                            : _cameraService.SplineCamera.GetNodeColor(nodeIndex);
+                        NativeListItem<string> colorItem = new NativeListItem<string>("Цвет", "Цвет маркера узла для ориентации при редактировании");
+                        for (int ci = 0; ci < colorNames.Length; ci++)
+                            colorItem.Items.Add(colorNames[ci]);
+                        string foundColor = "Белый";
+                        for (int ci = 0; ci < colorValues.Length; ci++)
+                        {
+                            if (colorValues[ci].ToArgb() == curArgb)
+                            {
+                                foundColor = colorNames[ci];
+                                break;
+                            }
+                        }
+                        colorItem.SelectedItem = foundColor;
+                        int capturedColorIndex = nodeIndex;
+                        colorItem.ItemChanged += delegate(object sender, ItemChangedEventArgs<string> args)
+                        {
+                            int newArgb = Color.White.ToArgb();
+                            for (int ci = 0; ci < colorNames.Length; ci++)
+                            {
+                                if (colorNames[ci] == args.Object)
+                                {
+                                    newArgb = colorValues[ci].ToArgb();
+                                    break;
+                                }
+                            }
+                            if (_editingSavedPath && _editingPath != null)
+                            {
+                                _editingPath.SetNodeColor(capturedColorIndex, newArgb);
+                                PathManager.SavePath(_editingPath);
+                                RefreshNodeEditorMenu();
+                            }
+                            else
+                            {
+                                var sp = _cameraService.SplineCamera;
+                                if (sp != null)
+                                {
+                                    sp.SetNodeColor(capturedColorIndex, newArgb);
+                                    RefreshNodeEditorMenu();
+                                }
+                            }
+                        };
+                        nodeMenu.Add(colorItem);
 
                         NativeItem nodeItem = new NativeItem(label, desc);
                         int capturedNodeIndex = nodeIndex;

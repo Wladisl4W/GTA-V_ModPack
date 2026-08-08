@@ -295,6 +295,7 @@ namespace ModdedCamera
         private List<int> _durations = new List<int>();
         private List<int> _baseDurations = new List<int>();
         private List<int> _nodeInterpolationModes = new List<int>();
+        private List<int> _nodeColors = new List<int>();
         private int _defaultDuration = 5000;
         private float _currentSpeedMult = 1.0f;
         private long _lastFrameMs = 0;
@@ -513,6 +514,11 @@ namespace ModdedCamera
 
         public void AddNode(Vector3 position, Vector3 rotation, int duration, int interpolationMode)
         {
+            AddNode(position, rotation, duration, interpolationMode, Color.White.ToArgb());
+        }
+
+        public void AddNode(Vector3 position, Vector3 rotation, int duration, int interpolationMode, int color)
+        {
             try
             {
                 if (_mainCamera == null)
@@ -536,6 +542,7 @@ namespace ModdedCamera
                 int adjustedDuration = (int)Math.Max(0, duration / _currentSpeedMult);
                 _durations.Add(adjustedDuration);
                 _nodeInterpolationModes.Add(interpolationMode);
+                _nodeColors.Add(color);
                 _defaultDuration = duration;
 
                 Logger.Debug("Node added: pos=(" + position.X.ToString("F1") + ", " + position.Y.ToString("F1") + ", " + position.Z.ToString("F1") +
@@ -555,6 +562,7 @@ namespace ModdedCamera
                 _durations.Clear();
                 _baseDurations.Clear();
                 _nodeInterpolationModes.Clear();
+                _nodeColors.Clear();
                 _startNodeIndex = 0;
             }
             catch (Exception ex)
@@ -573,17 +581,20 @@ namespace ModdedCamera
                 var savedNodes = new List<Tuple<Vector3, Vector3>>(_nodes);
                 var savedBaseDurations = new List<int>(_baseDurations);
                 var savedModes = new List<int>(_nodeInterpolationModes);
+                var savedColors = new List<int>(_nodeColors);
 
                 _nodes.Clear();
                 _durations.Clear();
                 _baseDurations.Clear();
                 _nodeInterpolationModes.Clear();
+                _nodeColors.Clear();
 
                 for (int i = 0; i < savedNodes.Count; i++)
                 {
                     int originalDuration = (savedBaseDurations.Count > i) ? savedBaseDurations[i] : _defaultDuration;
                     int nodeMode = (savedModes.Count > i) ? savedModes[i] : 2;
-                    AddNode(savedNodes[i].Item1, savedNodes[i].Item2, originalDuration, nodeMode);
+                    int nodeColor = (savedColors.Count > i) ? savedColors[i] : Color.White.ToArgb();
+                    AddNode(savedNodes[i].Item1, savedNodes[i].Item2, originalDuration, nodeMode, nodeColor);
                 }
                 Logger.Info("Spline rebuilt: " + _nodes.Count + " nodes");
             }
@@ -612,6 +623,49 @@ namespace ModdedCamera
             if (durationMs < 0) durationMs = 0;
             _baseDurations[index] = durationMs;
             _durations[index] = (int)Math.Max(0, durationMs / _currentSpeedMult);
+        }
+
+        public List<int> GetNodeColors()
+        {
+            return new List<int>(_nodeColors);
+        }
+
+        public int GetNodeColor(int index)
+        {
+            if (index >= 0 && index < _nodeColors.Count)
+                return _nodeColors[index];
+            return Color.White.ToArgb();
+        }
+
+        public void SetNodeColor(int index, int argb)
+        {
+            if (index >= 0 && index < _nodeColors.Count)
+                _nodeColors[index] = argb;
+        }
+
+        public void DrawNodeMarkers()
+        {
+            try
+            {
+                for (int i = 0; i < _nodes.Count; i++)
+                {
+                    int argb = GetNodeColor(i);
+                    Color c = Color.FromArgb(argb);
+                    Function.Call(NativeHashes.DRAW_MARKER,
+                        1,
+                        _nodes[i].Item1.X, _nodes[i].Item1.Y, _nodes[i].Item1.Z,
+                        0f, 0f, 0f,
+                        0f, 0f, 0f,
+                        0.6f, 0.6f, 0.6f,
+                        (int)c.R, (int)c.G, (int)c.B, (int)c.A,
+                        false, true, 2, false,
+                        false, false, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("DrawNodeMarkers warning: " + ex.Message);
+            }
         }
 
         public void SetStartNodeIndex(int index)

@@ -62,6 +62,7 @@ namespace ModdedCamera
         public List<Vector3> Rotations { get; set; }
         public List<int> Durations { get; set; }
         public List<int> NodeInterpolationModes { get; set; }
+        public List<int> NodeColors { get; set; }
         public int DefaultDuration { get; set; }
         public int Fov { get; set; }
         public float Speed { get; set; }
@@ -73,6 +74,7 @@ namespace ModdedCamera
             this.Rotations = new List<Vector3>();
             this.Durations = new List<int>();
             this.NodeInterpolationModes = new List<int>();
+            this.NodeColors = new List<int>();
             this.DefaultDuration = 5000;
             this.Fov = 50;
             this.Speed = 1.0f;
@@ -87,6 +89,7 @@ namespace ModdedCamera
             this.Rotations = new List<Vector3>();
             this.Durations = new List<int>();
             this.NodeInterpolationModes = new List<int>();
+            this.NodeColors = new List<int>();
             this.DefaultDuration = defaultDuration;
             this.Fov = fov;
             this.Speed = speed;
@@ -108,6 +111,7 @@ namespace ModdedCamera
             this.Rotations = (rotations != null) ? rotations : new List<Vector3>();
             this.Durations = (durations != null) ? durations : new List<int>();
             this.NodeInterpolationModes = (nodeModes != null) ? new List<int>(nodeModes) : new List<int>();
+            this.NodeColors = new List<int>();
             this.DefaultDuration = defaultDuration;
             this.Fov = fov;
             this.Speed = speed;
@@ -136,6 +140,21 @@ namespace ModdedCamera
             if (this.NodeInterpolationModes != null && index < this.NodeInterpolationModes.Count)
                 return this.NodeInterpolationModes[index];
             return this.InterpolationMode;
+        }
+
+        public int GetNodeColor(int index)
+        {
+            if (this.NodeColors != null && index < this.NodeColors.Count)
+                return this.NodeColors[index];
+            return Color.White.ToArgb();
+        }
+
+        public void SetNodeColor(int index, int argb)
+        {
+            if (this.NodeColors == null) this.NodeColors = new List<int>();
+            while (this.NodeColors.Count <= index)
+                this.NodeColors.Add(Color.White.ToArgb());
+            this.NodeColors[index] = argb;
         }
     }
 
@@ -342,6 +361,7 @@ namespace ModdedCamera
         private static CameraPath ApplyBackwardCompatibility(CameraPath path)
         {
             if (path == null) return null;
+            if (path.NodeColors == null) path.NodeColors = new List<int>();
             if (path.Version >= 1) return path;
 
             if (path.Fov <= 0) path.Fov = 50;
