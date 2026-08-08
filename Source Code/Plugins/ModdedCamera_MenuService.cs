@@ -33,6 +33,7 @@ namespace ModdedCamera.Services
 
         private readonly List<NativeMenu> _pathSubMenus = new List<NativeMenu>();
         private readonly List<NativeMenu> _nodeSubMenus = new List<NativeMenu>();
+        private readonly List<NativeMenu> _pendingSubMenuRemovals = new List<NativeMenu>();
 
         private bool _editingSavedPath = false;
         private CameraPath _editingPath = null;
@@ -92,7 +93,22 @@ namespace ModdedCamera.Services
         public void Process()
         {
             UpdateKeyboardInput();
+            FlushSubMenuRemovals();
             if (ActivePool != null) ActivePool.Process();
+        }
+
+        private void FlushSubMenuRemovals()
+        {
+            if (_pendingSubMenuRemovals.Count == 0) return;
+            for (int i = _pendingSubMenuRemovals.Count - 1; i >= 0; i--)
+            {
+                var m = _pendingSubMenuRemovals[i];
+                if (m.Visible) continue;
+                if (ActivePool != null) ActivePool.Remove(m);
+                _nodeSubMenus.Remove(m);
+                _pathSubMenus.Remove(m);
+                _pendingSubMenuRemovals.RemoveAt(i);
+            }
         }
 
         private void UpdateKeyboardInput()
@@ -179,11 +195,8 @@ namespace ModdedCamera.Services
         {
             try
             {
-                if (ActivePool != null)
-                {
-                    foreach (var m in _pathSubMenus)
-                        ActivePool.Remove(m);
-                }
+                foreach (var m in _pathSubMenus)
+                    _pendingSubMenuRemovals.Add(m);
                 _pathSubMenus.Clear();
                 SavedPathsMenu.Clear();
 
@@ -563,11 +576,8 @@ namespace ModdedCamera.Services
         {
             try
             {
-                if (ActivePool != null)
-                {
-                    foreach (var m in _nodeSubMenus)
-                        ActivePool.Remove(m);
-                }
+                foreach (var m in _nodeSubMenus)
+                    _pendingSubMenuRemovals.Add(m);
                 _nodeSubMenus.Clear();
                 NodeEditorMenu.Clear();
 
