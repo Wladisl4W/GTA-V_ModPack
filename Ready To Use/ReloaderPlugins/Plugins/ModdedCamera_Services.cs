@@ -56,6 +56,7 @@ namespace ModdedCamera.Services
         private int _lastFollowTeleportMs = 0;
         private const int FollowTeleportIntervalMs = 500;
         private float _lastTimeScale = 1f;
+        private int _playbackStartMs = 0;
 
         public CameraService()
         {
@@ -185,6 +186,7 @@ namespace ModdedCamera.Services
 
                 Logger.Info("CameraService: Starting playback with " + SplineCamera.Nodes.Count + " nodes");
                 _splineCamWasUsed = true;
+                _playbackStartMs = Game.GameTime;
                 SplineCamera.EnterCameraView(Game.Player.Character.GetOffsetPosition(new Vector3(0f, 0f, 10f)));
                 SetupPlayerForFollow();
                 return true;
@@ -205,6 +207,11 @@ namespace ModdedCamera.Services
                 RestorePlayerState();
                 if (SplineCamera != null && IsSplineCamActive)
                 {
+                    int realMs = Game.GameTime - _playbackStartMs;
+                    Logger.Info("CameraService: Stopping playback. Real elapsed: " + realMs + " ms; nominal duration: "
+                        + SplineCamera.NominalDurationMs + " ms; current (speed-adjusted) duration: "
+                        + SplineCamera.CurrentDurationMs + " ms; speed x" + SplineCamera.Speed.ToString("F2")
+                        + ". Ratio real/nominal: " + (SplineCamera.NominalDurationMs > 0 ? ((double)realMs / SplineCamera.NominalDurationMs).ToString("F2") : "n/a"));
                     Logger.Info("CameraService: Stopping playback");
                     SplineCamera.ExitCameraView();
                     _splineCamWasUsed = false;

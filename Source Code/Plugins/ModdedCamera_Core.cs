@@ -387,6 +387,28 @@ namespace ModdedCamera
             return new List<int>(_durations);
         }
 
+        public int NominalDurationMs
+        {
+            get
+            {
+                int sum = 0;
+                for (int i = 0; i < _baseDurations.Count; i++)
+                    sum += Math.Max(0, _baseDurations[i]);
+                return sum;
+            }
+        }
+
+        public int CurrentDurationMs
+        {
+            get
+            {
+                int sum = 0;
+                for (int i = 0; i < _durations.Count; i++)
+                    sum += Math.Max(0, _durations[i]);
+                return sum;
+            }
+        }
+
         public SplineCamera()
         {
             try
