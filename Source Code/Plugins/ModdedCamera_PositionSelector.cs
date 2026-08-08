@@ -1,0 +1,273 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Drawing;
+using GTA;
+using GTA.Math;
+using GTA.Native;
+using ModdedCamera.Gamepad;
+
+namespace ModdedCamera
+{
+    public class PositionSelector
+    {
+        private FadeStateMachine _fadeMachine;
+        private Camera _mainCamera;
+        private Vector3 _previousPos;
+        private Timer _renderSceneTimer;
+        private Scaleform _instructionalButtons;
+        private float _currentLerpTime;
+        private readonly float LerpTime = 0.5f;
+        private readonly float RotationSpeed = 0.7f;
+        private bool _controlsDisabled = false;
+        private int _lastInstructionalRenderMs = 0;
+
+        public GamepadHandler GamepadHandler;
+
+        public Camera MainCamera
+        {
+            get { return _mainCamera; }
+        }
+
+        public bool IsCameraAvailable
+        {
+            get { return _mainCamera != null && _mainCamera.Exists(); }
+        }
+
+        public PositionSelector(Vector3 position, Vector3 rotation)
+        {
+            this.GamepadHandler = new GamepadHandler();
+            this.GamepadHandler.LeftStickChanged += LeftStickChanged;
+            this.GamepadHandler.RightStickChanged += RightStickChanged;
+            this.GamepadHandler.LeftStickPressed += LeftStickPressed;
+
+            _instructionalButtons = Scaleform.RequestMovie("instructional_buttons");
+
+            _mainCamera = Camera.Create("DEFAULT_SCRIPTED_CAMERA", position, rotation, 50f);
+            _mainCamera.IsActive = false;
+            _previousPos = position;
+            _renderSceneTimer = new Timer(5000);
+            _renderSceneTimer.Start();
+
+            _fadeMachine = new FadeStateMachine(
+                onActivate: () => {
+                    this.MainCamera.IsActive = true;
+                    ScriptCameraDirector.StartRendering();
+                    Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
+                },
+                onDeactivate: () => {
+                    this.MainCamera.IsActive = false;
+                    ScriptCameraDirector.StopRendering(false);
+                    Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
+                },
+                logPrefix: "PositionSelector"
+            );
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                CameraRenderer.ClearFocus();
+                EnablePlayerControls();
+                if (GamepadHandler != null)
+                {
+                    GamepadHandler.LeftStickChanged -= LeftStickChanged;
+                    GamepadHandler.RightStickChanged -= RightStickChanged;
+                    GamepadHandler.LeftStickPressed -= LeftStickPressed;
+                    GamepadHandler.Dispose();
+                    GamepadHandler = null;
+                }
+                if (_instructionalButtons != null)
+                {
+                    _instructionalButtons.Dispose();
+                    _instructionalButtons = null;
+                }
+                if (_mainCamera != null && _mainCamera.Exists())
+                {
+                    if (_mainCamera.IsActive) _mainCamera.IsActive = false;
+                    Function.Call(Hash.DESTROY_CAM, _mainCamera.Handle);
+                    _mainCamera = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error disposing PositionSelector");
+            }
+        }
+
+        private void LeftStickChanged(object sender, AnalogStickChangedEventArgs e)
+        {
+            float deltaTime = Game.LastFrameTime;
+            bool flag = e.X > 127;
+            if (flag)
+            {
+                _previousPos -= Utils.RotationToDirection(_mainCamera.Rotation).RightVector(new Vector3(0f, 0f, 1f)) *
+                    (Function.Call<float>(NativeHashes.GET_CONTROL_VALUE, 2, 218) * -75f * deltaTime);
+            }
+            bool flag2 = e.X < 127;
+            if (flag2)
+            {
+                _previousPos += Utils.RotationToDirection(_mainCamera.Rotation).LeftVector(new Vector3(0f, 0f, 1f)) *
+                    (Function.Call<float>(NativeHashes.GET_CONTROL_VALUE, 2, 218) * -75f * deltaTime);
+            }
+            bool flag3 = e.Y != 127;
+            if (flag3)
+            {
+                _previousPos += Utils.RotationToDirection(_mainCamera.Rotation) *
+                    (Function.Call<float>(NativeHashes.GET_CONTROL_VALUE, 0, 8) * -125f * deltaTime);
+            }
+            _currentLerpTime += 0.02f;
+            if (_currentLerpTime > LerpTime) _currentLerpTime = LerpTime;
+            float num = _currentLerpTime / LerpTime;
+            _mainCamera.Position = Vector3.Lerp(_mainCamera.Position, _previousPos, num);
+        }
+
+        private void RightStickChanged(object sender, AnalogStickChangedEventArgs e)
+        {
+            float deltaTime = Game.LastFrameTime;
+            Camera cam = _mainCamera;
+            cam.Rotation += new Vector3(
+                Function.Call<float>(NativeHashes.GET_CONTROL_VALUE, 2, 221) * -400f * deltaTime,
+                0f,
+                Function.Call<float>(NativeHashes.GET_CONTROL_VALUE, 2, 220) * -500f * deltaTime
+            ) * RotationSpeed;
+        }
+
+        private void LeftStickPressed(object sender, ButtonPressedEventArgs e)
+        {
+            _previousPos += Utils.RotationToDirection(_mainCamera.Rotation) *
+                (Function.Call<float>(NativeHashes.GET_CONTROL_VALUE, 2, 230) * -5f);
+        }
+
+        public void EnterCameraView(Vector3 position)
+        {
+            _mainCamera.Position = position;
+            _fadeMachine.StartFadeOut(1200);
+            DisablePlayerControls();
+        }
+
+        public void ExitCameraView()
+        {
+            CameraRenderer.ClearFocus();
+            _fadeMachine.StartFadeOutExit(1200);
+            EnablePlayerControls();
+        }
+
+        private void DisablePlayerControls()
+        {
+            Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, 0);
+            Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, 2);
+        }
+
+        private void EnablePlayerControls()
+        {
+            Function.Call(Hash.ENABLE_ALL_CONTROL_ACTIONS, 0);
+            Function.Call(Hash.ENABLE_ALL_CONTROL_ACTIONS, 2);
+        }
+
+        public void Update()
+        {
+            try
+            {
+                _fadeMachine.Update();
+                if (_mainCamera == null || !_mainCamera.Exists())
+                {
+                    Logger.Warn("PositionSelector.Update: Camera not available");
+                    return;
+                }
+
+                bool isActive = _mainCamera.IsActive;
+                if (isActive)
+                {
+                    if (!_controlsDisabled)
+                    {
+                        _controlsDisabled = true;
+                        DisablePlayerControls();
+                    }
+                    bool shouldRender = _renderSceneTimer.Enabled && _renderSceneTimer.Check();
+                    if (shouldRender)
+                    {
+                        CameraRenderer.UpdateFocusArea(_mainCamera.Position);
+                        CameraRenderer.DrawPositionMarker(_mainCamera.Position, _previousPos);
+                        _renderSceneTimer.Reset();
+                    }
+
+                    _previousPos = _mainCamera.Position;
+                    RenderEntityPosition();
+
+                    try { GamepadHandler.Update(); } catch (Exception ex) { Logger.Debug("GamepadHandler.Update warning: " + ex.Message); }
+
+                    if (Utils.NowMs() - _lastInstructionalRenderMs > 500)
+                    {
+                        try { RenderInstructionalButtons(); } catch (Exception ex) { Logger.Debug("RenderInstructionalButtons warning: " + ex.Message); }
+                        _lastInstructionalRenderMs = (int)Utils.NowMs();
+                    }
+
+                    if (_currentLerpTime > 0f) _currentLerpTime -= 0.01f;
+                }
+                else if (_controlsDisabled)
+                {
+                    _controlsDisabled = false;
+                    EnablePlayerControls();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "PositionSelector.Update: Critical error");
+            }
+        }
+
+        private void RenderEntityPosition()
+        {
+            Vector3 position = Game.Player.Character.Position + Game.Player.Character.UpVector * 1.8f;
+            Vector3 worldDown = Vector3.WorldDown;
+            Vector3 rotation = new Vector3(90f, 0f, 0f);
+            Vector3 scale3D = new Vector3(2f, 2f, 2f);
+            Color yellow = Color.Yellow;
+            DrawMarker(20, position, worldDown, rotation, scale3D, yellow, true, false, false);
+        }
+
+        private void DrawMarker(int type, Vector3 position, Vector3 direction, Vector3 rotation, Vector3 scale3D, Color color, bool animate, bool faceCam, bool rotate)
+        {
+            Function.Call(NativeHashes.DRAW_MARKER,
+                type,
+                position.X, position.Y, position.Z,
+                direction.X, direction.Y, direction.Z,
+                rotation.X, rotation.Y, rotation.Z,
+                scale3D.X, scale3D.Y, scale3D.Z,
+                (int)color.R, (int)color.G, (int)color.B, (int)color.A,
+                animate, faceCam, 2, rotate,
+                0, 0, 0);
+        }
+
+        private void RenderInstructionalButtons()
+        {
+            _instructionalButtons.CallFunction("CLEAR_ALL", new object[0]);
+            _instructionalButtons.CallFunction("TOGGLE_MOUSE_BUTTONS", new object[] { false });
+
+            string text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 24, 0);
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 4, text, "Выбрать позицию" });
+
+            text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 3, 17, 0);
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 3, text, "Длительность +" });
+
+            text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 1, 16, 0);
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 2, text, "Длительность -" });
+
+            text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 25, 0);
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 1, text, "Выход" });
+
+            string[] array = new string[]
+            {
+                Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 32, 0),
+                Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 34, 0),
+                Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 33, 0),
+                Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 35, 0)
+            };
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 0, array[3], array[2], array[1], array[0], "Движение" });
+            _instructionalButtons.CallFunction("SET_BACKGROUND_COLOUR", new object[] { 0, 0, 0, 80 });
+            _instructionalButtons.CallFunction("DRAW_INSTRUCTIONAL_BUTTONS", new object[] { 0 });
+            _instructionalButtons.Render2D();
+        }
+    }
+}
