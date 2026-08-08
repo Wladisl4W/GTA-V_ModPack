@@ -156,6 +156,39 @@ namespace ModdedCamera
                 this.NodeColors.Add(Color.White.ToArgb());
             this.NodeColors[index] = argb;
         }
+
+        public void RemoveNodeAt(int index)
+        {
+            if (index < 0 || index >= this.Positions.Count) return;
+            this.Positions.RemoveAt(index);
+            if (this.Rotations.Count > index) this.Rotations.RemoveAt(index);
+            if (this.Durations.Count > index) this.Durations.RemoveAt(index);
+            if (this.NodeInterpolationModes != null && index < this.NodeInterpolationModes.Count)
+                this.NodeInterpolationModes.RemoveAt(index);
+            if (this.NodeColors != null && index < this.NodeColors.Count)
+                this.NodeColors.RemoveAt(index);
+        }
+
+        public void DuplicateNodeAt(int index)
+        {
+            if (index < 0 || index >= this.Positions.Count) return;
+            Vector3 p = this.Positions[index];
+            Vector3 r = (this.Rotations.Count > index) ? this.Rotations[index] : Vector3.Zero;
+            int d = (this.Durations.Count > index) ? this.Durations[index] : this.DefaultDuration;
+            int m = this.GetNodeMode(index);
+            int c = this.GetNodeColor(index);
+            this.Positions.Insert(index + 1, p);
+            this.Rotations.Insert(index + 1, r);
+            this.Durations.Insert(index + 1, d);
+            if (this.NodeInterpolationModes == null) this.NodeInterpolationModes = new List<int>();
+            while (this.NodeInterpolationModes.Count <= index)
+                this.NodeInterpolationModes.Add(this.InterpolationMode);
+            this.NodeInterpolationModes.Insert(index + 1, m);
+            if (this.NodeColors == null) this.NodeColors = new List<int>();
+            while (this.NodeColors.Count <= index)
+                this.NodeColors.Add(Color.White.ToArgb());
+            this.NodeColors.Insert(index + 1, c);
+        }
     }
 
     public static class PathManager

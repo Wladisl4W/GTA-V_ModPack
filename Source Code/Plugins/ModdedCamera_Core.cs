@@ -643,6 +643,53 @@ namespace ModdedCamera
                 _nodeColors[index] = argb;
         }
 
+        public bool RemoveNode(int index)
+        {
+            try
+            {
+                if (index < 0 || index >= _nodes.Count) return false;
+                if (_nodes.Count <= 2)
+                {
+                    Logger.Warn("RemoveNode: cannot remove - minimum 2 nodes required");
+                    return false;
+                }
+                _nodes.RemoveAt(index);
+                _baseDurations.RemoveAt(index);
+                _durations.RemoveAt(index);
+                _nodeInterpolationModes.RemoveAt(index);
+                _nodeColors.RemoveAt(index);
+                if (_startNodeIndex > index) _startNodeIndex--;
+                Logger.Info("Node removed at index " + index + ", remaining: " + _nodes.Count);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error removing node");
+                return false;
+            }
+        }
+
+        public bool DuplicateNode(int index)
+        {
+            try
+            {
+                if (index < 0 || index >= _nodes.Count) return false;
+                int insertAt = index + 1;
+                _nodes.Insert(insertAt, new Tuple<Vector3, Vector3>(_nodes[index].Item1, _nodes[index].Item2));
+                _baseDurations.Insert(insertAt, _baseDurations[index]);
+                _durations.Insert(insertAt, _durations[index]);
+                _nodeInterpolationModes.Insert(insertAt, _nodeInterpolationModes[index]);
+                _nodeColors.Insert(insertAt, _nodeColors[index]);
+                Logger.Info("Node duplicated at index " + insertAt + ", total: " + _nodes.Count);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Error duplicating node");
+                return false;
+            }
+        }
+
         public void DrawNodeMarkers()
         {
             try

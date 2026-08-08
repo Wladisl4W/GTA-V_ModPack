@@ -1563,6 +1563,69 @@ namespace ModdedCamera.Services
                         };
                         nodeMenu.Add(colorItem);
 
+                        // Duplicate node
+                        NativeItem dupItem = new NativeItem("~g~Дублировать узел", "Вставить копию этого узла сразу после него");
+                        int dupIndex = nodeIndex;
+                        dupItem.Activated += delegate
+                        {
+                            if (_editingSavedPath && _editingPath != null)
+                            {
+                                _editingPath.DuplicateNodeAt(dupIndex);
+                                PathManager.SavePath(_editingPath);
+                                _lastSelectedNodeIndex = dupIndex + 1;
+                            }
+                            else
+                            {
+                                var sp = _cameraService.SplineCamera;
+                                if (sp != null && sp.DuplicateNode(dupIndex))
+                                {
+                                    _lastSelectedNodeIndex = dupIndex + 1;
+                                    _cameraService.RestartPlaybackIfActive();
+                                }
+                            }
+                            RefreshNodeEditorMenu();
+                        };
+                        nodeMenu.Add(dupItem);
+
+                        // Delete node
+                        NativeItem delItem = new NativeItem("~r~Удалить узел", "Удалить этот узел (должно остаться минимум 2)");
+                        int delIndex = nodeIndex;
+                        delItem.Activated += delegate
+                        {
+                            if (_editingSavedPath && _editingPath != null)
+                            {
+                                if (_editingPath.Positions.Count > 2)
+                                {
+                                    _editingPath.RemoveNodeAt(delIndex);
+                                    PathManager.SavePath(_editingPath);
+                                    _lastSelectedNodeIndex = Math.Min(delIndex, _editingPath.Positions.Count - 1);
+                                    RefreshNodeEditorMenu();
+                                }
+                                else
+                                {
+                                    GTA.UI.Notification.PostTicker("~r~Нужно минимум 2 узла!", false, false);
+                                }
+                            }
+                            else
+                            {
+                                var sp = _cameraService.SplineCamera;
+                                if (sp != null)
+                                {
+                                    if (sp.RemoveNode(delIndex))
+                                    {
+                                        _lastSelectedNodeIndex = Math.Min(delIndex, sp.Nodes.Count - 1);
+                                        _cameraService.RestartPlaybackIfActive();
+                                        RefreshNodeEditorMenu();
+                                    }
+                                    else
+                                    {
+                                        GTA.UI.Notification.PostTicker("~r~Нужно минимум 2 узла!", false, false);
+                                    }
+                                }
+                            }
+                        };
+                        nodeMenu.Add(delItem);
+
                         NativeItem nodeItem = new NativeItem(label, desc);
                         if (curArgb != Color.White.ToArgb())
                         {
