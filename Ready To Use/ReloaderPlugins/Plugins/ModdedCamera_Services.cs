@@ -53,10 +53,10 @@ namespace ModdedCamera.Services
         private bool _savedPlayerCollision = true;
         private bool _savedPlayerInvincible = false;
         private bool _savedPlayerPosFrozen = false;
-        private int _lastFollowTeleportMs = 0;
+        private long _lastFollowTeleportMs = 0;
         private const int FollowTeleportIntervalMs = 500;
         private float _lastTimeScale = 1f;
-        private int _playbackStartMs = 0;
+        private long _playbackStartMs = 0;
 
         public CameraService()
         {
@@ -186,7 +186,7 @@ namespace ModdedCamera.Services
 
                 Logger.Info("CameraService: Starting playback with " + SplineCamera.Nodes.Count + " nodes");
                 _splineCamWasUsed = true;
-                _playbackStartMs = Game.GameTime;
+                _playbackStartMs = Utils.NowMs();
                 SplineCamera.EnterCameraView(Game.Player.Character.GetOffsetPosition(new Vector3(0f, 0f, 10f)));
                 SetupPlayerForFollow();
                 return true;
@@ -207,7 +207,7 @@ namespace ModdedCamera.Services
                 RestorePlayerState();
                 if (SplineCamera != null && IsSplineCamActive)
                 {
-                    int realMs = Game.GameTime - _playbackStartMs;
+                    long realMs = Utils.NowMs() - _playbackStartMs;
                     Logger.Info("CameraService: Stopping playback. Real elapsed: " + realMs + " ms; nominal duration: "
                         + SplineCamera.NominalDurationMs + " ms; current (speed-adjusted) duration: "
                         + SplineCamera.CurrentDurationMs + " ms; speed x" + SplineCamera.Speed.ToString("F2")
@@ -233,7 +233,7 @@ namespace ModdedCamera.Services
                 Vector3 dir = Utils.RotationToDirection(cam.Rotation);
                 Vector3 followPos = cam.Position - dir * 2.0f + new Vector3(0f, 0f, 0.5f);
                 Game.Player.Character.Position = followPos;
-                _lastFollowTeleportMs = Game.GameTime;
+                _lastFollowTeleportMs = Utils.NowMs();
             }
             catch (Exception ex)
             {
@@ -307,7 +307,7 @@ namespace ModdedCamera.Services
                 return;
             try
             {
-                int now = Game.GameTime;
+                long now = Utils.NowMs();
                 if (now - _lastFollowTeleportMs < FollowTeleportIntervalMs)
                     return;
                 _lastFollowTeleportMs = now;

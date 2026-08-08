@@ -516,6 +516,13 @@ namespace ModdedCamera
 
     public static class Utils
     {
+        private static readonly System.Diagnostics.Stopwatch _realClock = System.Diagnostics.Stopwatch.StartNew();
+
+        public static long NowMs()
+        {
+            return _realClock.ElapsedMilliseconds;
+        }
+
         public static double ToRadians(this float val)
         {
             return 0.017453292519943295 * (double)val;

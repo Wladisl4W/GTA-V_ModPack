@@ -15,7 +15,7 @@ namespace ModdedCamera
         private List<int> _durations;
         private List<int> _segmentModes;
         private bool _isPlaying = false;
-        private int _playbackStartTimeMs = 0;
+        private long _playbackStartTimeMs = 0;
         private int _totalDurationMs = 0;
 
         public bool IsPlaying { get { return _isPlaying; } }
@@ -25,7 +25,7 @@ namespace ModdedCamera
 
         public void SetPlaybackOffset(int elapsedMs)
         {
-            _playbackStartTimeMs = Game.GameTime - elapsedMs;
+            _playbackStartTimeMs = Utils.NowMs() - elapsedMs;
         }
 
         public void SetStartNodeIndex(int index)
@@ -93,7 +93,7 @@ namespace ModdedCamera
                 long offsetMs = 0;
                 for (int i = 0; i < limit; i++)
                     offsetMs += Math.Max(0, _durations[i]);
-                _playbackStartTimeMs = Game.GameTime - (int)offsetMs;
+                _playbackStartTimeMs = Utils.NowMs() - (int)offsetMs;
                 _startNodeIndex = 0;
                 PlaybackProgress = 0f;
                 Logger.Info("Playback started - total duration: " + _totalDurationMs + "ms" + (offsetMs > 0 ? ", offset: " + offsetMs + "ms" : ""));
@@ -113,7 +113,7 @@ namespace ModdedCamera
 
         public void Update(out Vector3 position, out Vector3 rotation)
         {
-            UpdateAt(Game.GameTime, out position, out rotation);
+            UpdateAt(Utils.NowMs(), out position, out rotation);
         }
 
         public void UpdateAt(long now, out Vector3 position, out Vector3 rotation)
@@ -131,7 +131,7 @@ namespace ModdedCamera
                 if (elapsedMs < 0)
                 {
                     Logger.Warn("Timing overflow detected, resetting playback");
-                    _playbackStartTimeMs = Game.GameTime;
+                    _playbackStartTimeMs = Utils.NowMs();
                     elapsedMs = 0;
                 }
 
@@ -297,6 +297,7 @@ namespace ModdedCamera
         private List<int> _nodeInterpolationModes = new List<int>();
         private int _defaultDuration = 5000;
         private float _currentSpeedMult = 1.0f;
+        private long _lastFrameMs = 0;
         private bool _usePlayerView;
         private int _startNodeIndex = 0;
         private Vector3 _startPos;
@@ -716,10 +717,12 @@ namespace ModdedCamera
 
                 Vector3 interpPos;
                 Vector3 interpRot;
-                int extrapolateMs = (int)(Game.LastFrameTime * 1000f);
+                long realNow = Utils.NowMs();
+                int extrapolateMs = (int)(realNow - _lastFrameMs);
                 if (extrapolateMs < 0) extrapolateMs = 0;
                 if (extrapolateMs > 250) extrapolateMs = 250;
-                _interpolator.UpdateAt(Game.GameTime + extrapolateMs, out interpPos, out interpRot);
+                _lastFrameMs = realNow;
+                _interpolator.UpdateAt(realNow + extrapolateMs, out interpPos, out interpRot);
 
                 _mainCamera.Position = interpPos;
                 _mainCamera.Rotation = interpRot;
