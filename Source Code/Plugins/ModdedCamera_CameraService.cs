@@ -58,7 +58,6 @@ namespace ModdedCamera.Services
         private float _lastTimeScale = 1f;
         private long _playbackStartMs = 0;
         private int _editNodeIndex = -1;
-        private CameraPath _editNodePath = null;
 
         public CameraService()
         {
@@ -132,7 +131,7 @@ namespace ModdedCamera.Services
             }
         }
 
-        public void EnterPointSelectorForNode(int nodeIndex, CameraPath editPath)
+        public void EnterPointSelectorForNode(int nodeIndex)
         {
             try
             {
@@ -154,7 +153,6 @@ namespace ModdedCamera.Services
 
                 Logger.Info("CameraService: Entering point selector to edit node " + nodeIndex);
                 _editNodeIndex = nodeIndex;
-                _editNodePath = editPath;
                 Game.Player.Character.IsPositionFrozen = true;
                 _selectorWasUsed = true;
                 var node = SplineCamera.Nodes[nodeIndex];
@@ -179,7 +177,6 @@ namespace ModdedCamera.Services
                 Game.Player.Character.IsPositionFrozen = false;
                 _selectorWasUsed = false;
                 _editNodeIndex = -1;
-                _editNodePath = null;
             }
             catch (Exception ex)
             {
@@ -202,14 +199,6 @@ namespace ModdedCamera.Services
                     if (_editNodeIndex < SplineCamera.Nodes.Count)
                     {
                         SplineCamera.SetNodePosition(_editNodeIndex, pos, rot);
-                        if (_editNodePath != null)
-                        {
-                            if (_editNodePath.Positions.Count > _editNodeIndex)
-                                _editNodePath.Positions[_editNodeIndex] = pos;
-                            if (_editNodePath.Rotations.Count > _editNodeIndex)
-                                _editNodePath.Rotations[_editNodeIndex] = rot;
-                            PathManager.SavePath(_editNodePath);
-                        }
                         Logger.Info("CameraService: Node " + _editNodeIndex + " updated at (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")");
                     }
                     ExitPointSelector();

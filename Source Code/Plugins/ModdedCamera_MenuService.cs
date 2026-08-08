@@ -35,10 +35,6 @@ namespace ModdedCamera.Services
         private readonly List<NativeMenu> _nodeSubMenus = new List<NativeMenu>();
         private readonly List<NativeMenu> _pendingSubMenuRemovals = new List<NativeMenu>();
 
-        private bool _editingSavedPath = false;
-        private CameraPath _editingPath = null;
-        private NativeMenu _editingPathBackMenu = null;
-        private bool _pickPathForEdit = false;
         private string _savedPathsSearch = "";
         private int _lastSelectedNodeIndex = -1;
 
@@ -245,40 +241,6 @@ namespace ModdedCamera.Services
 
                 foreach (string pathName in filteredPaths)
                 {
-                    string pn = pathName;
-                    if (_pickPathForEdit)
-                    {
-                        NativeItem pickItem = new NativeItem(pathName, "Нажмите, чтобы редактировать узлы");
-                        pickItem.Activated += delegate
-                        {
-                            try
-                            {
-                                CameraPath path = PathManager.LoadPath(pn);
-                                if (path == null || path.Positions == null || path.Positions.Count < 2)
-                                {
-                                    GTA.UI.Notification.PostTicker("~r~Путь повреждён или содержит меньше 2 узлов!", false, false);
-                                    return;
-                                }
-                                _cameraService.LoadPath(path);
-                                _editingSavedPath = true;
-                                _editingPath = path;
-                                _editingPathBackMenu = SavedPathsMenu;
-                                _lastSelectedNodeIndex = -1;
-                                _pickPathForEdit = false;
-                                SavedPathsMenu.Visible = false;
-                                RefreshNodeEditorMenu();
-                                NodeEditorMenu.Visible = true;
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Error(ex, "Error opening path editor: " + pn);
-                                GTA.UI.Notification.PostTicker("~r~Не удалось открыть редактор: " + ex.Message, false, false);
-                            }
-                        };
-                        SavedPathsMenu.Add(pickItem);
-                        continue;
-                    }
-
                     NativeMenu pathSubMenu = new NativeMenu(pathName, "Действия");
                     ActivePool.Add(pathSubMenu);
                     _pathSubMenus.Add(pathSubMenu);
@@ -399,7 +361,6 @@ namespace ModdedCamera.Services
                 if (SavedPathsMenu.Visible)
                 {
                     SavedPathsMenu.Visible = false;
-                    _pickPathForEdit = false;
                     MainMenu.Visible = true;
                     return true;
                 }
@@ -417,19 +378,7 @@ namespace ModdedCamera.Services
                 if (NodeEditorMenu.Visible)
                 {
                     NodeEditorMenu.Visible = false;
-                    if (_editingSavedPath)
-                    {
-                        if (_editingPath != null) PathManager.SavePath(_editingPath);
-                        _editingSavedPath = false;
-                        _editingPath = null;
-                        NativeMenu backMenu = _editingPathBackMenu;
-                        _editingPathBackMenu = null;
-                        if (backMenu != null) backMenu.Visible = true;
-                    }
-                    else
-                    {
-                        MainMenu.Visible = true;
-                    }
+                    MainMenu.Visible = true;
                     return true;
                 }
 
@@ -506,12 +455,8 @@ namespace ModdedCamera.Services
             MainMenu.Add(_savePathItem);
 
             _loadPathItem = new NativeItem("Загрузить путь", "Выберите сохранённый путь для загрузки");
-            _loadPathItem.Activated += (s, e) => { _pickPathForEdit = false; MainMenu.Visible = false; SavedPathsMenu.Visible = true; };
+            _loadPathItem.Activated += (s, e) => { MainMenu.Visible = false; SavedPathsMenu.Visible = true; };
             MainMenu.Add(_loadPathItem);
-
-            NativeItem editSavedPathItem = new NativeItem("~b~Редактировать сохранённый путь", "Изменить узлы выбранного сохранённого пути");
-            editSavedPathItem.Activated += (s, e) => { _pickPathForEdit = true; MainMenu.Visible = false; SavedPathsMenu.Visible = true; };
-            MainMenu.Add(editSavedPathItem);
 
             _cameraOptionsItem = new NativeItem("Настройки камеры", "Настроить параметры камеры");
             _cameraOptionsItem.Activated += (s, e) => { MainMenu.Visible = false; CameraOptionsMenu.Visible = true; };
@@ -520,9 +465,6 @@ namespace ModdedCamera.Services
             _editNodesItem = new NativeItem("~y~Редактор узлов", "Изменить длительность и интерполяцию каждого узла");
             _editNodesItem.Activated += (s, e) =>
             {
-                _editingSavedPath = false;
-                _editingPath = null;
-                _editingPathBackMenu = null;
                 _lastSelectedNodeIndex = -1;
                 RefreshNodeEditorMenu();
                 MainMenu.Visible = false;
@@ -573,16 +515,6 @@ namespace ModdedCamera.Services
             NodeEditorMenu = new NativeMenu("Редактор узлов", "Выберите узел для редактирования");
         }
 
-        private void ReloadEditingPath()
-        {
-            if (!_editingSavedPath || _editingPath == null) return;
-            bool wasActive = _cameraService.IsSplineCamActive;
-            _cameraService.LoadPath(_editingPath);
-            if (wasActive) _cameraService.RestartPlaybackIfActive();
-            PathManager.SavePath(_editingPath);
-            RefreshNodeEditorMenu();
-        }
-
         public void RefreshNodeEditorMenu()
         {
             try
@@ -592,51 +524,19 @@ namespace ModdedCamera.Services
                 _nodeSubMenus.Clear();
                 NodeEditorMenu.Clear();
 
-                if (_editingSavedPath && _editingPath == null)
+                var spline = _cameraService.SplineCamera;
+                if (spline == null || spline.Nodes.Count == 0)
                 {
-                    _editingSavedPath = false;
+                    NodeEditorMenu.Add(new NativeItem("~y~Нет узлов", "Сначала добавьте узлы (Настроить узлы)"));
+                    return;
                 }
+                int nodeCount = spline.Nodes.Count;
 
-                int nodeCount;
-                if (_editingSavedPath)
-                {
-                    if (_editingPath.Positions == null || _editingPath.Positions.Count == 0 ||
-                        _editingPath.Rotations == null || _editingPath.Rotations.Count == 0)
-                    {
-                        NodeEditorMenu.Add(new NativeItem("~r~Пустой или повреждённый путь", "В этом пути нет узлов"));
-                        return;
-                    }
-                    nodeCount = _editingPath.Positions.Count;
-                }
-                else
-                {
-                    var spline = _cameraService.SplineCamera;
-                    if (spline == null || spline.Nodes.Count == 0)
-                    {
-                        NodeEditorMenu.Add(new NativeItem("~y~Нет узлов", "Сначала добавьте узлы (Настроить узлы)"));
-                        return;
-                    }
-                    nodeCount = spline.Nodes.Count;
-                }
-
-                NativeItem backMain = new NativeItem("< Назад", _editingSavedPath ? "Вернуться к сохранённому пути" : "Вернуться в главное меню");
+                NativeItem backMain = new NativeItem("< Назад", "Вернуться в главное меню");
                 backMain.Activated += delegate
                 {
-                    if (_editingSavedPath)
-                    {
-                        if (_editingPath != null) PathManager.SavePath(_editingPath);
-                        _editingSavedPath = false;
-                        _editingPath = null;
-                        NativeMenu backMenu = _editingPathBackMenu;
-                        _editingPathBackMenu = null;
-                        NodeEditorMenu.Visible = false;
-                        if (backMenu != null) backMenu.Visible = true;
-                    }
-                    else
-                    {
-                        NodeEditorMenu.Visible = false;
-                        MainMenu.Visible = true;
-                    }
+                    NodeEditorMenu.Visible = false;
+                    MainMenu.Visible = true;
                 };
                 NodeEditorMenu.Add(backMain);
 
@@ -646,23 +546,9 @@ namespace ModdedCamera.Services
                     try
                     {
                         int nodeIndex = i;
-                        Vector3 pos;
-                        int duration;
-                        int nodeMode;
-
-                        if (_editingSavedPath)
-                        {
-                            pos = _editingPath.Positions[i];
-                            duration = (i < _editingPath.Durations.Count) ? _editingPath.Durations[i] : _editingPath.DefaultDuration;
-                            nodeMode = _editingPath.GetNodeMode(i);
-                        }
-                        else
-                        {
-                            var spline = _cameraService.SplineCamera;
-                            pos = spline.Nodes[i].Item1;
-                            duration = spline.GetDurations()[i];
-                            nodeMode = (i < spline.GetNodeInterpolationModes().Count) ? spline.GetNodeInterpolationModes()[i] : 2;
-                        }
+                        Vector3 pos = spline.Nodes[i].Item1;
+                        int duration = spline.GetDurations()[i];
+                        int nodeMode = (i < spline.GetNodeInterpolationModes().Count) ? spline.GetNodeInterpolationModes()[i] : 2;
 
                         string modeLabel = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно (без остановки)" : "Плавно";
                         float durSec = (float)duration / 1000f;
@@ -692,23 +578,13 @@ namespace ModdedCamera.Services
                             if (float.TryParse(args.Object, out newDurSec) && newDurSec >= 0f)
                             {
                                 int newDurMs = (int)(newDurSec * 1000f);
-                                if (_editingSavedPath && _editingPath != null)
+                                var sp = _cameraService.SplineCamera;
+                                if (sp != null)
                                 {
-                                    while (_editingPath.Durations.Count <= capturedIndex)
-                                        _editingPath.Durations.Add(_editingPath.DefaultDuration);
-                                    _editingPath.Durations[capturedIndex] = newDurMs;
-                                    ReloadEditingPath();
-                                }
-                                else
-                                {
-                                    var sp = _cameraService.SplineCamera;
-                                    if (sp != null)
-                                    {
-                                        sp.SetNodeDuration(capturedIndex, newDurMs);
-                                        sp.SetStartNodeIndex(capturedIndex);
-                                        _cameraService.RestartPlaybackIfActive();
-                                        RefreshNodeEditorMenu();
-                                    }
+                                    sp.SetNodeDuration(capturedIndex, newDurMs);
+                                    sp.SetStartNodeIndex(capturedIndex);
+                                    _cameraService.RestartPlaybackIfActive();
+                                    RefreshNodeEditorMenu();
                                 }
                             }
                         };
@@ -724,31 +600,19 @@ namespace ModdedCamera.Services
                         modeItem.ItemChanged += delegate(object sender, ItemChangedEventArgs<string> args)
                         {
                             int newMode = (args.Object == "Линейно") ? 0 : (args.Object == "Плавно (без остановки)") ? 1 : 2;
-                            if (_editingSavedPath && _editingPath != null)
+                            var sp = _cameraService.SplineCamera;
+                            if (sp != null)
                             {
-                                while (_editingPath.NodeInterpolationModes.Count <= capturedIndex2)
-                                    _editingPath.NodeInterpolationModes.Add(newMode);
-                                _editingPath.NodeInterpolationModes[capturedIndex2] = newMode;
-                                ReloadEditingPath();
-                            }
-                            else
-                            {
-                                var sp = _cameraService.SplineCamera;
-                                if (sp != null)
-                                {
-                                    sp.SetNodeInterpolationMode(capturedIndex2, newMode);
-                                    sp.SetStartNodeIndex(capturedIndex2);
-                                    _cameraService.RestartPlaybackIfActive();
-                                    RefreshNodeEditorMenu();
-                                }
+                                sp.SetNodeInterpolationMode(capturedIndex2, newMode);
+                                sp.SetStartNodeIndex(capturedIndex2);
+                                _cameraService.RestartPlaybackIfActive();
+                                RefreshNodeEditorMenu();
                             }
                         };
                         nodeMenu.Add(modeItem);
 
                         // Node color
-                        int curArgb = _editingSavedPath && _editingPath != null
-                            ? _editingPath.GetNodeColor(nodeIndex)
-                            : _cameraService.SplineCamera.GetNodeColor(nodeIndex);
+                        int curArgb = _cameraService.SplineCamera.GetNodeColor(nodeIndex);
                         NativeListItem<string> colorItem = new NativeListItem<string>("Цвет", "Цвет маркера узла для ориентации при редактировании");
                         for (int ci = 0; ci < NodeColorNames.Length; ci++)
                             colorItem.Items.Add(NodeColorNames[ci]);
@@ -774,19 +638,11 @@ namespace ModdedCamera.Services
                                     break;
                                 }
                             }
-                            if (_editingSavedPath && _editingPath != null)
+                            var sp = _cameraService.SplineCamera;
+                            if (sp != null)
                             {
-                                _editingPath.SetNodeColor(capturedColorIndex, newArgb);
-                                ReloadEditingPath();
-                            }
-                            else
-                            {
-                                var sp = _cameraService.SplineCamera;
-                                if (sp != null)
-                                {
-                                    sp.SetNodeColor(capturedColorIndex, newArgb);
-                                    RefreshNodeEditorMenu();
-                                }
+                                sp.SetNodeColor(capturedColorIndex, newArgb);
+                                RefreshNodeEditorMenu();
                             }
                         };
                         nodeMenu.Add(colorItem);
@@ -798,7 +654,7 @@ namespace ModdedCamera.Services
                         {
                             nodeMenu.Visible = false;
                             NodeEditorMenu.Visible = false;
-                            _cameraService.EnterPointSelectorForNode(editCamIndex, (_editingSavedPath ? _editingPath : null));
+                            _cameraService.EnterPointSelectorForNode(editCamIndex);
                         };
                         nodeMenu.Add(editCamItem);
 
@@ -807,21 +663,12 @@ namespace ModdedCamera.Services
                         int dupIndex = nodeIndex;
                         dupItem.Activated += delegate
                         {
-                            if (_editingSavedPath && _editingPath != null)
+                            var sp = _cameraService.SplineCamera;
+                            if (sp != null && sp.DuplicateNode(dupIndex))
                             {
-                                _editingPath.DuplicateNodeAt(dupIndex);
                                 _lastSelectedNodeIndex = dupIndex + 1;
-                                ReloadEditingPath();
-                            }
-                            else
-                            {
-                                var sp = _cameraService.SplineCamera;
-                                if (sp != null && sp.DuplicateNode(dupIndex))
-                                {
-                                    _lastSelectedNodeIndex = dupIndex + 1;
-                                    _cameraService.RestartPlaybackIfActive();
-                                    RefreshNodeEditorMenu();
-                                }
+                                _cameraService.RestartPlaybackIfActive();
+                                RefreshNodeEditorMenu();
                             }
                         };
                         nodeMenu.Add(dupItem);
@@ -831,34 +678,18 @@ namespace ModdedCamera.Services
                         int delIndex = nodeIndex;
                         delItem.Activated += delegate
                         {
-                            if (_editingSavedPath && _editingPath != null)
+                            var sp = _cameraService.SplineCamera;
+                            if (sp != null)
                             {
-                                if (_editingPath.Positions.Count > 2)
+                                if (sp.RemoveNode(delIndex))
                                 {
-                                    _editingPath.RemoveNodeAt(delIndex);
-                                    _lastSelectedNodeIndex = Math.Min(delIndex, _editingPath.Positions.Count - 1);
-                                    ReloadEditingPath();
+                                    _lastSelectedNodeIndex = Math.Min(delIndex, sp.Nodes.Count - 1);
+                                    _cameraService.RestartPlaybackIfActive();
+                                    RefreshNodeEditorMenu();
                                 }
                                 else
                                 {
                                     GTA.UI.Notification.PostTicker("~r~Нужно минимум 2 узла!", false, false);
-                                }
-                            }
-                            else
-                            {
-                                var sp = _cameraService.SplineCamera;
-                                if (sp != null)
-                                {
-                                    if (sp.RemoveNode(delIndex))
-                                    {
-                                        _lastSelectedNodeIndex = Math.Min(delIndex, sp.Nodes.Count - 1);
-                                        _cameraService.RestartPlaybackIfActive();
-                                        RefreshNodeEditorMenu();
-                                    }
-                                    else
-                                    {
-                                        GTA.UI.Notification.PostTicker("~r~Нужно минимум 2 узла!", false, false);
-                                    }
                                 }
                             }
                         };
