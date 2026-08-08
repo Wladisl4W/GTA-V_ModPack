@@ -1564,6 +1564,12 @@ namespace ModdedCamera.Services
                         nodeMenu.Add(colorItem);
 
                         NativeItem nodeItem = new NativeItem(label, desc);
+                        if (curArgb != Color.White.ToArgb())
+                        {
+                            Color nodeTextColor = Color.FromArgb(curArgb);
+                            nodeItem.Colors.TitleNormal = nodeTextColor;
+                            nodeItem.Colors.TitleHovered = nodeTextColor;
+                        }
                         int capturedNodeIndex = nodeIndex;
                         nodeItem.Activated += delegate { _lastSelectedNodeIndex = capturedNodeIndex; NodeEditorMenu.Visible = false; nodeMenu.Visible = true; };
                         NodeEditorMenu.Add(nodeItem);
