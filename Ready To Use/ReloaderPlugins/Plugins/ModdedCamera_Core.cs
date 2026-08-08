@@ -340,6 +340,7 @@ namespace ModdedCamera
 
         public float Speed
         {
+            get { return _currentSpeedMult; }
             set
             {
                 try

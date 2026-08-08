@@ -55,6 +55,7 @@ namespace ModdedCamera.Services
         private bool _savedPlayerPosFrozen = false;
         private int _lastFollowTeleportMs = 0;
         private const int FollowTeleportIntervalMs = 500;
+        private float _lastTimeScale = 1f;
 
         public CameraService()
         {
@@ -356,6 +357,8 @@ namespace ModdedCamera.Services
         {
             try
             {
+                ApplyTimeScale();
+
                 if (IsSplineCamActive || _splineCamWasUsed)
                 {
                     if (SplineCamera != null && SplineCamera.MainCamera != null && SplineCamera.MainCamera.Exists())
@@ -380,6 +383,29 @@ namespace ModdedCamera.Services
             }
         }
 
+        private void ApplyTimeScale()
+        {
+            try
+            {
+                float target = 1f;
+                if (IsSplineCamActive && SplineCamera != null)
+                {
+                    float s = SplineCamera.Speed;
+                    if (s > 0f && s < 1f)
+                        target = s;
+                }
+                if (Math.Abs(target - _lastTimeScale) > 0.001f)
+                {
+                    _lastTimeScale = target;
+                    Function.Call(Hash.SET_TIME_SCALE, target);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("ApplyTimeScale warning: " + ex.Message);
+            }
+        }
+
         public void ResetAll()
         {
             try
@@ -388,6 +414,8 @@ namespace ModdedCamera.Services
                 Function.Call(NativeHashes.UNDO_SCREEN_FADE);
                 CameraRenderer.ClearFocus();
                 RestorePlayerState();
+                _lastTimeScale = 1f;
+                Function.Call(Hash.SET_TIME_SCALE, 1f);
 
                 if (SplineCamera != null)
                 {
@@ -431,6 +459,8 @@ namespace ModdedCamera.Services
                 Logger.Info("CameraService: Disposing...");
                 Function.Call(NativeHashes.UNDO_SCREEN_FADE);
                 CameraRenderer.ClearFocus();
+                _lastTimeScale = 1f;
+                Function.Call(Hash.SET_TIME_SCALE, 1f);
 
                 if (SplineCamera != null)
                 {
