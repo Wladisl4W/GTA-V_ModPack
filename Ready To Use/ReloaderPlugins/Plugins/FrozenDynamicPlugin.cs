@@ -109,16 +109,26 @@ namespace FrozenDynamic
 
         public FrozenDynamicPlugin()
         {
-            _menu = new NativeMenu("Frozen Dynamic", "Управление NPC");
+            try
+            {
+                _menu = new NativeMenu("Frozen Dynamic", "Управление NPC");
 
-            _freezeItem = new NativeItem("Заморозить NPC", "Остановить всех пешеходов на месте");
-            _unfreezeItem = new NativeItem("Разморозить NPC", "Вернуть NPC к обычному поведению");
+                _freezeItem = new NativeItem("Заморозить NPC", "Остановить всех пешеходов на месте");
+                _unfreezeItem = new NativeItem("Разморозить NPC", "Вернуть NPC к обычному поведению");
 
-            _menu.Add(_freezeItem);
-            _menu.Add(_unfreezeItem);
+                _menu.Add(_freezeItem);
+                _menu.Add(_unfreezeItem);
 
-            _freezeItem.Activated += OnFreezeActivated;
-            _unfreezeItem.Activated += OnUnfreezeActivated;
+                _freezeItem.Activated += OnFreezeActivated;
+                _unfreezeItem.Activated += OnUnfreezeActivated;
+            }
+            catch (Exception ex)
+            {
+                try { System.IO.File.AppendAllText(
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ReloaderPlugins", "FrozenDynamic.log"),
+                    "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] Ошибка конструктора: " + ex.Message + "\n"); }
+                catch { }
+            }
         }
 
         public void OnStart()
@@ -238,22 +248,29 @@ namespace FrozenDynamic
         /// </summary>
         private AnimRef GetCurrentDanceAnim(Ped ped)
         {
-            foreach (AnimRef anim in DanceAnims)
+            try
             {
-                Function.Call(Hash.REQUEST_ANIM_DICT, anim.Dict);
-
-                if (Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, ped.Handle, anim.Dict, anim.Anim, 3))
+                foreach (AnimRef anim in DanceAnims)
                 {
-                    return anim;
+                    Function.Call(Hash.REQUEST_ANIM_DICT, anim.Dict);
+
+                    if (Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, ped.Handle, anim.Dict, anim.Anim, 3))
+                    {
+                        return anim;
+                    }
+                }
+
+                // Проверяем сценарные анимации (WORLD_HUMAN_*)
+                if (Function.Call<bool>(Hash.IS_PED_USING_ANY_SCENARIO, ped.Handle))
+                {
+                    // Имя сценария (GET_PED_SCENARIO_NAME) — скрытый native, вызывать нельзя.
+                    // Оно и не нужно: сценарии не перезапускаются, пед продолжит сам.
+                    return new AnimRef(null, null); // Dict = null означает сценарий
                 }
             }
-
-            // Проверяем сценарные анимации (WORLD_HUMAN_*)
-            if (Function.Call<bool>(Hash.IS_PED_USING_ANY_SCENARIO, ped.Handle))
+            catch (Exception ex)
             {
-                // Имя сценария (GET_PED_SCENARIO_NAME) — скрытый native, вызывать нельзя.
-                // Оно и не нужно: сценарии не перезапускаются, пед продолжит сам.
-                return new AnimRef(null, null); // Dict = null означает сценарий
+                Log("Ошибка при определении анимации педа " + ped.Handle + ": " + ex.Message);
             }
 
             return null;
@@ -265,32 +282,34 @@ namespace FrozenDynamic
         private int FreezeAllPeds()
         {
             int count = 0;
-            Ped playerPed = Game.Player.Character;
-
-            if (playerPed == null || !playerPed.Exists())
+            try
             {
-                ShowNotification("~y~Игрок не найден");
-                return 0;
-            }
+                Ped playerPed = Game.Player.Character;
 
-            Ped[] allPeds = World.GetAllPeds();
-
-            if (allPeds == null || allPeds.Length == 0)
-            {
-                ShowNotification("~y~NPC не найдены в игре");
-                return 0;
-            }
-
-            foreach (Ped ped in allPeds)
-            {
-                // Пропускаем null, несуществующих и игрока
-                if (ped == null || !ped.Exists() || ped.Handle == playerPed.Handle)
-                    continue;
-
-                try
+                if (playerPed == null || !playerPed.Exists())
                 {
-                    // Сохраняем анимацию (если это танец или сценарий)
-                    AnimRef currentAnim = GetCurrentDanceAnim(ped);
+                    ShowNotification("~y~Игрок не найден");
+                    return 0;
+                }
+
+                Ped[] allPeds = World.GetAllPeds();
+
+                if (allPeds == null || allPeds.Length == 0)
+                {
+                    ShowNotification("~y~NPC не найдены в игре");
+                    return 0;
+                }
+
+                foreach (Ped ped in allPeds)
+                {
+                    // Пропускаем null, несуществующих и игрока
+                    if (ped == null || !ped.Exists() || ped.Handle == playerPed.Handle)
+                        continue;
+
+                    try
+                    {
+                        // Сохраняем анимацию (если это танец или сценарий)
+                        AnimRef currentAnim = GetCurrentDanceAnim(ped);
                     if (currentAnim != null)
                     {
                         double progress = 0.0;
@@ -347,6 +366,11 @@ namespace FrozenDynamic
                     Log("Ошибка при заморозке педа " + ped.Handle + ": " + ex.Message);
                 }
             }
+            }
+            catch (Exception ex)
+            {
+                Log("Ошибка при заморозке NPC: " + ex.Message);
+            }
 
             return count;
         }
@@ -358,20 +382,22 @@ namespace FrozenDynamic
         private int UnfreezeAllPeds()
         {
             int count = 0;
-            Ped playerPed = Game.Player.Character;
-
-            if (playerPed == null || !playerPed.Exists())
+            try
             {
-                ShowNotification("~y~Игрок не найден");
-                _frozenPeds.Clear();
-                _pedAnimStates.Clear();
-                _pendingRestores.Clear();
-                _pendingRestoreStart.Clear();
-                return 0;
-            }
+                Ped playerPed = Game.Player.Character;
 
-            foreach (int handle in _frozenPeds.ToList()) // ToList для безопасного удаления
-            {
+                if (playerPed == null || !playerPed.Exists())
+                {
+                    ShowNotification("~y~Игрок не найден");
+                    _frozenPeds.Clear();
+                    _pedAnimStates.Clear();
+                    _pendingRestores.Clear();
+                    _pendingRestoreStart.Clear();
+                    return 0;
+                }
+
+                foreach (int handle in _frozenPeds.ToList()) // ToList для безопасного удаления
+                {
                 try
                 {
                     Ped ped = (Ped)GTA.Entity.FromHandle(handle);
@@ -415,6 +441,16 @@ namespace FrozenDynamic
 
             _frozenPeds.Clear();
             _pedAnimStates.Clear();
+            }
+            catch (Exception ex)
+            {
+                Log("Ошибка при разморозке NPC: " + ex.Message);
+                _frozenPeds.Clear();
+                _pedAnimStates.Clear();
+                _pendingRestores.Clear();
+                _pendingRestoreStart.Clear();
+            }
+
             return count;
         }
 
@@ -463,6 +499,8 @@ namespace FrozenDynamic
         /// </summary>
         private void ProcessPendingRestores(long now)
         {
+            try
+            {
             for (int i = _pendingRestores.Count - 1; i >= 0; i--)
             {
                 int handle = _pendingRestores[i];
@@ -529,6 +567,11 @@ namespace FrozenDynamic
                     _pendingRestoreStart.Remove(handle);
                 }
             }
+            }
+            catch (Exception ex)
+            {
+                Log("Ошибка в очереди восстановления анимаций: " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -537,6 +580,8 @@ namespace FrozenDynamic
         /// </summary>
         private void MaintainFrozenState()
         {
+            try
+            {
             foreach (int handle in _frozenPeds.ToList())
             {
                 try
@@ -560,6 +605,11 @@ namespace FrozenDynamic
                     _frozenPeds.Remove(handle);
                     _pedAnimStates.Remove(handle);
                 }
+            }
+            }
+            catch (Exception ex)
+            {
+                Log("Ошибка при обслуживании замороженных педов: " + ex.Message);
             }
         }
 
