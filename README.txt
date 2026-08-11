@@ -34,6 +34,7 @@ GTA V ModPack
   • Remove Dropped Peds (H)  — удаление педов, упавших в воду (включая мёртвых)
   • MenyooStreamer (U)       — стриминг педов из Menyoo
   • Modded Camera (T)        — пролёты камеры по точкам, Backspace — назад
+  • Frozen Dynamic (K)       — заморозка/разморозка всех NPC (танцы сохраняются)
 
 Файлы модов (создаются автоматически):
   • scripts\ReloaderPlugins\Reloader.log       — лог загрузчика
