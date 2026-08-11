@@ -251,12 +251,9 @@ namespace FrozenDynamic
             // Проверяем сценарные анимации (WORLD_HUMAN_*)
             if (Function.Call<bool>(Hash.IS_PED_USING_ANY_SCENARIO, ped.Handle))
             {
-                // GET_PED_SCENARIO_NAME hash = 0x3B0B693D
-                string scenarioName = Function.Call<string>((Hash)0x3B0B693D, ped.Handle);
-                if (!string.IsNullOrEmpty(scenarioName))
-                {
-                    return new AnimRef(null, scenarioName); // Dict = null означает сценарий
-                }
+                // Имя сценария (GET_PED_SCENARIO_NAME) — скрытый native, вызывать нельзя.
+                // Оно и не нужно: сценарии не перезапускаются, пед продолжит сам.
+                return new AnimRef(null, null); // Dict = null означает сценарий
             }
 
             return null;
@@ -435,11 +432,11 @@ namespace FrozenDynamic
 
             try
             {
-                if (animState.IsScenario && animState.Anim != null)
+                if (animState.IsScenario)
                 {
                     // Сценарная анимация — не можем перезапустить без сценария
                     // Пед будет продолжать сам
-                    Log("Пед " + handle + " был в сценарии " + animState.Anim + ", не перезапускаем");
+                    Log("Пед " + handle + " был в сценарии, не перезапускаем");
                 }
                 else if (animState.Dict != null && animState.Anim != null)
                 {
