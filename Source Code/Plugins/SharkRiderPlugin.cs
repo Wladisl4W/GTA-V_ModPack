@@ -1,18 +1,22 @@
+using System;
+using System.IO;
+using System.Web.Script.Serialization;
+using System.Windows.Forms;
 using GTA;
 using GTA.Math;
 using GTA.Native;
-using System;
-using System.IO;
-using System.Windows.Forms;
+using LemonUI;
+using LemonUI.Menus;
 
 namespace SharkRider
 {
     /// <summary>
-    /// Автономный мод-акула: без меню и кнопок.
-    /// - Когда игрок в воде, рядом спавнится акула (tiger_shark) и подплывает к нему
+    /// Мод-акула: без меню и кнопок.
+    /// - Когда игрок в воде, рядом спавнится акула (a_c_shark_tiger по умолчанию) и подплывает к нему
     /// - При близком контакте игрок автоматически садится на спину акулы
     /// - WASD — плавание, Shift — всплытие, Ctrl — погружение
     /// - Выход на сушу автоматически отпускает акулу и удаляет её
+    /// - Клавиша O — меню: выбор модели педа прицелом (сохраняется в файл) + вкл/выкл мода
     /// </summary>
     public class SharkRiderPlugin : IGtaPlugin
     {
@@ -20,7 +24,7 @@ namespace SharkRider
 
         // ВАЖНО: правильное имя модели акулы в GTA V — "a_c_shark_tiger",
         // а не "tiger_shark" (несуществующая модель -> нативный краш в CREATE_PED)
-        private const string SharkModel = "a_c_shark_tiger";
+        private const string DefaultSharkModel = "a_c_shark_tiger";
         private const int PedType = 26; // PED_TYPE_CREATURE
 
         private const long CheckIntervalMs = 400;   // как часто проверять "в воде ли игрок"
@@ -46,12 +50,68 @@ namespace SharkRider
         private long _sharkSpawnMs = 0;
         private float _targetDepth = 0f;
 
+        // Настройки мода
+        private bool _modEnabled = true;
+        private int _modelHash = 0;
+        private int _defaultModelHash = 0;
+
+        // LemonUI
+        private readonly ObjectPool _pool = new ObjectPool();
+        private NativeMenu _menu;
+        private NativeCheckboxItem _enableCheckbox;
+        private NativeItem _pickModelItem;
+        private NativeItem _modelDisplayItem;
+
+        // Сохранение настроек (как в RemoveDroppedPeds)
+        private class ModSettings
+        {
+            public bool ModEnabled { get; set; }
+            public int ModelHash { get; set; }
+
+            public ModSettings()
+            {
+                ModEnabled = true;
+                ModelHash = 0;
+            }
+        }
+
+        private readonly string _settingsPath = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            "ReloaderPlugins",
+            "SharkRiderSettings.json"
+        );
+        private readonly SettingsSerializer _serializer = new SettingsSerializer();
+        private ModSettings _settings;
+
+        private int _lastSaveGameTime = 0;
+        private bool _settingsDirty = false;
+        private int _lastKeyGameTime = 0;
+
         public void OnStart()
         {
             try
             {
-                Log("Shark Rider загружен");
-                GTA.UI.Notification.PostTicker("~b~Shark Rider~w~ активен~n~Войдите в воду — акула подплывёт сама", false, false);
+                _defaultModelHash = Game.GenerateHash(DefaultSharkModel);
+                _modelHash = _defaultModelHash;
+
+                // Загрузка настроек
+                _settings = LoadSettings();
+                _modEnabled = _settings.ModEnabled;
+
+                // Валидную модель берём из файла, битую или пустую — заменяем на акулу
+                if (IsModelValidForSpawn(_settings.ModelHash))
+                    _modelHash = _settings.ModelHash;
+                else
+                    _modelHash = _defaultModelHash;
+
+                _lastSaveGameTime = Game.GameTime;
+                _lastKeyGameTime = Game.GameTime;
+
+                CreateMenu();
+
+                Log("Shark Rider загружен. Мод: " + (_modEnabled ? "вкл" : "выкл") +
+                    ", модель: 0x" + _modelHash.ToString("X8"));
+                GTA.UI.Notification.PostTicker("~b~Shark Rider~w~ активен~n~Войдите в воду — акула подплывёт сама~n~~y~O~w~ — меню мода", false, false);
             }
             catch (Exception ex)
             {
@@ -59,12 +119,141 @@ namespace SharkRider
             }
         }
 
+        private void CreateMenu()
+        {
+            _menu = new NativeMenu("Shark Rider", "Катание на акуле");
+
+            _enableCheckbox = new NativeCheckboxItem(
+                "Включить мод",
+                "Выкл — акула не спавнится, а текущая удаляется",
+                _modEnabled);
+            _enableCheckbox.CheckboxChanged += (s, e) =>
+            {
+                _modEnabled = _enableCheckbox.Checked;
+                _settings.ModEnabled = _modEnabled;
+                MarkSettingsDirty();
+                if (!_modEnabled && _state != State.Idle)
+                {
+                    StopRiding(true);
+                    _state = State.Idle;
+                }
+            };
+            _menu.Add(_enableCheckbox);
+
+            _pickModelItem = new NativeItem(
+                "Выбрать модель под прицелом",
+                "Наведитесь на педа (например, акулу) и нажмите Enter — модель запомнится навсегда и будет спавниться в воде");
+            _pickModelItem.Activated += (s, e) => PickAimedPedModel();
+            _menu.Add(_pickModelItem);
+
+            _modelDisplayItem = new NativeItem("Модель", "");
+            _menu.Add(_modelDisplayItem);
+            UpdateModelDisplay();
+
+            _pool.Add(_menu);
+        }
+
+        private void UpdateModelDisplay()
+        {
+            if (_modelDisplayItem == null) return;
+
+            if (_modelHash == _defaultModelHash)
+            {
+                _modelDisplayItem.Title = "Модель: акула (по умолчанию)";
+                _modelDisplayItem.AltTitle = DefaultSharkModel;
+            }
+            else
+            {
+                _modelDisplayItem.Title = "Модель: 0x" + _modelHash.ToString("X8");
+                _modelDisplayItem.AltTitle = "Выбрана прицелом, сохранится в файле";
+            }
+        }
+
+        /// <summary>
+        /// Рейкаст из камеры по педам: выбрал педа — его модель становится моделью спавна.
+        /// </summary>
+        private void PickAimedPedModel()
+        {
+            try
+            {
+                Vector3 source = GameplayCamera.Position;
+                Vector3 target = source + GameplayCamera.Direction * 100f;
+
+                RaycastResult ray = World.Raycast(source, target, IntersectFlags.Peds);
+                if (!ray.DidHit)
+                {
+                    GTA.UI.Screen.ShowSubtitle("~r~Наведитесь на педа и попробуйте снова.", 3000);
+                    return;
+                }
+
+                Ped ped = ray.HitEntity as Ped;
+                if (ped == null || !ped.Exists())
+                {
+                    GTA.UI.Screen.ShowSubtitle("~r~Под прицелом нет педа. Наведитесь на педа (например, акулу).", 3000);
+                    return;
+                }
+
+                int hash = ped.Model.Hash;
+                if (!IsModelValidForSpawn(hash))
+                {
+                    GTA.UI.Screen.ShowSubtitle("~r~Модель невалидна. Наведитесь на существующего педа.", 3000);
+                    return;
+                }
+
+                _modelHash = hash;
+                _settings.ModelHash = hash;
+                MarkSettingsDirty();
+                UpdateModelDisplay();
+                Log("Выбрана модель педа: 0x" + hash.ToString("X8"));
+                GTA.UI.Screen.ShowSubtitle("~g~Модель 0x" + hash.ToString("X8") + " сохранена.~n~Теперь в воде будет спавниться этот пед.", 4000);
+            }
+            catch (Exception ex)
+            {
+                Log("PickAimedPedModel: " + ex.Message);
+            }
+        }
+
         public void OnTick()
         {
+            // LemonUI требует вызова Process() каждый кадр
+            try
+            {
+                _pool.Process();
+            }
+            catch (Exception ex)
+            {
+                Log("OnTick pool: " + ex.Message);
+            }
+
+            // Отложенное сохранение настроек (раз в 3 секунды)
+            if (_settingsDirty && HasElapsed(_lastSaveGameTime, 3000))
+            {
+                try
+                {
+                    SaveSettings();
+                    _settingsDirty = false;
+                    _lastSaveGameTime = Game.GameTime;
+                }
+                catch (Exception ex)
+                {
+                    Log("OnTick save: " + ex.Message);
+                }
+            }
+
             try
             {
                 Ped player = Game.Player.Character;
                 if (player == null || !player.Exists()) return;
+
+                if (!_modEnabled)
+                {
+                    if (_state != State.Idle)
+                    {
+                        StopRiding(true);
+                        _state = State.Idle;
+                    }
+                    return;
+                }
 
                 bool inWater = IsPlayerInWater(player);
 
@@ -111,7 +300,16 @@ namespace SharkRider
 
         public void OnKeyDown(Keys key)
         {
-            // без кнопок — мод полностью автономный
+            if (key != Keys.O) return;
+
+            // Защита от автоповтора при удержании
+            int now = Game.GameTime;
+            uint sinceLast = unchecked((uint)(now - _lastKeyGameTime));
+            if (sinceLast < 300) return;
+            _lastKeyGameTime = now;
+
+            if (_menu == null) return;
+            _menu.Visible = !_menu.Visible;
         }
 
         public void OnAbort()
@@ -120,6 +318,12 @@ namespace SharkRider
             {
                 Log("Shark Rider выгружается");
                 StopRiding(true);
+
+                if (_menu != null)
+                    _menu.Visible = false;
+
+                if (_settingsDirty)
+                    SaveSettings();
             }
             catch (Exception ex)
             {
@@ -127,7 +331,104 @@ namespace SharkRider
             }
         }
 
+        // === НАСТРОЙКИ ===
+
+        /// <summary>
+        /// Проверяет, прошло ли достаточно времени с учётом переполнения Game.GameTime.
+        /// </summary>
+        private static bool HasElapsed(int lastTime, int intervalMs)
+        {
+            int currentTime = Game.GameTime;
+            uint elapsed = unchecked((uint)(currentTime - lastTime));
+            return elapsed >= (uint)intervalMs;
+        }
+
+        private void MarkSettingsDirty()
+        {
+            _settingsDirty = true;
+        }
+
+        private ModSettings LoadSettings()
+        {
+            try
+            {
+                if (File.Exists(_settingsPath))
+                {
+                    string json = File.ReadAllText(_settingsPath);
+                    var settings = _serializer.Deserialize(json);
+                    if (settings != null)
+                    {
+                        Log("Настройки загружены: Enabled=" + settings.ModEnabled + ", ModelHash=0x" + settings.ModelHash.ToString("X8"));
+                        return settings;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("LoadSettings: " + ex.Message);
+            }
+            Log("Используются настройки по умолчанию");
+            return new ModSettings();
+        }
+
+        private void SaveSettings()
+        {
+            try
+            {
+                var directory = Path.GetDirectoryName(_settingsPath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                    Directory.CreateDirectory(directory);
+
+                File.WriteAllText(_settingsPath, _serializer.Serialize(_settings));
+                Log("Настройки сохранены в файл");
+            }
+            catch (Exception ex)
+            {
+                Log("SaveSettings: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Обёртка для сериализации/десериализации настроек.
+        /// </summary>
+        private sealed class SettingsSerializer
+        {
+            private readonly JavaScriptSerializer _serializer = new JavaScriptSerializer();
+
+            public ModSettings Deserialize(string json)
+            {
+                if (string.IsNullOrWhiteSpace(json))
+                    return new ModSettings();
+
+                var settings = _serializer.Deserialize<ModSettings>(json);
+                return settings ?? new ModSettings();
+            }
+
+            public string Serialize(ModSettings settings)
+            {
+                return _serializer.Serialize(settings);
+            }
+        }
+
         // === СПАВН ===
+
+        /// <summary>
+        /// Модель обязана существовать и быть педом, иначе CREATE_PED крашит игру нативно.
+        /// </summary>
+        private bool IsModelValidForSpawn(int modelHash)
+        {
+            if (modelHash == 0) return false;
+            try
+            {
+                if (!Function.Call<bool>(Hash.IS_MODEL_VALID, modelHash)) return false;
+                if (!Function.Call<bool>(Hash.IS_MODEL_A_PED, modelHash)) return false;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private void SpawnShark(Ped player)
         {
@@ -142,7 +443,7 @@ namespace SharkRider
                 }
 
                 _spawnRequestMs = NowMs();
-                Function.Call(Hash.REQUEST_MODEL, Game.GenerateHash(SharkModel));
+                Function.Call(Hash.REQUEST_MODEL, _modelHash);
             }
             catch (Exception ex)
             {
@@ -155,25 +456,22 @@ namespace SharkRider
         {
             try
             {
-                int modelHash = Game.GenerateHash(SharkModel);
-
                 // Страховка: модель обязана существовать и быть педом, иначе CREATE_PED крашит игру нативно
-                if (!Function.Call<bool>(Hash.IS_MODEL_VALID, modelHash) ||
-                    !Function.Call<bool>(Hash.IS_MODEL_A_PED, modelHash))
+                if (!IsModelValidForSpawn(_modelHash))
                 {
-                    Log("Модель " + SharkModel + " (hash " + modelHash + ") не существует или не пед — спавн отменён");
+                    Log("Модель 0x" + _modelHash.ToString("X8") + " не существует или не пед — спавн отменён");
                     _state = State.Idle;
                     return;
                 }
 
-                if (!Function.Call<bool>(Hash.HAS_MODEL_LOADED, modelHash))
+                if (!Function.Call<bool>(Hash.HAS_MODEL_LOADED, _modelHash))
                 {
                     // Модель не загрузилась — пробуем снова и пишем в лог
                     if (NowMs() - _spawnRequestMs > 5000)
                     {
-                        Log("Модель " + SharkModel + " не загрузилась за 5с (hash " + modelHash + "), повторный запрос");
+                        Log("Модель 0x" + _modelHash.ToString("X8") + " не загрузилась за 5с, повторный запрос");
                         _spawnRequestMs = NowMs();
-                        Function.Call(Hash.REQUEST_MODEL, modelHash);
+                        Function.Call(Hash.REQUEST_MODEL, _modelHash);
                     }
                     return;
                 }
@@ -205,7 +503,7 @@ namespace SharkRider
                     spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
                 }
 
-                _shark = (Ped)Function.Call<Entity>(Hash.CREATE_PED, PedType, modelHash,
+                _shark = (Ped)Function.Call<Entity>(Hash.CREATE_PED, PedType, _modelHash,
                     spawnPos.X, spawnPos.Y, spawnPos.Z, playerPos.ToHeading(), true, false);
 
                 if (_shark == null || !_shark.Exists() || IsInvalid(_shark.Position))
