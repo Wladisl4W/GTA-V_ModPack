@@ -24,10 +24,11 @@ namespace SharkRider
         private const long CheckIntervalMs = 400;   // как часто проверять "в воде ли игрок"
         private const long AbandonTimeoutMs = 2500; // через сколько без воды отпустить акулу
 
-        private const float SpawnDistance = 18f;    // дистанция спавна акулы от игрока
+        private const float SpawnDistance = 40f;    // дистанция спавна акулы от игрока
         private const float RideDistance = 3.0f;    // с какой дистанции игрок садится
         private const float SwimSpeed = 7.5f;       // скорость подплыва акулы к игроку
         private const float RideSpeed = 7.5f;       // скорость катания
+        private const long SpawnSettleMs = 400;     // пауза после создания акулы (не трогать физику)
 
         private static readonly Vector3 AttachOffset = new Vector3(0f, 0.4f, 0.9f); // крепление на спине
         private static readonly Vector3 CamOffset = new Vector3(0f, -5.5f, 2.6f);    // камера позади-сверху
@@ -40,6 +41,7 @@ namespace SharkRider
         private long _lastInWaterMs = 0;
         private long _lastDiagMs = 0;
         private long _spawnRequestMs = 0;
+        private long _sharkSpawnMs = 0;
         private float _targetDepth = 0f;
 
         public void OnStart()
@@ -179,11 +181,15 @@ namespace SharkRider
                     return;
                 }
 
-                // Спавним рядом с игроком, чтобы акула точно была в зоне стриминга
+                // Не спавним вплотную к игроку (риск коллизии при создании педа)
                 Vector3 playerPos = player.Position;
-                if (spawnPos.DistanceTo(playerPos) > 25f)
+                if (spawnPos.DistanceTo(playerPos) < 15f)
                 {
-                    spawnPos = playerPos + new Vector3(2f, -2f, 0f);
+                    Vector3 away = (spawnPos - playerPos).Normalized;
+                    spawnPos = playerPos + away * 20f;
+                    spawnPos.Z = Clamp(GetWaterHeight(spawnPos), playerPos.Z - 6f, playerPos.Z + 1f);
+                    if (IsInvalid(spawnPos) || spawnPos.Z < -10f)
+                        spawnPos = playerPos + new Vector3(5f, -5f, 0f);
                     spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
                 }
 
@@ -204,8 +210,8 @@ namespace SharkRider
                 Function.Call(Hash.SET_PED_ALERTNESS, _shark.Handle, 0);
                 Function.Call(Hash.CLEAR_PED_TASKS, _shark.Handle);
                 _shark.IsPositionFrozen = false;
-                _shark.Velocity = Vector3.Zero;
 
+                _sharkSpawnMs = NowMs();
                 _lastInWaterMs = NowMs();
                 Log("Акула создана на " + spawnPos.ToString());
                 _state = State.Approaching;
@@ -231,13 +237,14 @@ namespace SharkRider
             float waterZ = GetWaterHeight(spawnPos);
             if (waterZ < -10f)
             {
-                spawnPos = playerPos + dir * 8f;
+                // В точке нет воды — ищем ближе (игрок-то в воде)
+                spawnPos = playerPos + dir * 12f;
                 waterZ = GetWaterHeight(spawnPos);
             }
             if (waterZ < -10f)
             {
-                spawnPos = playerPos;
-                waterZ = playerPos.Z;
+                // Воды нет и вблизи — спавн отменяем
+                return new Vector3(float.NaN, float.NaN, float.NaN);
             }
 
             // Никогда не уходим глубоко под воду и не выходим за карту
@@ -281,6 +288,10 @@ namespace SharkRider
                     _state = State.Idle;
                     return;
                 }
+
+                // Только что созданную акулу не трогаем первые ~0.4с (физика ещё не инициализирована)
+                if (NowMs() - _sharkSpawnMs < SpawnSettleMs)
+                    return;
 
                 float dist = playerPos.DistanceTo(sharkPos);
                 if (dist < RideDistance && inWater)
