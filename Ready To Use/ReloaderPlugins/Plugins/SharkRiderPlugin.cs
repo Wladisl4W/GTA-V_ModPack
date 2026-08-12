@@ -337,6 +337,11 @@ namespace SharkRider
                     _menu.Visible = true;
             }
 
+            // Меню (scaleform) ставит игру на паузу: любые нативные вызовы в этом состоянии
+            // могут крашить игру (AccessViolation в NativeCall). Игровую логику не трогаем.
+            if (_menu != null && _menu.Visible)
+                return;
+
             try
             {
                 Ped player = Game.Player.Character;
