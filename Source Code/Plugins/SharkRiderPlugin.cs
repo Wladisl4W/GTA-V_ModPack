@@ -85,6 +85,8 @@ namespace SharkRider
         private int _lastSaveGameTime = 0;
         private bool _settingsDirty = false;
         private int _lastKeyGameTime = 0;
+        private bool _pendingPick = false;
+        private long _pendingPickAtMs = 0;
 
         public void OnStart()
         {
@@ -140,8 +142,15 @@ namespace SharkRider
 
             _pickModelItem = new NativeItem(
                 "Выбрать модель под прицелом",
-                "Наведитесь на педа (например, акулу) и нажмите Enter — модель запомнится навсегда и будет спавниться в воде");
-            _pickModelItem.Activated += (s, e) => PickAimedPedModel();
+                "Меню закроется, наведитесь на педа и нажмите Enter — модель запомнится навсегда");
+            _pickModelItem.Activated += (s, e) =>
+            {
+                // Меню (scaleform) ставит игру на паузу — рейкаст в меню не работает.
+                // Закрываем меню, рейкаст делаем в ближайший тик, когда игра отыграна.
+                _menu.Visible = false;
+                _pendingPick = true;
+                _pendingPickAtMs = NowMs() + 500;
+            };
             _menu.Add(_pickModelItem);
 
             _modelDisplayItem = new NativeItem("Модель", "");
@@ -169,8 +178,9 @@ namespace SharkRider
 
         /// <summary>
         /// Рейкаст из камеры по педам: выбрал педа — его модель становится моделью спавна.
+        /// Возвращает true, если модель выбрана.
         /// </summary>
-        private void PickAimedPedModel()
+        private bool PickAimedPedModel()
         {
             try
             {
@@ -178,51 +188,48 @@ namespace SharkRider
                 Vector3 dir = GameplayCamera.Direction;
                 if (dir.LengthSquared() < 0.001f)
                     dir = new Vector3(0f, 1f, 0f);
-                Vector3 target = source + dir * 100f;
+                Vector3 target = source + dir * 200f;
 
-                Ped ped = null;
-                Vector3 aimPoint = target;
-
-                // 1) Рейкаст по всему: если попал в педа — берём его, иначе запоминаем точку попадания
+                // 1) Рейкаст по всему: если попал в педа — берём его
                 RaycastResult ray = World.Raycast(source, target, IntersectFlags.Everything);
                 if (ray.DidHit)
                 {
-                    aimPoint = ray.HitPosition;
-                    ped = ray.HitEntity as Ped;
+                    Ped ped = ray.HitEntity as Ped;
+                    if ((ped != null && ped.Exists() && !ped.IsPlayer) &&
+                        IsModelValidForSpawn(ped.Model.Hash))
+                    {
+                        SaveModel(ped.Model.Hash);
+                        return true;
+                    }
+                    // Попали в машину/стену, а не в педа — ищем ближайшего педа к точке попадания
+                    target = ray.HitPosition;
                 }
 
                 // 2) Страховка: ближайший пед к точке прицела (игрока исключаем)
-                if (ped == null || !ped.Exists())
+                Ped closest = World.GetClosestPed(target, 6f);
+                if (closest != null && closest.Exists() && !closest.IsPlayer &&
+                    IsModelValidForSpawn(closest.Model.Hash))
                 {
-                    Ped closest = World.GetClosestPed(aimPoint, 10f);
-                    if (closest != null && closest.Exists() && !closest.IsPlayer)
-                        ped = closest;
+                    SaveModel(closest.Model.Hash);
+                    return true;
                 }
-
-                if (ped == null || !ped.Exists())
-                {
-                    GTA.UI.Screen.ShowSubtitle("~r~Наведитесь на педа и попробуйте снова.", 3000);
-                    return;
-                }
-
-                int hash = ped.Model.Hash;
-                if (!IsModelValidForSpawn(hash))
-                {
-                    GTA.UI.Screen.ShowSubtitle("~r~Модель невалидна. Наведитесь на существующего педа.", 3000);
-                    return;
-                }
-
-                _modelHash = hash;
-                _settings.ModelHash = hash;
-                MarkSettingsDirty();
-                UpdateModelDisplay();
-                Log("Выбрана модель педа: 0x" + hash.ToString("X8"));
-                GTA.UI.Screen.ShowSubtitle("~g~Модель 0x" + hash.ToString("X8") + " сохранена.~n~Теперь в воде будет спавниться этот пед.", 4000);
             }
             catch (Exception ex)
             {
                 Log("PickAimedPedModel: " + ex.Message);
             }
+            Log("PickAimedPedModel: пед под прицелом не найден");
+            return false;
+        }
+
+        private void SaveModel(int hash)
+        {
+            _modelHash = hash;
+            _settings.ModelHash = hash;
+            MarkSettingsDirty();
+            UpdateModelDisplay();
+            Log("Выбрана модель педа: 0x" + hash.ToString("X8"));
+            GTA.UI.Screen.ShowSubtitle("~g~Модель 0x" + hash.ToString("X8") + " сохранена.~n~Теперь в воде будет спавниться этот пед.", 4000);
         }
 
         public void OnTick()
@@ -250,6 +257,14 @@ namespace SharkRider
                 {
                     Log("OnTick save: " + ex.Message);
                 }
+            }
+
+            // Отложенный выбор модели: меню закрыто, игра распаузена — теперь рейкаст работает
+            if (_pendingPick && NowMs() >= _pendingPickAtMs)
+            {
+                _pendingPick = false;
+                if (PickAimedPedModel())
+                    _menu.Visible = true;
             }
 
             try
@@ -290,7 +305,7 @@ namespace SharkRider
                                     if (now - _lastHintMs >= 5000)
                                     {
                                         _lastHintMs = now;
-                                        GTA.UI.Screen.ShowSubtitle("~y~Shark Rider: модель не выбрана. Откройте меню (~b~O~w~) и выберите педа прицелом.", 4000);
+                                        GTA.UI.Screen.ShowSubtitle("~y~Shark Rider: модель не выбрана. Наведитесь на педа и нажмите ~b~O~w~.", 4000);
                                     }
                                     break;
                                 }
@@ -331,7 +346,19 @@ namespace SharkRider
             _lastKeyGameTime = now;
 
             if (_menu == null) return;
-            _menu.Visible = !_menu.Visible;
+
+            // Меню открыто — закрываем
+            if (_menu.Visible)
+            {
+                _menu.Visible = false;
+                return;
+            }
+
+            // Меню закрыто (игра не на паузе): сначала вытаскиваем модель педа под прицелом,
+            // потом открываем меню. Так работает и в самолёте/машине, и просто с руки.
+            if (!PickAimedPedModel())
+                GTA.UI.Screen.ShowSubtitle("~y~Под прицелом нет педа. Открываю меню...", 3000);
+            _menu.Visible = true;
         }
 
         public void OnAbort()
