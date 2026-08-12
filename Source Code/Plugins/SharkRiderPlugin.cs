@@ -120,22 +120,13 @@ namespace SharkRider
         {
             try
             {
-                Vector3 playerPos = player.Position;
-                Vector3 dir = GetPlayerLookDirection(player);
-                Vector3 spawnPos = playerPos + dir * SpawnDistance;
-
-                float waterZ = GetWaterHeight(spawnPos);
-                if (waterZ < -10f)
+                Vector3 spawnPos = ComputeSpawnPosition(player);
+                if (IsInvalid(spawnPos))
                 {
-                    spawnPos = playerPos + dir * 8f;
-                    waterZ = GetWaterHeight(spawnPos);
+                    Log("SpawnShark: невалидная позиция спавна");
+                    _state = State.Idle;
+                    return;
                 }
-                if (waterZ < -10f)
-                {
-                    spawnPos = playerPos;
-                    waterZ = playerPos.Z;
-                }
-                spawnPos.Z = waterZ - 1.5f; // чуть под поверхностью
 
                 Function.Call(Hash.REQUEST_MODEL, Game.GenerateHash(SharkModel));
             }
@@ -153,30 +144,36 @@ namespace SharkRider
                 if (!Function.Call<bool>(Hash.HAS_MODEL_LOADED, Game.GenerateHash(SharkModel)))
                     return;
 
-                Vector3 playerPos = player.Position;
-                Vector3 dir = GetPlayerLookDirection(player);
-                Vector3 spawnPos = playerPos + dir * SpawnDistance;
+                if (!IsPedInWater(player))
+                {
+                    _state = State.Idle;
+                    return;
+                }
 
-                float waterZ = GetWaterHeight(spawnPos);
-                if (waterZ < -10f)
+                Vector3 spawnPos = ComputeSpawnPosition(player);
+                if (IsInvalid(spawnPos))
                 {
-                    spawnPos = playerPos + dir * 8f;
-                    waterZ = GetWaterHeight(spawnPos);
+                    Log("UpdateSpawning: невалидная позиция спавна");
+                    _state = State.Idle;
+                    return;
                 }
-                if (waterZ < -10f)
+
+                // Спавним рядом с игроком, чтобы акула точно была в зоне стриминга
+                Vector3 playerPos = player.Position;
+                if (spawnPos.DistanceTo(playerPos) > 25f)
                 {
-                    spawnPos = playerPos;
-                    waterZ = playerPos.Z;
+                    spawnPos = playerPos + new Vector3(2f, -2f, 0f);
+                    spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
                 }
-                spawnPos.Z = waterZ - 1.5f;
 
                 int hash = Game.GenerateHash(SharkModel);
                 _shark = (Ped)Function.Call<Entity>(Hash.CREATE_PED, PedType, hash,
                     spawnPos.X, spawnPos.Y, spawnPos.Z, playerPos.ToHeading(), true, false);
 
-                if (_shark == null || !_shark.Exists())
+                if (_shark == null || !_shark.Exists() || IsInvalid(_shark.Position))
                 {
                     Log("Не удалось создать акулу");
+                    DeleteShark();
                     _state = State.Idle;
                     return;
                 }
@@ -187,6 +184,7 @@ namespace SharkRider
                 Function.Call(Hash.SET_PED_ALERTNESS, _shark.Handle, 0);
                 Function.Call(Hash.CLEAR_PED_TASKS, _shark.Handle);
                 _shark.IsPositionFrozen = false;
+                _shark.Velocity = Vector3.Zero;
 
                 _lastInWaterMs = NowMs();
                 Log("Акула создана на " + spawnPos.ToString());
@@ -198,6 +196,35 @@ namespace SharkRider
                 DeleteShark();
                 _state = State.Idle;
             }
+        }
+
+        /// <summary>
+        /// Считает безопасную точку спавна рядом с игроком (только в воде, без выхода за карту)
+        /// </summary>
+        private Vector3 ComputeSpawnPosition(Ped player)
+        {
+            Vector3 playerPos = player.Position;
+
+            Vector3 dir = GetPlayerLookDirection(player);
+            Vector3 spawnPos = playerPos + dir * SpawnDistance;
+
+            float waterZ = GetWaterHeight(spawnPos);
+            if (waterZ < -10f)
+            {
+                spawnPos = playerPos + dir * 8f;
+                waterZ = GetWaterHeight(spawnPos);
+            }
+            if (waterZ < -10f)
+            {
+                spawnPos = playerPos;
+                waterZ = playerPos.Z;
+            }
+
+            // Никогда не уходим глубоко под воду и не выходим за карту
+            spawnPos.Z = Clamp(waterZ - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
+            spawnPos.X = Clamp(spawnPos.X, -4000f, 4000f);
+            spawnPos.Y = Clamp(spawnPos.Y, -4000f, 4000f);
+            return spawnPos;
         }
 
         // === ПОДПЛЫВ К ИГРОКУ ===
@@ -227,10 +254,27 @@ namespace SharkRider
                 Vector3 playerPos = player.Position;
                 Vector3 sharkPos = _shark.Position;
 
+                if (IsInvalid(sharkPos))
+                {
+                    Log("UpdateApproaching: невалидная позиция акулы");
+                    DeleteShark();
+                    _state = State.Idle;
+                    return;
+                }
+
                 float dist = playerPos.DistanceTo(sharkPos);
                 if (dist < RideDistance && inWater)
                 {
                     StartRiding(player);
+                    return;
+                }
+
+                // Акула далеко (глюк стриминга) — пересоздаём рядом
+                if (dist > 60f)
+                {
+                    Log("UpdateApproaching: акула слишком далеко (" + dist.ToString("F0") + "м), пересоздаём");
+                    DeleteShark();
+                    _state = State.Spawning;
                     return;
                 }
 
@@ -241,12 +285,12 @@ namespace SharkRider
                     Vector3 dir = toPlayerFlat.Normalized;
                     _shark.Heading = dir.ToHeading();
 
-                    float targetZ = playerPos.Z + 0.5f;
+                    float targetZ = Clamp(playerPos.Z + 0.5f, playerPos.Z - 4f, playerPos.Z + 3f);
                     Vector3 vel = new Vector3(
                         dir.X * SwimSpeed,
                         dir.Y * SwimSpeed,
-                        (targetZ - sharkPos.Z) * 1.5f);
-                    _shark.Velocity = vel;
+                        Clamp((targetZ - sharkPos.Z) * 1.5f, -SwimSpeed, SwimSpeed));
+                    _shark.Velocity = ClampSpeed(vel, 12f);
                 }
             }
             catch (Exception ex)
@@ -305,8 +349,20 @@ namespace SharkRider
                 }
                 if (inWater) _lastInWaterMs = now;
 
+                Vector3 sharkPos = _shark.Position;
+                if (IsInvalid(sharkPos))
+                {
+                    Log("UpdateRiding: невалидная позиция акулы");
+                    StopRiding(true);
+                    _state = State.Idle;
+                    return;
+                }
+
                 Vector3 fwd = (_rideCam != null) ? _rideCam.ForwardVector : new Vector3(1f, 0f, 0f);
                 Vector3 right = (_rideCam != null) ? _rideCam.RightVector : new Vector3(0f, 1f, 0f);
+
+                if (IsInvalid(fwd)) fwd = new Vector3(1f, 0f, 0f);
+                if (IsInvalid(right)) right = new Vector3(0f, 1f, 0f);
 
                 float fwdIn = (Game.IsKeyPressed(Keys.W) ? 1f : 0f) - (Game.IsKeyPressed(Keys.S) ? 1f : 0f);
                 float strafe = (Game.IsKeyPressed(Keys.D) ? 1f : 0f) - (Game.IsKeyPressed(Keys.A) ? 1f : 0f);
@@ -326,18 +382,18 @@ namespace SharkRider
                     vel = new Vector3(0f, 0f, 0f);
                 }
 
-                // Shift — вверх, Ctrl — вниз
+                // Shift — вверх, Ctrl — вниз (глубина ограничена, чтобы не улететь под карту)
                 float depthStep = 0f;
                 if (Game.IsKeyPressed(Keys.ShiftKey)) depthStep = +1f;
                 else if (Game.IsKeyPressed(Keys.ControlKey)) depthStep = -1f;
-                if (depthStep != 0f) _targetDepth += depthStep * 1.5f;
+                if (depthStep != 0f) _targetDepth = Clamp(_targetDepth + depthStep * 1.5f, sharkPos.Z - 25f, sharkPos.Z + 25f);
 
-                float depthDiff = _targetDepth - _shark.Position.Z;
+                float depthDiff = Clamp(_targetDepth - sharkPos.Z, -12f, 12f);
                 vel.Z = depthDiff * 1.2f;
                 if (depthDiff > 1.5f) vel.Z = Math.Max(vel.Z, 1.0f);
                 if (depthDiff < -1.5f) vel.Z = Math.Min(vel.Z, -1.0f);
 
-                _shark.Velocity = vel;
+                _shark.Velocity = ClampSpeed(vel, 12f);
             }
             catch (Exception ex)
             {
@@ -463,6 +519,31 @@ namespace SharkRider
         private static long NowMs()
         {
             return DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+        }
+
+        private static float Clamp(float value, float min, float max)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value)) return min;
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
+        }
+
+        private static bool IsInvalid(Vector3 v)
+        {
+            return float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) ||
+                   float.IsInfinity(v.X) || float.IsInfinity(v.Y) || float.IsInfinity(v.Z);
+        }
+
+        /// <summary>
+        /// Ограничивает длину вектора скорости, чтобы не разгонять физику до краша
+        /// </summary>
+        private static Vector3 ClampSpeed(Vector3 v, float maxSpeed)
+        {
+            float len = v.Length();
+            if (len <= maxSpeed || len < 0.0001f) return v;
+            float k = maxSpeed / len;
+            return new Vector3(v.X * k, v.Y * k, v.Z * k);
         }
 
         private void Log(string message)
