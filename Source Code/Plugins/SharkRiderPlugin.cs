@@ -38,6 +38,8 @@ namespace SharkRider
 
         private long _lastCheckMs = 0;
         private long _lastInWaterMs = 0;
+        private long _lastDiagMs = 0;
+        private long _spawnRequestMs = 0;
         private float _targetDepth = 0f;
 
         public void OnStart()
@@ -60,17 +62,24 @@ namespace SharkRider
                 Ped player = Game.Player.Character;
                 if (player == null || !player.Exists()) return;
 
-                bool inWater = IsPedInWater(player);
+                bool inWater = IsPlayerInWater(player);
 
                 switch (_state)
                 {
                     case State.Idle:
                         long now = NowMs();
+                        if (now - _lastDiagMs >= 5000)
+                        {
+                            _lastDiagMs = now;
+                            Log("Idle: inWater=" + inWater + ", inVehicle=" + IsPedInVehicle(player) +
+                                ", playerZ=" + player.Position.Z.ToString("F1"));
+                        }
                         if (inWater && now - _lastCheckMs >= CheckIntervalMs)
                         {
                             _lastCheckMs = now;
                             if (!IsPedInVehicle(player))
                             {
+                                Log("Игрок в воде — спавним акулу");
                                 SpawnShark(player);
                                 _state = State.Spawning;
                             }
@@ -128,6 +137,7 @@ namespace SharkRider
                     return;
                 }
 
+                _spawnRequestMs = NowMs();
                 Function.Call(Hash.REQUEST_MODEL, Game.GenerateHash(SharkModel));
             }
             catch (Exception ex)
@@ -141,11 +151,22 @@ namespace SharkRider
         {
             try
             {
-                if (!Function.Call<bool>(Hash.HAS_MODEL_LOADED, Game.GenerateHash(SharkModel)))
-                    return;
-
-                if (!IsPedInWater(player))
+                int modelHash = Game.GenerateHash(SharkModel);
+                if (!Function.Call<bool>(Hash.HAS_MODEL_LOADED, modelHash))
                 {
+                    // Модель не загрузилась — пробуем снова и пишем в лог
+                    if (NowMs() - _spawnRequestMs > 5000)
+                    {
+                        Log("Модель " + SharkModel + " не загрузилась за 5с (hash " + modelHash + "), повторный запрос");
+                        _spawnRequestMs = NowMs();
+                        Function.Call(Hash.REQUEST_MODEL, modelHash);
+                    }
+                    return;
+                }
+
+                if (!IsPlayerInWater(player))
+                {
+                    Log("UpdateSpawning: игрок вышел из воды, отмена спавна");
                     _state = State.Idle;
                     return;
                 }
@@ -166,8 +187,7 @@ namespace SharkRider
                     spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
                 }
 
-                int hash = Game.GenerateHash(SharkModel);
-                _shark = (Ped)Function.Call<Entity>(Hash.CREATE_PED, PedType, hash,
+                _shark = (Ped)Function.Call<Entity>(Hash.CREATE_PED, PedType, modelHash,
                     spawnPos.X, spawnPos.Y, spawnPos.Z, playerPos.ToHeading(), true, false);
 
                 if (_shark == null || !_shark.Exists() || IsInvalid(_shark.Position))
@@ -456,16 +476,26 @@ namespace SharkRider
             _shark = null;
         }
 
-        private bool IsPedInWater(Ped ped)
+        /// <summary>
+        /// Проверка "игрок в воде". IS_ENTITY_IN_WATER иногда даёт false у самой поверхности,
+        /// поэтому дополнительно сверяемся с высотой воды в точке игрока.
+        /// </summary>
+        private bool IsPlayerInWater(Ped ped)
         {
             try
             {
-                return Function.Call<bool>(Hash.IS_ENTITY_IN_WATER, ped.Handle);
+                if (Function.Call<bool>(Hash.IS_ENTITY_IN_WATER, ped.Handle))
+                    return true;
+
+                Vector3 pos = ped.Position;
+                float waterZ = GetWaterHeight(pos);
+                if (waterZ > -10f && pos.Z <= waterZ + 1.5f)
+                    return true;
             }
             catch
             {
-                return false;
             }
+            return false;
         }
 
         private bool IsPedInVehicle(Ped ped)
