@@ -22,9 +22,8 @@ namespace SharkRider
     {
         private enum State { Idle, Spawning, Approaching, Riding }
 
-        // ВАЖНО: правильное имя модели акулы в GTA V — "a_c_shark_tiger",
-        // а не "tiger_shark" (несуществующая модель -> нативный краш в CREATE_PED)
-        private const string DefaultSharkModel = "a_c_shark_tiger";
+        // ВАЖНО: если пользователь выбирает модель (акула — "a_c_shark_tiger",
+        // НЕ "tiger_shark"), перед спавном всегда проверяется IS_MODEL_VALID/IS_MODEL_A_PED
         private const int PedType = 26; // PED_TYPE_CREATURE
 
         private const long CheckIntervalMs = 400;   // как часто проверять "в воде ли игрок"
@@ -46,14 +45,14 @@ namespace SharkRider
         private long _lastCheckMs = 0;
         private long _lastInWaterMs = 0;
         private long _lastDiagMs = 0;
+        private long _lastHintMs = 0;
         private long _spawnRequestMs = 0;
         private long _sharkSpawnMs = 0;
         private float _targetDepth = 0f;
 
         // Настройки мода
         private bool _modEnabled = true;
-        private int _modelHash = 0;
-        private int _defaultModelHash = 0;
+        private int _modelHash = 0; // 0 = модель не выбрана (обязательно выбрать в меню)
 
         // LemonUI
         private readonly ObjectPool _pool = new ObjectPool();
@@ -91,18 +90,17 @@ namespace SharkRider
         {
             try
             {
-                _defaultModelHash = Game.GenerateHash(DefaultSharkModel);
-                _modelHash = _defaultModelHash;
+                _modelHash = 0;
 
                 // Загрузка настроек
                 _settings = LoadSettings();
                 _modEnabled = _settings.ModEnabled;
 
-                // Валидную модель берём из файла, битую или пустую — заменяем на акулу
+                // Валидную модель берём из файла, битую или пустую — мод ждёт выбора в меню
                 if (IsModelValidForSpawn(_settings.ModelHash))
                     _modelHash = _settings.ModelHash;
                 else
-                    _modelHash = _defaultModelHash;
+                    _modelHash = 0;
 
                 _lastSaveGameTime = Game.GameTime;
                 _lastKeyGameTime = Game.GameTime;
@@ -110,7 +108,7 @@ namespace SharkRider
                 CreateMenu();
 
                 Log("Shark Rider загружен. Мод: " + (_modEnabled ? "вкл" : "выкл") +
-                    ", модель: 0x" + _modelHash.ToString("X8"));
+                    ", модель: " + (_modelHash == 0 ? "не выбрана" : "0x" + _modelHash.ToString("X8")));
                 GTA.UI.Notification.PostTicker("~b~Shark Rider~w~ активен~n~Войдите в воду — акула подплывёт сама~n~~y~O~w~ — меню мода", false, false);
             }
             catch (Exception ex)
@@ -157,10 +155,10 @@ namespace SharkRider
         {
             if (_modelDisplayItem == null) return;
 
-            if (_modelHash == _defaultModelHash)
+            if (_modelHash == 0)
             {
-                _modelDisplayItem.Title = "Модель: акула (по умолчанию)";
-                _modelDisplayItem.AltTitle = DefaultSharkModel;
+                _modelDisplayItem.Title = "Модель: не выбрана";
+                _modelDisplayItem.AltTitle = "Наведитесь на педа и выберите — без модели мод не работает";
             }
             else
             {
@@ -177,19 +175,33 @@ namespace SharkRider
             try
             {
                 Vector3 source = GameplayCamera.Position;
-                Vector3 target = source + GameplayCamera.Direction * 100f;
+                Vector3 dir = GameplayCamera.Direction;
+                if (dir.LengthSquared() < 0.001f)
+                    dir = new Vector3(0f, 1f, 0f);
+                Vector3 target = source + dir * 100f;
 
-                RaycastResult ray = World.Raycast(source, target, IntersectFlags.Peds);
-                if (!ray.DidHit)
+                Ped ped = null;
+                Vector3 aimPoint = target;
+
+                // 1) Рейкаст по всему: если попал в педа — берём его, иначе запоминаем точку попадания
+                RaycastResult ray = World.Raycast(source, target, IntersectFlags.Everything);
+                if (ray.DidHit)
                 {
-                    GTA.UI.Screen.ShowSubtitle("~r~Наведитесь на педа и попробуйте снова.", 3000);
-                    return;
+                    aimPoint = ray.HitPosition;
+                    ped = ray.HitEntity as Ped;
                 }
 
-                Ped ped = ray.HitEntity as Ped;
+                // 2) Страховка: ближайший пед к точке прицела (игрока исключаем)
                 if (ped == null || !ped.Exists())
                 {
-                    GTA.UI.Screen.ShowSubtitle("~r~Под прицелом нет педа. Наведитесь на педа (например, акулу).", 3000);
+                    Ped closest = World.GetClosestPed(aimPoint, 10f);
+                    if (closest != null && closest.Exists() && !closest.IsPlayer)
+                        ped = closest;
+                }
+
+                if (ped == null || !ped.Exists())
+                {
+                    GTA.UI.Screen.ShowSubtitle("~r~Наведитесь на педа и попробуйте снова.", 3000);
                     return;
                 }
 
@@ -265,13 +277,23 @@ namespace SharkRider
                         {
                             _lastDiagMs = now;
                             Log("Idle: inWater=" + inWater + ", inVehicle=" + IsPedInVehicle(player) +
-                                ", playerZ=" + player.Position.Z.ToString("F1"));
+                                ", playerZ=" + player.Position.Z.ToString("F1") +
+                                ", model=" + (_modelHash == 0 ? "не выбрана" : "0x" + _modelHash.ToString("X8")));
                         }
                         if (inWater && now - _lastCheckMs >= CheckIntervalMs)
                         {
                             _lastCheckMs = now;
                             if (!IsPedInVehicle(player))
                             {
+                                if (!IsModelValidForSpawn(_modelHash))
+                                {
+                                    if (now - _lastHintMs >= 5000)
+                                    {
+                                        _lastHintMs = now;
+                                        GTA.UI.Screen.ShowSubtitle("~y~Shark Rider: модель не выбрана. Откройте меню (~b~O~w~) и выберите педа прицелом.", 4000);
+                                    }
+                                    break;
+                                }
                                 Log("Игрок в воде — спавним акулу");
                                 SpawnShark(player);
                                 _state = State.Spawning;
@@ -358,7 +380,8 @@ namespace SharkRider
                     var settings = _serializer.Deserialize(json);
                     if (settings != null)
                     {
-                        Log("Настройки загружены: Enabled=" + settings.ModEnabled + ", ModelHash=0x" + settings.ModelHash.ToString("X8"));
+                        Log("Настройки загружены: Enabled=" + settings.ModEnabled + ", ModelHash=" +
+                            (settings.ModelHash == 0 ? "не выбрана" : "0x" + settings.ModelHash.ToString("X8")));
                         return settings;
                     }
                 }
@@ -367,7 +390,7 @@ namespace SharkRider
             {
                 Log("LoadSettings: " + ex.Message);
             }
-            Log("Используются настройки по умолчанию");
+            Log("Используются настройки по умолчанию (модель не выбрана)");
             return new ModSettings();
         }
 
