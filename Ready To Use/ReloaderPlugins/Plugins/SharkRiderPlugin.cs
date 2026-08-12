@@ -18,7 +18,9 @@ namespace SharkRider
     {
         private enum State { Idle, Spawning, Approaching, Riding }
 
-        private const string SharkModel = "tiger_shark";
+        // ВАЖНО: правильное имя модели акулы в GTA V — "a_c_shark_tiger",
+        // а не "tiger_shark" (несуществующая модель -> нативный краш в CREATE_PED)
+        private const string SharkModel = "a_c_shark_tiger";
         private const int PedType = 26; // PED_TYPE_CREATURE
 
         private const long CheckIntervalMs = 400;   // как часто проверять "в воде ли игрок"
@@ -154,6 +156,16 @@ namespace SharkRider
             try
             {
                 int modelHash = Game.GenerateHash(SharkModel);
+
+                // Страховка: модель обязана существовать и быть педом, иначе CREATE_PED крашит игру нативно
+                if (!Function.Call<bool>(Hash.IS_MODEL_VALID, modelHash) ||
+                    !Function.Call<bool>(Hash.IS_MODEL_A_PED, modelHash))
+                {
+                    Log("Модель " + SharkModel + " (hash " + modelHash + ") не существует или не пед — спавн отменён");
+                    _state = State.Idle;
+                    return;
+                }
+
                 if (!Function.Call<bool>(Hash.HAS_MODEL_LOADED, modelHash))
                 {
                     // Модель не загрузилась — пробуем снова и пишем в лог
