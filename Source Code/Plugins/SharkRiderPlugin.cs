@@ -177,40 +177,27 @@ namespace SharkRider
         }
 
         /// <summary>
-        /// Рейкаст из камеры по педам: выбрал педа — его модель становится моделью спавна.
+        /// Выбор модели: пед под прицелом (ближайший к центру экрана) из свободной камеры.
+        /// Не зависит от рейкаста — тот в этой сборке SHVDN3 ловит нестабильно.
         /// Возвращает true, если модель выбрана.
         /// </summary>
         private bool PickAimedPedModel()
         {
             try
             {
-                Vector3 source = GameplayCamera.Position;
-                Vector3 dir = GameplayCamera.Direction;
-                if (dir.LengthSquared() < 0.001f)
-                    dir = new Vector3(0f, 1f, 0f);
-                Vector3 target = source + dir * 200f;
-
-                // 1) Рейкаст по всему: если попал в педа — берём его
-                RaycastResult ray = World.Raycast(source, target, IntersectFlags.Everything);
-                if (ray.DidHit)
+                // 1) Если игрок целится из оружия — игра сама говорит, на кого смотрит
+                Ped freeAim = GetFreeAimPed();
+                if (freeAim != null)
                 {
-                    Ped ped = ray.HitEntity as Ped;
-                    if ((ped != null && ped.Exists() && !ped.IsPlayer) &&
-                        IsModelValidForSpawn(ped.Model.Hash))
-                    {
-                        SaveModel(ped.Model.Hash);
-                        return true;
-                    }
-                    // Попали в машину/стену, а не в педа — ищем ближайшего педа к точке попадания
-                    target = ray.HitPosition;
+                    SaveModel(freeAim.Model.Hash);
+                    return true;
                 }
 
-                // 2) Страховка: ближайший пед к точке прицела (игрока исключаем)
-                Ped closest = World.GetClosestPed(target, 6f);
-                if (closest != null && closest.Exists() && !closest.IsPlayer &&
-                    IsModelValidForSpawn(closest.Model.Hash))
+                // 2) Иначе: ближайший пед к центру экрана (прицелу) среди загруженных рядом
+                Ped best = GetPedNearestToScreenCenter(0.12f, 40f);
+                if (best != null)
                 {
-                    SaveModel(closest.Model.Hash);
+                    SaveModel(best.Model.Hash);
                     return true;
                 }
             }
@@ -218,8 +205,91 @@ namespace SharkRider
             {
                 Log("PickAimedPedModel: " + ex.Message);
             }
-            Log("PickAimedPedModel: пед под прицелом не найден");
             return false;
+        }
+
+        /// <summary>
+        /// Пед, на которого игрок целится из оружия (GET_ENTITY_PLAYER_IS_FREE_AIMING_AT).
+        /// </summary>
+        private Ped GetFreeAimPed()
+        {
+            try
+            {
+                Entity e = Function.Call<Entity>(Hash.GET_ENTITY_PLAYER_IS_FREE_AIMING_AT, Game.Player.Handle);
+                if (e != null && e.Exists())
+                {
+                    Ped p = e as Ped;
+                    if (p != null && p.Exists() && !p.IsPlayer && IsModelValidForSpawn(p.Model.Hash))
+                        return p;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("GetFreeAimPed: " + ex.Message);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Проецирует каждого педа рядом на экран и берёт ближайшего к центру (0.5, 0.5).
+        /// maxScreenDist — допустимое расстояние от центра в долях экрана (0.12 = 12%).
+        /// </summary>
+        private Ped GetPedNearestToScreenCenter(float maxScreenDist, float scanRadius)
+        {
+            try
+            {
+                Ped player = Game.Player.Character;
+                if (player == null || !player.Exists()) return null;
+
+                Ped[] peds = World.GetNearbyPeds(player.Position, scanRadius);
+                if (peds == null || peds.Length == 0) return null;
+
+                float bestSq = maxScreenDist * maxScreenDist;
+                Ped best = null;
+                int scanned = 0;
+
+                for (int i = 0; i < peds.Length; i++)
+                {
+                    Ped p = peds[i];
+                    if (p == null || !p.Exists() || p.IsPlayer || p.IsDead) continue;
+
+                    Vector3 pos = p.Position;
+                    var sx = new OutputArgument();
+                    var sy = new OutputArgument();
+
+                    bool onScreen;
+                    try
+                    {
+                        onScreen = Function.Call<bool>(Hash.GET_SCREEN_COORD_FROM_WORLD_COORD,
+                            pos.X, pos.Y, pos.Z, sx, sy);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                    if (!onScreen) continue;
+
+                    float px = sx.GetResult<float>() - 0.5f;
+                    float py = sy.GetResult<float>() - 0.5f;
+                    float distSq = px * px + py * py;
+                    scanned++;
+
+                    if (distSq < bestSq)
+                    {
+                        bestSq = distSq;
+                        best = p;
+                    }
+                }
+
+                Log("GetPedNearestToScreenCenter: просмотрено " + scanned +
+                    " педов из " + peds.Length + ", лучший дист. " + Math.Sqrt(bestSq).ToString("F3"));
+                return best;
+            }
+            catch (Exception ex)
+            {
+                Log("GetPedNearestToScreenCenter: " + ex.Message);
+                return null;
+            }
         }
 
         private void SaveModel(int hash)
