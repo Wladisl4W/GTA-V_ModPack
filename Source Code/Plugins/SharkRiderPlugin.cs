@@ -33,6 +33,7 @@ namespace SharkRider
         private const float RideDistance = 3.0f;    // с какой дистанции игрок садится
         private const float SwimSpeed = 7.5f;       // скорость подплыва акулы к игроку
         private const float RideSpeed = 7.5f;       // скорость катания
+        private const float RideVerticalSpeed = 5f;  // скорость вверх/вниз (ед/сек)
         private const long SpawnSettleMs = 400;     // пауза после создания акулы (не трогать физику)
 
         private static readonly Vector3 AttachOffset = new Vector3(0.1f, -0.6f, 0.85f); // по центру спины, чуть сзади
@@ -48,7 +49,7 @@ namespace SharkRider
         private long _lastHintMs = 0;
         private long _spawnRequestMs = 0;
         private long _sharkSpawnMs = 0;
-        private float _targetDepth = 0f;
+
 
         // Настройки мода
         private bool _modEnabled = true;
@@ -781,8 +782,6 @@ namespace SharkRider
                     Log("StartRiding (сидячая анимация): " + ex2.Message);
                 }
 
-                _targetDepth = _shark.Position.Z;
-
                 Log("Игрок сел на акулу");
                 GTA.UI.Notification.PostTicker("~b~WASD~w~ — плыть, ~b~Shift~w~ — вверх, ~b~Ctrl~w~ — вниз", false, false);
                 _state = State.Riding;
@@ -867,16 +866,14 @@ namespace SharkRider
                     _shark.Heading = cur + diff * 0.12f;
                 }
 
-                // Shift — вверх, Ctrl — вниз (глубина ограничена, чтобы не улететь под карту)
-                float depthStep = 0f;
-                if (Game.IsKeyPressed(Keys.ShiftKey)) depthStep = +1f;
-                else if (Game.IsKeyPressed(Keys.ControlKey)) depthStep = -1f;
-                if (depthStep != 0f) _targetDepth = Clamp(_targetDepth + depthStep * 1.5f, sharkPos.Z - 25f, sharkPos.Z + 25f);
-
-                float depthDiff = Clamp(_targetDepth - sharkPos.Z, -12f, 12f);
-                vel.Z = depthDiff * 1.2f;
-                if (depthDiff > 1.5f) vel.Z = Math.Max(vel.Z, 1.0f);
-                if (depthDiff < -1.5f) vel.Z = Math.Min(vel.Z, -1.0f);
+                // Shift — вверх, Ctrl — вниз. Движение ТОЛЬКО пока кнопка удерживается;
+                // отпустили — сразу держим глубину (vel.Z = 0, без инерции/догона).
+                if (Game.IsKeyPressed(Keys.ShiftKey))
+                    vel.Z = RideVerticalSpeed;
+                else if (Game.IsKeyPressed(Keys.ControlKey))
+                    vel.Z = -RideVerticalSpeed;
+                else
+                    vel.Z = 0f;
 
                 _shark.Velocity = ClampSpeed(vel, 12f);
             }
@@ -905,7 +902,6 @@ namespace SharkRider
                     _shark.Velocity = Vector3.Zero;
                 }
 
-                _targetDepth = 0f;
                 _state = State.Idle;
             }
             catch (Exception ex)
