@@ -622,7 +622,7 @@ namespace SharkRider
                 {
                     Vector3 away = (spawnPos - playerPos).Normalized;
                     spawnPos = playerPos + away * 20f;
-                    spawnPos.Z = Clamp(GetWaterHeight(spawnPos), playerPos.Z - 6f, playerPos.Z + 1f);
+                    spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
                     if (IsInvalid(spawnPos) || spawnPos.Z < -10f)
                         spawnPos = playerPos + new Vector3(5f, -5f, 0f);
                     spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
@@ -669,21 +669,9 @@ namespace SharkRider
             Vector3 dir = GetPlayerLookDirection(player);
             Vector3 spawnPos = playerPos + dir * SpawnDistance;
 
-            float waterZ = GetWaterHeight(spawnPos);
-            if (waterZ < -10f)
-            {
-                // В точке нет воды — ищем ближе (игрок-то в воде)
-                spawnPos = playerPos + dir * 12f;
-                waterZ = GetWaterHeight(spawnPos);
-            }
-            if (waterZ < -10f)
-            {
-                // Воды нет и вблизи — спавн отменяем
-                return new Vector3(float.NaN, float.NaN, float.NaN);
-            }
-
-            // Никогда не уходим глубоко под воду и не выходим за карту
-            spawnPos.Z = Clamp(waterZ - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
+            // Глубину берём от игрока (он уже в воде). GET_WATER_HEIGHT не используем
+            // — в этой сборке SHVDN3 он крашит игру нативно.
+            spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
             spawnPos.X = Clamp(spawnPos.X, -4000f, 4000f);
             spawnPos.Y = Clamp(spawnPos.Y, -4000f, 4000f);
             return spawnPos;
@@ -926,17 +914,14 @@ namespace SharkRider
         /// Проверка "игрок в воде". IS_ENTITY_IN_WATER иногда даёт false у самой поверхности,
         /// поэтому дополнительно сверяемся с высотой воды в точке игрока.
         /// </summary>
+        // Только IS_ENTITY_IN_WATER. GET_WATER_HEIGHT в этой сборке SHVDN3 имеет
+        // неверный хеш в Hash-енуме и вызывает нативный AccessViolation (краш игры),
+        // поэтому высоту воды не запрашиваем вообще.
         private bool IsPlayerInWater(Ped ped)
         {
             try
             {
-                if (Function.Call<bool>(Hash.IS_ENTITY_IN_WATER, ped.Handle))
-                    return true;
-
-                Vector3 pos = ped.Position;
-                float waterZ = GetWaterHeight(pos);
-                if (waterZ > -10f && pos.Z <= waterZ + 1.5f)
-                    return true;
+                return Function.Call<bool>(Hash.IS_ENTITY_IN_WATER, ped.Handle);
             }
             catch
             {
@@ -953,18 +938,6 @@ namespace SharkRider
             catch
             {
                 return false;
-            }
-        }
-
-        private float GetWaterHeight(Vector3 pos)
-        {
-            try
-            {
-                return Function.Call<float>(Hash.GET_WATER_HEIGHT, pos.X, pos.Y, pos.Z, 0f);
-            }
-            catch
-            {
-                return -100f;
             }
         }
 
