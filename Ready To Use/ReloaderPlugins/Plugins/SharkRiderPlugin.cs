@@ -35,7 +35,7 @@ namespace SharkRider
         private const float RideSpeed = 7.5f;       // скорость катания
         private const long SpawnSettleMs = 400;     // пауза после создания акулы (не трогать физику)
 
-        private static readonly Vector3 AttachOffset = new Vector3(0f, -0.6f, 0.85f); // по центру спины, чуть сзади
+        private static readonly Vector3 AttachOffset = new Vector3(0.2f, -0.6f, 0.85f); // по центру спины, чуть сзади
 
         private State _state = State.Idle;
         private Ped _shark = null;
@@ -764,6 +764,22 @@ namespace SharkRider
 
                 player.IsPositionFrozen = true;
                 player.AttachTo(_shark, AttachOffset, new Vector3(0f, 0f, 0f));
+
+                // Убираем анимацию плавания: проигрываем сидячую анимацию
+                // (отдельный try — если анимация не проигрывается, катание не должно падать)
+                try
+                {
+                    const string sitDict = "amb@world_human_sit_on_bench@male@idle_a";
+                    const string sitAnim = "idle_a";
+                    Function.Call(Hash.REQUEST_ANIM_DICT, sitDict);
+                    // flags = 1 (loop). Перекрывает анимацию плавания.
+                    Function.Call(Hash.TASK_PLAY_ANIM, player.Handle, sitDict, sitAnim,
+                        8f, -8f, -1, 1, 0f, false, false, false);
+                }
+                catch (Exception ex2)
+                {
+                    Log("StartRiding (сидячая анимация): " + ex2.Message);
+                }
 
                 _targetDepth = _shark.Position.Z;
 
