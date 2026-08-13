@@ -697,8 +697,7 @@ namespace SharkRider
 
                 if (_shark == null || !_shark.Exists())
                 {
-                    DeleteShark();
-                    _state = State.Idle;
+                    StopRiding(true);
                     return;
                 }
 
@@ -708,8 +707,7 @@ namespace SharkRider
                 if (IsInvalid(sharkPos))
                 {
                     Log("UpdateApproaching: невалидная позиция акулы");
-                    DeleteShark();
-                    _state = State.Idle;
+                    StopRiding(true);
                     return;
                 }
 
@@ -728,7 +726,7 @@ namespace SharkRider
                 if (dist > 60f)
                 {
                     Log("UpdateApproaching: акула слишком далеко (" + dist.ToString("F0") + "м), пересоздаём");
-                    DeleteShark();
+                    StopRiding(true);
                     _state = State.Spawning;
                     return;
                 }
@@ -914,6 +912,22 @@ namespace SharkRider
 
         private void DeleteShark()
         {
+            // Защита: игрок может быть прикреплён к акуле — удалять сущность до открепления
+            // нельзя (игра падает с AccessViolation). Открепляем и снимаем заморозку.
+            try
+            {
+                Ped player = Game.Player.Character;
+                if (player != null && player.Exists())
+                {
+                    if (player.IsAttached())
+                        player.Detach();
+                    player.IsPositionFrozen = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("DeleteShark (detach): " + ex.Message);
+            }
             try
             {
                 if (_shark != null && _shark.Exists())
