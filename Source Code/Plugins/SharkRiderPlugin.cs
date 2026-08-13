@@ -36,6 +36,8 @@ namespace SharkRider
         private const long SpawnSettleMs = 400;     // пауза после создания акулы (не трогать физику)
 
         private static readonly Vector3 AttachOffset = new Vector3(0.1f, -0.6f, 0.85f); // по центру спины, чуть сзади
+        private const string SitAnimDict = "amb@world_human_sit_on_bench@male@idle_a";
+        private const string SitAnimName = "idle_a";
 
         private State _state = State.Idle;
         private Ped _shark = null;
@@ -769,11 +771,9 @@ namespace SharkRider
                 // (отдельный try — если анимация не проигрывается, катание не должно падать)
                 try
                 {
-                    const string sitDict = "amb@world_human_sit_on_bench@male@idle_a";
-                    const string sitAnim = "idle_a";
-                    Function.Call(Hash.REQUEST_ANIM_DICT, sitDict);
+                    Function.Call(Hash.REQUEST_ANIM_DICT, SitAnimDict);
                     // flags = 1 (loop). Перекрывает анимацию плавания.
-                    Function.Call(Hash.TASK_PLAY_ANIM, player.Handle, sitDict, sitAnim,
+                    Function.Call(Hash.TASK_PLAY_ANIM, player.Handle, SitAnimDict, SitAnimName,
                         8f, -8f, -1, 1, 0f, false, false, false);
                 }
                 catch (Exception ex2)
@@ -809,6 +809,20 @@ namespace SharkRider
                     return;
                 }
                 if (inWater) _lastInWaterMs = now;
+
+                // Держим сидячую анимацию — иначе в воде игра постоянно включает плавание
+                try
+                {
+                    Function.Call(Hash.REQUEST_ANIM_DICT, SitAnimDict);
+                    if (!Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, player.Handle, SitAnimDict, SitAnimName, 3))
+                    {
+                        Function.Call(Hash.TASK_PLAY_ANIM, player.Handle, SitAnimDict, SitAnimName,
+                            8f, -8f, -1, 1, 0f, false, false, false);
+                    }
+                }
+                catch
+                {
+                }
 
                 Vector3 sharkPos = _shark.Position;
                 if (IsInvalid(sharkPos))
