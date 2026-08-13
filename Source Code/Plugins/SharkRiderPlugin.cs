@@ -35,7 +35,7 @@ namespace SharkRider
         private const float RideSpeed = 7.5f;       // скорость катания
         private const long SpawnSettleMs = 400;     // пауза после создания акулы (не трогать физику)
 
-        private static readonly Vector3 AttachOffset = new Vector3(0f, 0.4f, 0.9f); // крепление на спине
+        private static readonly Vector3 AttachOffset = new Vector3(0f, -0.6f, 0.85f); // по центру спины, чуть сзади
 
         private State _state = State.Idle;
         private Ped _shark = null;
