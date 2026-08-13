@@ -36,11 +36,9 @@ namespace SharkRider
         private const long SpawnSettleMs = 400;     // пауза после создания акулы (не трогать физику)
 
         private static readonly Vector3 AttachOffset = new Vector3(0f, 0.4f, 0.9f); // крепление на спине
-        private static readonly Vector3 CamOffset = new Vector3(0f, -5.5f, 2.6f);    // камера позади-сверху
 
         private State _state = State.Idle;
         private Ped _shark = null;
-        private Camera _rideCam = null;
 
         private long _lastCheckMs = 0;
         private long _lastInWaterMs = 0;
@@ -769,13 +767,6 @@ namespace SharkRider
 
                 _targetDepth = _shark.Position.Z;
 
-                if (_rideCam == null)
-                {
-                    _rideCam = World.CreateCamera(_shark.Position + CamOffset, new Vector3(0f, 0f, 0f), 60f);
-                    _rideCam.AttachTo(_shark, CamOffset);
-                    World.RenderingCamera = _rideCam;
-                }
-
                 Log("Игрок сел на акулу");
                 GTA.UI.Notification.PostTicker("~b~WASD~w~ — плыть, ~b~Shift~w~ — вверх, ~b~Ctrl~w~ — вниз", false, false);
                 _state = State.Riding;
@@ -812,8 +803,15 @@ namespace SharkRider
                     return;
                 }
 
-                Vector3 fwd = (_rideCam != null) ? _rideCam.ForwardVector : new Vector3(1f, 0f, 0f);
-                Vector3 right = (_rideCam != null) ? _rideCam.RightVector : new Vector3(0f, 1f, 0f);
+                // Направление берём от обычной игровой камеры — у неё работает мышь,
+                // поэтому игрок может смотреть вокруг и рулить акулой.
+                Vector3 fwd = GTA.GameplayCamera.ForwardVector;
+                Vector3 right = GTA.GameplayCamera.RightVector;
+                fwd.Z = 0f; right.Z = 0f;
+                if (fwd.LengthSquared() < 0.01f) fwd = new Vector3(1f, 0f, 0f);
+                if (right.LengthSquared() < 0.01f) right = new Vector3(0f, 1f, 0f);
+                fwd = fwd.Normalized;
+                right = right.Normalized;
 
                 if (IsInvalid(fwd)) fwd = new Vector3(1f, 0f, 0f);
                 if (IsInvalid(right)) right = new Vector3(0f, 1f, 0f);
@@ -824,16 +822,19 @@ namespace SharkRider
                 Vector3 move = fwd * fwdIn + right * strafe;
                 move.Z = 0f;
 
-                Vector3 vel;
+                Vector3 vel = new Vector3(0f, 0f, 0f);
                 if (move.LengthSquared() > 0.01f)
                 {
                     Vector3 dir = move.Normalized;
                     vel = new Vector3(dir.X * RideSpeed, dir.Y * RideSpeed, 0f);
-                    _shark.Heading = dir.ToHeading();
-                }
-                else
-                {
-                    vel = new Vector3(0f, 0f, 0f);
+
+                    // Плавный поворот акулы в сторону движения (без резких рывков)
+                    float target = dir.ToHeading();
+                    float cur = _shark.Heading;
+                    float diff = target - cur;
+                    while (diff > 180f) diff -= 360f;
+                    while (diff < -180f) diff += 360f;
+                    _shark.Heading = cur + diff * 0.12f;
                 }
 
                 // Shift — вверх, Ctrl — вниз (глубина ограничена, чтобы не улететь под карту)
@@ -865,14 +866,6 @@ namespace SharkRider
                     if (player.IsAttached())
                         player.Detach();
                     player.IsPositionFrozen = false;
-                }
-
-                if (_rideCam != null)
-                {
-                    if (World.RenderingCamera == _rideCam)
-                        World.RenderingCamera = null;
-                    _rideCam.Delete();
-                    _rideCam = null;
                 }
 
                 if (deleteShark)
