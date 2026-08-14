@@ -300,7 +300,7 @@ namespace ModdedCamera
             return delta;
         }
 
-        private const float _easeFrac = 0.25f;
+        private const float _easeFrac = 0.2f;
         private const float _noStopFloor = 0.25f;
 
         private float Ease(int mode, float t)
