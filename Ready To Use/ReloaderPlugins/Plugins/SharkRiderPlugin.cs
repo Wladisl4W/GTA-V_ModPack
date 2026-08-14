@@ -806,7 +806,6 @@ namespace SharkRider
                 }
 
                 Log("Игрок сел на акулу");
-                GTA.UI.Notification.PostTicker("~b~WASD~w~ — плыть, ~b~Shift~w~ — вверх, ~b~Ctrl~w~ — вниз", false, false);
                 _state = State.Riding;
             }
             catch (Exception ex)
