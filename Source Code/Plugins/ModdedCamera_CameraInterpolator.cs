@@ -225,11 +225,14 @@ namespace ModdedCamera
 
                 if (round)
                 {
-                    float w = CornerWindow(t);
-                    Vector3 splinePos = CatmullRom(p0, p1, p2, p3, f);
-                    Vector3 splineRot = InterpolateRotationSpline(currentSegment, f);
-                    position = Vector3.Lerp(straightPos, splinePos, w * _bendStrength);
-                    rotation = Vector3.Lerp(straightRot, splineRot, w);
+                    Vector3 splinePos = CubicHermite(p0, p1, p2, p3, f, _tanScale);
+                    Vector3 r0 = (currentSegment > 0) ? _rotations[currentSegment - 1] : _rotations[currentSegment];
+                    Vector3 r1 = _rotations[currentSegment];
+                    Vector3 r2 = UnwrapRotation(r1, _rotations[currentSegment + 1]);
+                    Vector3 r3 = (currentSegment + 2 < _rotations.Count) ? UnwrapRotation(r2, _rotations[currentSegment + 2]) : r2;
+                    Vector3 splineRot = CubicHermiteRot(r0, r1, r2, r3, f, _tanScale);
+                    position = splinePos;
+                    rotation = splineRot;
                 }
                 else
                 {
@@ -267,21 +270,30 @@ namespace ModdedCamera
             return a + delta * t;
         }
 
-        private Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+        private Vector3 CubicHermite(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t, float tanScale)
         {
+            Vector3 m1 = (p2 - p0) * (0.5f * tanScale);
+            Vector3 m2 = (p3 - p1) * (0.5f * tanScale);
             float t2 = t * t;
             float t3 = t2 * t;
-            return 0.5f * ((2f * p1) + (-p0 + p2) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 + (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
+            float h00 = 2f * t3 - 3f * t2 + 1f;
+            float h10 = t3 - 2f * t2 + t;
+            float h01 = -2f * t3 + 3f * t2;
+            float h11 = t3 - t2;
+            return h00 * p1 + h10 * m1 + h01 * p2 + h11 * m2;
         }
 
-        private Vector3 InterpolateRotationSpline(int segment, float t)
+        private Vector3 CubicHermiteRot(Vector3 r0, Vector3 r1, Vector3 r2, Vector3 r3, float t, float tanScale)
         {
-            Vector3 r0 = (segment > 0) ? _rotations[segment - 1] : _rotations[segment];
-            Vector3 r1 = _rotations[segment];
-            Vector3 r2 = UnwrapRotation(r1, _rotations[segment + 1]);
-            Vector3 r3 = (segment + 2 < _rotations.Count) ? UnwrapRotation(r2, _rotations[segment + 2]) : r2;
-            r0 = UnwrapRotation(r1, r0);
-            return CatmullRom(r0, r1, r2, r3, t);
+            Vector3 m1 = (r2 - r0) * (0.5f * tanScale);
+            Vector3 m2 = (r3 - r1) * (0.5f * tanScale);
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float h00 = 2f * t3 - 3f * t2 + 1f;
+            float h10 = t3 - 2f * t2 + t;
+            float h01 = -2f * t3 + 3f * t2;
+            float h11 = t3 - t2;
+            return h00 * r1 + h10 * m1 + h01 * r2 + h11 * m2;
         }
 
         private Vector3 UnwrapRotation(Vector3 reference, Vector3 target)
@@ -335,16 +347,7 @@ namespace ModdedCamera
             return Fmid / A;
         }
 
-        private const float _cornerFrac = 0.05f;
-        private const float _bendStrength = 0.35f;
-
-        private float CornerWindow(float t)
-        {
-            float m = (float)System.Math.Min(t, 1f - t) / _cornerFrac;
-            if (m < 0f) m = 0f;
-            if (m > 1f) m = 1f;
-            return m * m * (3f - 2f * m);
-        }
+        private const float _tanScale = 0.5f;
 
         public void Clear()
         {
