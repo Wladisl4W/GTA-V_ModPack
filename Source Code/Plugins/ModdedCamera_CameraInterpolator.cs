@@ -213,19 +213,28 @@ namespace ModdedCamera
                 float blend = t * t * (3f - 2f * t);
                 float f = fStart + (fEnd - fStart) * blend;
 
-                if (modeOut == 1 || modeIn == 1)
+                bool round = (modeOut == 1 || modeIn == 1);
+
+                Vector3 p0 = (currentSegment > 0) ? _positions[currentSegment - 1] : _positions[currentSegment];
+                Vector3 p1 = _positions[currentSegment];
+                Vector3 p2 = _positions[currentSegment + 1];
+                Vector3 p3 = (currentSegment + 2 < _positions.Count) ? _positions[currentSegment + 2] : _positions[currentSegment + 1];
+
+                Vector3 straightPos = Vector3.Lerp(p1, p2, f);
+                Vector3 straightRot = InterpolateRotationShortest(currentSegment, f);
+
+                if (round)
                 {
-                    Vector3 p0 = (currentSegment > 0) ? _positions[currentSegment - 1] : _positions[currentSegment];
-                    Vector3 p1 = _positions[currentSegment];
-                    Vector3 p2 = _positions[currentSegment + 1];
-                    Vector3 p3 = (currentSegment + 2 < _positions.Count) ? _positions[currentSegment + 2] : _positions[currentSegment + 1];
-                    position = CatmullRom(p0, p1, p2, p3, f);
-                    rotation = InterpolateRotationSpline(currentSegment, f);
+                    float w = CornerWindow(t);
+                    Vector3 splinePos = CatmullRom(p0, p1, p2, p3, f);
+                    Vector3 splineRot = InterpolateRotationSpline(currentSegment, f);
+                    position = Vector3.Lerp(straightPos, splinePos, w);
+                    rotation = Vector3.Lerp(straightRot, splineRot, w);
                 }
                 else
                 {
-                    position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], f);
-                    rotation = InterpolateRotationShortest(currentSegment, f);
+                    position = straightPos;
+                    rotation = straightRot;
                 }
 
                 if (_fovs != null && currentSegment + 1 < _fovs.Count)
@@ -291,16 +300,48 @@ namespace ModdedCamera
             return delta;
         }
 
+        private const float _easeFrac = 0.15f;
+        private const float _noStopFloor = 0.25f;
+
         private float Ease(int mode, float t)
         {
             if (mode == 0) return t;
-            if (mode == 1) return 0.5f * t + 0.5f * Smootherstep(t);
-            return t * t * (3f - 2f * t);
+            if (mode == 1) return TrapezoidEase(t, _easeFrac, _noStopFloor);
+            return TrapezoidEase(t, _easeFrac, 0f);
         }
 
-        private float Smootherstep(float t)
+        private float TrapezoidEase(float t, float ease, float floor)
         {
-            return t * t * t * (t * (t * 6f - 15f) + 10f);
+            if (ease < 0.001f) ease = 0.001f;
+            if (ease > 0.49f) ease = 0.49f;
+            if (floor < 0f) floor = 0f;
+            if (floor > 0.95f) floor = 0.95f;
+
+            float A = 1f - ease * (1f - floor);
+            if (t <= ease)
+            {
+                float F = floor * t + (1f - floor) * (t * t) / (2f * ease);
+                return F / A;
+            }
+            if (t >= 1f - ease)
+            {
+                float u = 1f - t;
+                float F1mE = ease * (floor + 1f) / 2f + (1f - 2f * ease);
+                float F = F1mE + floor * u + (1f - floor) * (u * u) / (2f * ease);
+                return F / A;
+            }
+            float Fe = ease * (floor + 1f) / 2f;
+            float Fmid = Fe + (t - ease);
+            return Fmid / A;
+        }
+
+        private float CornerWindow(float t)
+        {
+            float corner = 0.15f;
+            float m = (float)System.Math.Min(t, 1f - t) / corner;
+            if (m < 0f) m = 0f;
+            if (m > 1f) m = 1f;
+            return m * m * (3f - 2f * m);
         }
 
         public void Clear()
