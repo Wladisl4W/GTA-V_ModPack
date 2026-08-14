@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
 using GTA;
 using GTA.Math;
 using GTA.Native;
@@ -18,6 +20,7 @@ namespace ModdedCamera
         private float _currentLerpTime;
         private readonly float LerpTime = 0.5f;
         private readonly float RotationSpeed = 0.7f;
+        private readonly float RollSpeed = 90f; // градусов в секунду (наклон горизонта)
         private bool _controlsDisabled = false;
 
         public GamepadHandler GamepadHandler;
@@ -196,6 +199,18 @@ namespace ModdedCamera
 
                     try { GamepadHandler.Update(); } catch (Exception ex) { Logger.Debug("GamepadHandler.Update warning: " + ex.Message); }
 
+                    // Roll (наклон горизонта / Dutch-angle) по клавишам X / Z.
+                    // IsRawKeyDown — сырое состояние клавиш через WinAPI, работает даже
+                    // при DisablePlayerControls() (IS_CONTROL_PRESSED был бы заблокирован).
+                    float rollDelta = 0f;
+                    if (IsRawKeyDown(Keys.X)) rollDelta -= RollSpeed * Game.LastFrameTime;
+                    if (IsRawKeyDown(Keys.Z)) rollDelta += RollSpeed * Game.LastFrameTime;
+                    if (rollDelta != 0f && _mainCamera != null && _mainCamera.Exists())
+                    {
+                        Vector3 rot = _mainCamera.Rotation;
+                        _mainCamera.Rotation = new Vector3(rot.X, rot.Y + rollDelta, rot.Z);
+                    }
+
                     // Подсказку управления рисуем КАЖДЫЙ кадр: scaleform держится на
                     // экране только пока вызывается Render2D() каждый тик, иначе он
                     // мигает (пропадает между редкими перерисовками).
@@ -263,9 +278,20 @@ namespace ModdedCamera
                 Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 35, 0)
             };
             _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 0, array[3], array[2], array[1], array[0], "Движение" });
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 5, "X / Z", "Наклон" });
             _instructionalButtons.CallFunction("SET_BACKGROUND_COLOUR", new object[] { 0, 0, 0, 80 });
             _instructionalButtons.CallFunction("DRAW_INSTRUCTIONAL_BUTTONS", new object[] { 0 });
             _instructionalButtons.Render2D();
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        private static bool IsRawKeyDown(Keys key)
+        {
+            // Сырое состояние клавиши через WinAPI — не зависит от GTA-контролов
+            // и работает даже при DisablePlayerControls() в селекторе.
+            return (GetAsyncKeyState((int)key) & 0x8000) != 0;
         }
     }
 }
