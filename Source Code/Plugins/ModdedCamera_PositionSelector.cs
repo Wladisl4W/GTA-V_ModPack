@@ -19,7 +19,6 @@ namespace ModdedCamera
         private readonly float LerpTime = 0.5f;
         private readonly float RotationSpeed = 0.7f;
         private bool _controlsDisabled = false;
-        private int _lastInstructionalRenderMs = 0;
 
         public GamepadHandler GamepadHandler;
 
@@ -197,11 +196,10 @@ namespace ModdedCamera
 
                     try { GamepadHandler.Update(); } catch (Exception ex) { Logger.Debug("GamepadHandler.Update warning: " + ex.Message); }
 
-                    if (Utils.NowMs() - _lastInstructionalRenderMs > 500)
-                    {
-                        try { RenderInstructionalButtons(); } catch (Exception ex) { Logger.Debug("RenderInstructionalButtons warning: " + ex.Message); }
-                        _lastInstructionalRenderMs = (int)Utils.NowMs();
-                    }
+                    // Подсказку управления рисуем КАЖДЫЙ кадр: scaleform держится на
+                    // экране только пока вызывается Render2D() каждый тик, иначе он
+                    // мигает (пропадает между редкими перерисовками).
+                    try { RenderInstructionalButtons(); } catch (Exception ex) { Logger.Debug("RenderInstructionalButtons warning: " + ex.Message); }
 
                     if (_currentLerpTime > 0f) _currentLerpTime -= 0.01f;
                 }
