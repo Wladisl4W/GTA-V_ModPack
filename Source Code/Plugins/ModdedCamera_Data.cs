@@ -283,7 +283,12 @@ namespace ModdedCamera
         {
             try
             {
-                Function.Call(NativeHashes.SET_FOCUS_AREA, 0f, 0f, 0f);
+                // Не сбрасываем фокус в (0,0,0): это привязывает детализацию/стриминг
+                // мира к началу карты и вызывает фризы ("слайд-шоу" у персонажа).
+                // Возвращаем фокус на игрока, как делает игра по умолчанию.
+                var p = Game.Player.Character;
+                if (p != null && p.Exists())
+                    Function.Call(NativeHashes.SET_FOCUS_AREA, p.Position.X, p.Position.Y, p.Position.Z);
             }
             catch (Exception ex)
             {

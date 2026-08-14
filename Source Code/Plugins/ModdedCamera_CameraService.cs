@@ -175,6 +175,7 @@ namespace ModdedCamera.Services
                 if (PositionSelector != null)
                     PositionSelector.ExitCameraView();
                 Game.Player.Character.IsPositionFrozen = false;
+                Function.Call(Hash.SET_TIME_SCALE, 1f);
                 _selectorWasUsed = false;
                 _editNodeIndex = -1;
             }
@@ -440,17 +441,13 @@ namespace ModdedCamera.Services
         {
             try
             {
-                float target = 1f;
-                if (IsSplineCamActive && SplineCamera != null)
+                // Скорость камеры уже учтена в длительностях узлов (SplineCamera.Speed
+                // делит _baseDurations). Глобальный SET_TIME_SCALE замедлял ВЕСЬ мир
+                // (включая игрока) — убираем, всегда держим нормальное время.
+                if (_lastTimeScale != 1f)
                 {
-                    float s = SplineCamera.Speed;
-                    if (s > 0f && s < 1f)
-                        target = s;
-                }
-                if (Math.Abs(target - _lastTimeScale) > 0.001f)
-                {
-                    _lastTimeScale = target;
-                    Function.Call(Hash.SET_TIME_SCALE, target);
+                    _lastTimeScale = 1f;
+                    Function.Call(Hash.SET_TIME_SCALE, 1f);
                 }
             }
             catch (Exception ex)
