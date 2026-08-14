@@ -327,7 +327,7 @@ namespace ModdedCamera
             {
                 float u = 1f - t;
                 float F1mE = ease * (floor + 1f) / 2f + (1f - 2f * ease);
-                float F = F1mE + floor * u + (1f - floor) * (u * u) / (2f * ease);
+                float F = F1mE + floor * (ease - u) + (1f - floor) * (ease * ease - u * u) / (2f * ease);
                 return F / A;
             }
             float Fe = ease * (floor + 1f) / 2f;
