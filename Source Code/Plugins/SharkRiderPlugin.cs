@@ -932,8 +932,12 @@ namespace SharkRider
             {
                 if (_shark != null && _shark.Exists())
                 {
-                    Function.Call(Hash.SET_ENTITY_AS_NO_LONGER_NEEDED, _shark.Handle, false);
-                    _shark.Delete();
+                    // ВАЖНО: SET_ENTITY_AS_NO_LONGER_NEEDED принимает Entity* — передавать
+                    // сюда _shark.Handle (int) нельзя: маленькое число трактуется как
+                    // указатель и игра падает с AccessViolation. Entity.Delete() сам
+                    // корректно помечает и удаляет сущность, поэтому этот натив не нужен.
+                    try { _shark.Delete(); }
+                    catch { }
                 }
             }
             catch (Exception ex)
