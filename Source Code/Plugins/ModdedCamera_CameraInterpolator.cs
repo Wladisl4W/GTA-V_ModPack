@@ -313,12 +313,10 @@ namespace ModdedCamera
         }
 
         private const float _easeFrac = 0.2f;
-        private const float _noStopFloor = 0.25f;
 
         private float Ease(int mode, float t)
         {
-            if (mode == 0) return t;
-            if (mode == 1) return TrapezoidEase(t, _easeFrac, _noStopFloor);
+            if (mode == 0 || mode == 1) return t;
             return TrapezoidEase(t, _easeFrac, 0f);
         }
 
