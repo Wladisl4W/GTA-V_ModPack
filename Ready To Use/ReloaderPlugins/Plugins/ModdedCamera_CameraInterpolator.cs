@@ -335,10 +335,11 @@ namespace ModdedCamera
             return Fmid / A;
         }
 
+        private const float _cornerFrac = 0.05f;
+
         private float CornerWindow(float t)
         {
-            float corner = 0.15f;
-            float m = (float)System.Math.Min(t, 1f - t) / corner;
+            float m = (float)System.Math.Min(t, 1f - t) / _cornerFrac;
             if (m < 0f) m = 0f;
             if (m > 1f) m = 1f;
             return m * m * (3f - 2f * m);
