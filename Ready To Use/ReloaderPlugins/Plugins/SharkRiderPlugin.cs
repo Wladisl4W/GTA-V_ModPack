@@ -86,8 +86,7 @@ namespace SharkRider
         private int _lastSaveGameTime = 0;
         private bool _settingsDirty = false;
         private int _lastKeyGameTime = 0;
-        private bool _pendingPick = false;
-        private long _pendingPickAtMs = 0;
+        private int _aimedModelHash = 0; // модель педа под прицелом (пока меню открыто)
 
         public void OnStart()
         {
@@ -146,11 +145,9 @@ namespace SharkRider
                 "Меню закроется, наведитесь на педа и нажмите Enter — модель запомнится навсегда");
             _pickModelItem.Activated += (s, e) =>
             {
-                // Меню (scaleform) ставит игру на паузу — рейкаст в меню не работает.
-                // Закрываем меню, рейкаст делаем в ближайший тик, когда игра отыграна.
-                _menu.Visible = false;
-                _pendingPick = true;
-                _pendingPickAtMs = NowMs() + 500;
+                // Меню открыто — прицел «живой»: выбираем педа под перекрестьем прямо сейчас.
+                if (PickAimedPedModel())
+                    _menu.Visible = false; // закрываем после успешного выбора
             };
             _menu.Add(_pickModelItem);
 
@@ -210,6 +207,37 @@ namespace SharkRider
         }
 
         /// <summary>
+        /// Пока открыто меню, каждый тик считывает педа под перекрестьем и сохраняет его
+        /// хеш в _aimedModelHash (для живой подсказки и выбора по Enter). Рейкаст активен
+        /// только при открытом меню.
+        /// </summary>
+        private void TrackAimedModel()
+        {
+            try
+            {
+                int hash = 0;
+                Ped freeAim = GetFreeAimPed();
+                if (freeAim != null)
+                    hash = freeAim.Model.Hash;
+                else
+                {
+                    Ped best = GetPedNearestToScreenCenter(0.12f, 40f, false);
+                    if (best != null)
+                        hash = best.Model.Hash;
+                }
+                _aimedModelHash = hash;
+                if (_pickModelItem != null)
+                    _pickModelItem.AltTitle = hash == 0
+                        ? "Наведите прицел на педа и нажмите Enter"
+                        : "Под прицелом: 0x" + hash.ToString("X8");
+            }
+            catch
+            {
+                _aimedModelHash = 0;
+            }
+        }
+
+        /// <summary>
         /// Пед, на которого игрок целится из оружия (GET_ENTITY_PLAYER_IS_FREE_AIMING_AT).
         /// </summary>
         private Ped GetFreeAimPed()
@@ -235,7 +263,7 @@ namespace SharkRider
         /// Проецирует каждого педа рядом на экран и берёт ближайшего к центру (0.5, 0.5).
         /// maxScreenDist — допустимое расстояние от центра в долях экрана (0.12 = 12%).
         /// </summary>
-        private Ped GetPedNearestToScreenCenter(float maxScreenDist, float scanRadius)
+        private Ped GetPedNearestToScreenCenter(float maxScreenDist, float scanRadius, bool log = true)
         {
             try
             {
@@ -282,8 +310,9 @@ namespace SharkRider
                     }
                 }
 
-                Log("GetPedNearestToScreenCenter: просмотрено " + scanned +
-                    " педов из " + peds.Length + ", лучший дист. " + Math.Sqrt(bestSq).ToString("F3"));
+                if (log)
+                    Log("GetPedNearestToScreenCenter: просмотрено " + scanned +
+                        " педов из " + peds.Length + ", лучший дист. " + Math.Sqrt(bestSq).ToString("F3"));
                 return best;
             }
             catch (Exception ex)
@@ -330,18 +359,13 @@ namespace SharkRider
                 }
             }
 
-            // Отложенный выбор модели: меню закрыто, игра распаузена — теперь рейкаст работает
-            if (_pendingPick && NowMs() >= _pendingPickAtMs)
-            {
-                _pendingPick = false;
-                if (PickAimedPedModel())
-                    _menu.Visible = true;
-            }
-
-            // Меню (scaleform) ставит игру на паузу: любые нативные вызовы в этом состоянии
-            // могут крашить игру (AccessViolation в NativeCall). Игровую логику не трогаем.
+            // Пока меню открыто — прицел активен: каждый тик считываем педа под
+            // перекрестьем (живой рейкаст) и обновляем подсказку. Выбор — по Enter.
             if (_menu != null && _menu.Visible)
+            {
+                TrackAimedModel();
                 return;
+            }
 
             try
             {
@@ -423,18 +447,10 @@ namespace SharkRider
 
             if (_menu == null) return;
 
-            // Меню открыто — закрываем
-            if (_menu.Visible)
-            {
-                _menu.Visible = false;
-                return;
-            }
-
-            // Меню закрыто (игра не на паузе): сначала вытаскиваем модель педа под прицелом,
-            // потом открываем меню. Так работает и в самолёте/машине, и просто с руки.
-            if (!PickAimedPedModel())
-                GTA.UI.Screen.ShowSubtitle("~y~Под прицелом нет педа. Открываю меню...", 3000);
-            _menu.Visible = true;
+            // O переключает меню. Пока меню открыто, прицел «живой» — каждый тик
+            // считывается пед под перекрестьем (см. TrackAimedModel в OnTick).
+            _aimedModelHash = 0;
+            _menu.Visible = !_menu.Visible;
         }
 
         public void OnAbort()
