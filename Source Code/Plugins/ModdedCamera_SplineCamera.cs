@@ -493,7 +493,8 @@ namespace ModdedCamera
                 var rotations = GetRotations();
                 var durations = GetDurations();
                 var modes = GetNodeInterpolationModes();
-                _interpolator.SetPath(positions, rotations, durations, modes);
+                var fovs = GetNodeFovs();
+                _interpolator.SetPath(positions, rotations, durations, modes, fovs);
                 _interpolator.SetStartNodeIndex(_startNodeIndex);
                 _interpolator.Start();
                 _startNodeIndex = 0;
