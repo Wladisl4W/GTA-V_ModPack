@@ -647,6 +647,31 @@ namespace ModdedCamera.Services
                         };
                         nodeMenu.Add(colorItem);
 
+                        // Per-node FOV
+                        int curFov = _cameraService.SplineCamera.GetNodeFov(nodeIndex);
+                        NativeListItem<string> fovItem = new NativeListItem<string>("Поле зрения (FOV)", "Индивидуальное поле зрения узла");
+                        for (int f = 1; f <= 100; f++)
+                            fovItem.Items.Add(f.ToString());
+                        string foundFov = curFov.ToString();
+                        if (fovItem.Items.Contains(foundFov))
+                            fovItem.SelectedItem = foundFov;
+                        int capturedFovIndex = nodeIndex;
+                        fovItem.ItemChanged += delegate(object sender, ItemChangedEventArgs<string> args)
+                        {
+                            int newFov;
+                            if (int.TryParse(args.Object, out newFov) && newFov > 0)
+                            {
+                                var sp = _cameraService.SplineCamera;
+                                if (sp != null)
+                                {
+                                    sp.SetNodeFov(capturedFovIndex, newFov);
+                                    _cameraService.RestartPlaybackIfActive();
+                                    RefreshNodeEditorMenu();
+                                }
+                            }
+                        };
+                        nodeMenu.Add(fovItem);
+
                         // Edit camera of the node
                         NativeItem editCamItem = new NativeItem("~y~Изменить камеру узла", "Свободная камера в позиции узла. Поменяйте ракурс/позицию, ЛКМ — применить и вернуться");
                         int editCamIndex = nodeIndex;

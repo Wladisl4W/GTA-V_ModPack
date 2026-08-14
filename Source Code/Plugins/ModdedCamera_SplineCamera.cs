@@ -18,7 +18,9 @@ namespace ModdedCamera
         private List<int> _baseDurations = new List<int>();
         private List<int> _nodeInterpolationModes = new List<int>();
         private List<int> _nodeColors = new List<int>();
+        private List<int> _nodeFovs = new List<int>();
         private int _defaultDuration = 5000;
+        private int _defaultFov = 50;
         private float _currentSpeedMult = 1.0f;
         private long _lastFrameMs = 0;
         private bool _usePlayerView;
@@ -46,6 +48,12 @@ namespace ModdedCamera
                 if (changed)
                     Logger.Info("UsePlayerView set to " + value);
             }
+        }
+
+        public int DefaultFov
+        {
+            get { return _defaultFov; }
+            set { _defaultFov = Math.Max(1, Math.Min(130, value)); }
         }
 
         public float Speed
@@ -219,15 +227,20 @@ namespace ModdedCamera
 
         public void AddNode(Vector3 position, Vector3 rotation, int duration)
         {
-            AddNode(position, rotation, duration, 2);
+            AddNode(position, rotation, duration, 2, Color.White.ToArgb(), _defaultFov);
         }
 
         public void AddNode(Vector3 position, Vector3 rotation, int duration, int interpolationMode)
         {
-            AddNode(position, rotation, duration, interpolationMode, Color.White.ToArgb());
+            AddNode(position, rotation, duration, interpolationMode, Color.White.ToArgb(), _defaultFov);
         }
 
         public void AddNode(Vector3 position, Vector3 rotation, int duration, int interpolationMode, int color)
+        {
+            AddNode(position, rotation, duration, interpolationMode, color, _defaultFov);
+        }
+
+        public void AddNode(Vector3 position, Vector3 rotation, int duration, int interpolationMode, int color, int fov)
         {
             try
             {
@@ -253,15 +266,34 @@ namespace ModdedCamera
                 _durations.Add(adjustedDuration);
                 _nodeInterpolationModes.Add(interpolationMode);
                 _nodeColors.Add(color);
+                _nodeFovs.Add(fov);
                 _defaultDuration = duration;
 
                 Logger.Debug("Node added: pos=(" + position.X.ToString("F1") + ", " + position.Y.ToString("F1") + ", " + position.Z.ToString("F1") +
-                    ") rot=(" + rotation.X.ToString("F1") + ", " + rotation.Y.ToString("F1") + ", " + rotation.Z.ToString("F1") + ") duration=" + duration + "ms");
+                    ") rot=(" + rotation.X.ToString("F1") + ", " + rotation.Y.ToString("F1") + ", " + rotation.Z.ToString("F1") + ") duration=" + duration + "ms fov=" + fov);
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, "Error adding node");
             }
+        }
+
+        public List<int> GetNodeFovs()
+        {
+            return new List<int>(_nodeFovs);
+        }
+
+        public int GetNodeFov(int index)
+        {
+            if (index >= 0 && index < _nodeFovs.Count)
+                return _nodeFovs[index];
+            return 50;
+        }
+
+        public void SetNodeFov(int index, int fov)
+        {
+            if (index >= 0 && index < _nodeFovs.Count)
+                _nodeFovs[index] = Math.Max(1, Math.Min(130, fov));
         }
 
         public void ClearNodes()
@@ -273,6 +305,7 @@ namespace ModdedCamera
                 _baseDurations.Clear();
                 _nodeInterpolationModes.Clear();
                 _nodeColors.Clear();
+                _nodeFovs.Clear();
                 _startNodeIndex = 0;
             }
             catch (Exception ex)
@@ -292,6 +325,7 @@ namespace ModdedCamera
                 var savedBaseDurations = new List<int>(_baseDurations);
                 var savedModes = new List<int>(_nodeInterpolationModes);
                 var savedColors = new List<int>(_nodeColors);
+                var savedFovs = new List<int>(_nodeFovs);
 
                 _nodes.Clear();
                 _durations.Clear();
@@ -304,7 +338,8 @@ namespace ModdedCamera
                     int originalDuration = (savedBaseDurations.Count > i) ? savedBaseDurations[i] : _defaultDuration;
                     int nodeMode = (savedModes.Count > i) ? savedModes[i] : 2;
                     int nodeColor = (savedColors.Count > i) ? savedColors[i] : Color.White.ToArgb();
-                    AddNode(savedNodes[i].Item1, savedNodes[i].Item2, originalDuration, nodeMode, nodeColor);
+                    int nodeFov = (savedFovs.Count > i) ? savedFovs[i] : _defaultFov;
+                    AddNode(savedNodes[i].Item1, savedNodes[i].Item2, originalDuration, nodeMode, nodeColor, nodeFov);
                 }
                 Logger.Info("Spline rebuilt: " + _nodes.Count + " nodes");
             }
@@ -368,6 +403,7 @@ namespace ModdedCamera
                 _durations.RemoveAt(index);
                 _nodeInterpolationModes.RemoveAt(index);
                 _nodeColors.RemoveAt(index);
+                _nodeFovs.RemoveAt(index);
                 if (_startNodeIndex > index) _startNodeIndex--;
                 Logger.Info("Node removed at index " + index + ", remaining: " + _nodes.Count);
                 return true;
@@ -390,6 +426,7 @@ namespace ModdedCamera
                 _durations.Insert(insertAt, _durations[index]);
                 _nodeInterpolationModes.Insert(insertAt, _nodeInterpolationModes[index]);
                 _nodeColors.Insert(insertAt, _nodeColors[index]);
+                _nodeFovs.Insert(insertAt, _nodeFovs[index]);
                 Logger.Info("Node duplicated at index " + insertAt + ", total: " + _nodes.Count);
                 return true;
             }
@@ -487,7 +524,8 @@ namespace ModdedCamera
                     var rotations = GetRotations();
                     var durations = GetDurations();
                     var modes = GetNodeInterpolationModes();
-                    _interpolator.SetPath(positions, rotations, durations, modes);
+                    var fovs = GetNodeFovs();
+                    _interpolator.SetPath(positions, rotations, durations, modes, fovs);
                     Logger.Info("Interpolator ready: " + positions.Count + " waypoints");
                 }
                 catch (Exception ex)
@@ -534,15 +572,17 @@ namespace ModdedCamera
 
                 Vector3 interpPos;
                 Vector3 interpRot;
+                float interpFov;
                 long realNow = Utils.NowMs();
                 int extrapolateMs = (int)(realNow - _lastFrameMs);
                 if (extrapolateMs < 0) extrapolateMs = 0;
                 if (extrapolateMs > 250) extrapolateMs = 250;
                 _lastFrameMs = realNow;
-                _interpolator.UpdateAt(realNow + extrapolateMs, out interpPos, out interpRot);
+                _interpolator.UpdateAt(realNow + extrapolateMs, out interpPos, out interpRot, out interpFov);
 
                 _mainCamera.Position = interpPos;
                 _mainCamera.Rotation = interpRot;
+                _mainCamera.FieldOfView = interpFov;
                 _previousPos = _mainCamera.Position;
 
                 UpdateRenderScene();

@@ -14,6 +14,7 @@ namespace ModdedCamera
         private List<Vector3> _rotations;
         private List<int> _durations;
         private List<int> _segmentModes;
+        private List<int> _fovs;
         private bool _isPlaying = false;
         private long _playbackStartTimeMs = 0;
         private int _totalDurationMs = 0;
@@ -66,6 +67,10 @@ namespace ModdedCamera
                 for (int i = 0; i < _positions.Count; i++)
                     _segmentModes.Add((i < modeCount) ? segmentModes[i] : 2);
 
+                _fovs = new List<int>();
+                for (int i = 0; i < _positions.Count; i++)
+                    _fovs.Add(50);
+
                 _totalDurationMs = 0;
                 for (int i = 0; i < _durations.Count; i++)
                     _totalDurationMs += Math.Max(1, _durations[i]);
@@ -77,6 +82,16 @@ namespace ModdedCamera
                 Logger.Error(ex, "SetPath error");
                 throw;
             }
+        }
+
+        public void SetPath(List<Vector3> positions, List<Vector3> rotations, List<int> durations, List<int> segmentModes, List<int> fovs)
+        {
+            SetPath(positions, rotations, durations, segmentModes);
+            if (_fovs == null) _fovs = new List<int>();
+            _fovs.Clear();
+            int fovCount = (fovs != null) ? fovs.Count : 0;
+            for (int i = 0; i < _positions.Count; i++)
+                _fovs.Add((i < fovCount) ? fovs[i] : 50);
         }
 
         public void Start()
@@ -113,13 +128,20 @@ namespace ModdedCamera
 
         public void Update(out Vector3 position, out Vector3 rotation)
         {
-            UpdateAt(Utils.NowMs(), out position, out rotation);
+            float fov;
+            UpdateAt(Utils.NowMs(), out position, out rotation, out fov);
         }
 
-        public void UpdateAt(long now, out Vector3 position, out Vector3 rotation)
+        public void Update(out Vector3 position, out Vector3 rotation, out float fov)
+        {
+            UpdateAt(Utils.NowMs(), out position, out rotation, out fov);
+        }
+
+        public void UpdateAt(long now, out Vector3 position, out Vector3 rotation, out float fov)
         {
             position = Vector3.Zero;
             rotation = Vector3.Zero;
+            fov = 50f;
 
             if (!_isPlaying || _positions.Count < 2 || _totalDurationMs <= 0)
                 return;
@@ -140,6 +162,7 @@ namespace ModdedCamera
                     Logger.Warn("Update called with zero total duration - returning last position");
                     position = _positions[_positions.Count - 1];
                     rotation = _rotations[_rotations.Count - 1];
+                    if (_fovs != null && _fovs.Count > 0) fov = _fovs[_fovs.Count - 1];
                     return;
                 }
 
@@ -164,6 +187,7 @@ namespace ModdedCamera
                 {
                     position = _positions[_positions.Count - 1];
                     rotation = _rotations[_rotations.Count - 1];
+                    if (_fovs != null && _fovs.Count > 0) fov = _fovs[_fovs.Count - 1];
                     PlaybackProgress = 1f;
                     return;
                 }
@@ -172,6 +196,7 @@ namespace ModdedCamera
                 {
                     position = _positions[_positions.Count - 1];
                     rotation = _rotations[_rotations.Count - 1];
+                    if (_fovs != null && _fovs.Count > 0) fov = _fovs[_fovs.Count - 1];
                     return;
                 }
 
@@ -202,12 +227,16 @@ namespace ModdedCamera
                     position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], f);
                     rotation = InterpolateRotationShortest(currentSegment, f);
                 }
+
+                if (_fovs != null && currentSegment + 1 < _fovs.Count)
+                    fov = _fovs[currentSegment] + (_fovs[currentSegment + 1] - _fovs[currentSegment]) * f;
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, "Update error - continuing playback");
                 position = _positions.Count > 0 ? _positions[_positions.Count - 1] : Vector3.Zero;
                 rotation = _rotations.Count > 0 ? _rotations[_rotations.Count - 1] : Vector3.Zero;
+                if (_fovs != null && _fovs.Count > 0) fov = _fovs[_fovs.Count - 1];
             }
         }
 

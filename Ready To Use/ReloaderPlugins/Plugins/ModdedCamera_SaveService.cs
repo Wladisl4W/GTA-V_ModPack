@@ -158,6 +158,7 @@ namespace ModdedCamera.Services
                     2
                 );
                 cp.NodeColors = new List<int>(nodeColors);
+                cp.NodeFovs = new List<int>(_cameraService.SplineCamera.GetNodeFovs());
 
                 string result = PathManager.SavePath(cp);
                 if (result != null)

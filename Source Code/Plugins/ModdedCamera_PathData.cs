@@ -63,6 +63,7 @@ namespace ModdedCamera
         public List<int> Durations { get; set; }
         public List<int> NodeInterpolationModes { get; set; }
         public List<int> NodeColors { get; set; }
+        public List<int> NodeFovs { get; set; }
         public int DefaultDuration { get; set; }
         public int Fov { get; set; }
         public float Speed { get; set; }
@@ -75,6 +76,7 @@ namespace ModdedCamera
             this.Durations = new List<int>();
             this.NodeInterpolationModes = new List<int>();
             this.NodeColors = new List<int>();
+            this.NodeFovs = new List<int>();
             this.DefaultDuration = 5000;
             this.Fov = 50;
             this.Speed = 1.0f;
@@ -90,6 +92,7 @@ namespace ModdedCamera
             this.Durations = new List<int>();
             this.NodeInterpolationModes = new List<int>();
             this.NodeColors = new List<int>();
+            this.NodeFovs = new List<int>();
             this.DefaultDuration = defaultDuration;
             this.Fov = fov;
             this.Speed = speed;
@@ -112,6 +115,7 @@ namespace ModdedCamera
             this.Durations = (durations != null) ? durations : new List<int>();
             this.NodeInterpolationModes = (nodeModes != null) ? new List<int>(nodeModes) : new List<int>();
             this.NodeColors = new List<int>();
+            this.NodeFovs = new List<int>();
             this.DefaultDuration = defaultDuration;
             this.Fov = fov;
             this.Speed = speed;
