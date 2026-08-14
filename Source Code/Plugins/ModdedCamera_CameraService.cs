@@ -443,13 +443,20 @@ namespace ModdedCamera.Services
         {
             try
             {
-                // Скорость камеры уже учтена в длительностях узлов (SplineCamera.Speed
-                // делит _baseDurations). Глобальный SET_TIME_SCALE замедлял ВЕСЬ мир
-                // (включая игрока) — убираем, всегда держим нормальное время.
-                if (_lastTimeScale != 1f)
+                // Кинематографичный slow-mo: когда скорость пролётки < 1, замедляем
+                // ВЕСЬ мир пропорционально, чтобы камера и мир двигались синхронно.
+                // При выходе из камеры (IsSplineCamActive=false) время всегда сбрасывается в 1.
+                float target = 1f;
+                if (IsSplineCamActive && SplineCamera != null)
                 {
-                    _lastTimeScale = 1f;
-                    Function.Call(Hash.SET_TIME_SCALE, 1f);
+                    float s = CurrentSpeed;
+                    if (s > 0.05f && s < 1f)
+                        target = s;
+                }
+                if (Math.Abs(target - _lastTimeScale) > 0.001f)
+                {
+                    _lastTimeScale = target;
+                    Function.Call(Hash.SET_TIME_SCALE, target);
                 }
             }
             catch (Exception ex)
