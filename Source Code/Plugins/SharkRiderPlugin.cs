@@ -61,6 +61,7 @@ namespace SharkRider
         private NativeCheckboxItem _enableCheckbox;
         private NativeItem _pickModelItem;
         private NativeItem _modelDisplayItem;
+        private NativeItem _aimedDisplayItem;
 
         // Сохранение настроек (как в RemoveDroppedPeds)
         private class ModSettings
@@ -141,8 +142,8 @@ namespace SharkRider
             _menu.Add(_enableCheckbox);
 
             _pickModelItem = new NativeItem(
-                "Выбрать модель под прицелом",
-                "Меню закроется, наведитесь на педа и нажмите Enter — модель запомнится навсегда");
+                "Выбрать модель",
+                "Наведитесь на педа и нажмите Enter — модель запомнится навсегда");
             _pickModelItem.Activated += (s, e) =>
             {
                 // Меню открыто — прицел «живой»: выбираем педа под перекрестьем прямо сейчас.
@@ -153,6 +154,10 @@ namespace SharkRider
 
             _modelDisplayItem = new NativeItem("Модель", "");
             _menu.Add(_modelDisplayItem);
+
+            _aimedDisplayItem = new NativeItem("Под прицелом", "Наведите прицел на педа");
+            _menu.Add(_aimedDisplayItem);
+
             UpdateModelDisplay();
 
             _pool.Add(_menu);
@@ -162,15 +167,19 @@ namespace SharkRider
         {
             if (_modelDisplayItem == null) return;
 
+            // Короткие Title + короткий AltTitle (хеш) — иначе в строке меню они
+            // накладываются друг на друга. Детали — в Description (нижняя панель меню).
             if (_modelHash == 0)
             {
-                _modelDisplayItem.Title = "Модель: не выбрана";
-                _modelDisplayItem.AltTitle = "Наведитесь на педа и выберите — без модели мод не работает";
+                _modelDisplayItem.Title = "Модель";
+                _modelDisplayItem.AltTitle = "не выбрана";
+                _modelDisplayItem.Description = "Наведитесь на педа и выберите — без модели мод не работает";
             }
             else
             {
-                _modelDisplayItem.Title = "Модель: 0x" + _modelHash.ToString("X8");
-                _modelDisplayItem.AltTitle = "Выбрана прицелом, сохранится в файле";
+                _modelDisplayItem.Title = "Модель";
+                _modelDisplayItem.AltTitle = "0x" + _modelHash.ToString("X8");
+                _modelDisplayItem.Description = "Выбрана прицелом, сохранится в файле";
             }
         }
 
@@ -226,10 +235,10 @@ namespace SharkRider
                         hash = best.Model.Hash;
                 }
                 _aimedModelHash = hash;
-                if (_pickModelItem != null)
-                    _pickModelItem.AltTitle = hash == 0
-                        ? "Наведите прицел на педа и нажмите Enter"
-                        : "Под прицелом: 0x" + hash.ToString("X8");
+                if (_aimedDisplayItem != null)
+                    _aimedDisplayItem.AltTitle = hash == 0
+                        ? "—"
+                        : "0x" + hash.ToString("X8");
             }
             catch
             {
