@@ -228,7 +228,7 @@ namespace ModdedCamera
                     float w = CornerWindow(t);
                     Vector3 splinePos = CatmullRom(p0, p1, p2, p3, f);
                     Vector3 splineRot = InterpolateRotationSpline(currentSegment, f);
-                    position = Vector3.Lerp(straightPos, splinePos, w);
+                    position = Vector3.Lerp(straightPos, splinePos, w * _bendStrength);
                     rotation = Vector3.Lerp(straightRot, splineRot, w);
                 }
                 else
@@ -336,6 +336,7 @@ namespace ModdedCamera
         }
 
         private const float _cornerFrac = 0.05f;
+        private const float _bendStrength = 0.35f;
 
         private float CornerWindow(float t)
         {
