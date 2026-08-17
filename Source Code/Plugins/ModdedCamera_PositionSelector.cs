@@ -225,12 +225,17 @@ namespace ModdedCamera
 
                         try { GamepadHandler.Update(); } catch (Exception ex) { Logger.Debug("GamepadHandler.Update warning: " + ex.Message); }
 
-                        // Roll (наклон горизонта / Dutch-angle) по клавишам X / Z.
+                        // Roll (наклон горизонта / Dutch-angle): Z — влево, X — вправо, C — сброс.
                         // IsRawKeyDown — сырое состояние клавиш через WinAPI, работает даже
                         // при DisablePlayerControls() (IS_CONTROL_PRESSED был бы заблокирован).
+                        if (IsRawKeyDown(Keys.C) && _mainCamera != null && _mainCamera.Exists())
+                        {
+                            Vector3 rotC = _mainCamera.Rotation;
+                            _mainCamera.Rotation = new Vector3(rotC.X, 0f, rotC.Z);
+                        }
                         float rollDelta = 0f;
-                        if (IsRawKeyDown(Keys.X)) rollDelta -= RollSpeed * Game.LastFrameTime;
-                        if (IsRawKeyDown(Keys.Z)) rollDelta += RollSpeed * Game.LastFrameTime;
+                        if (IsRawKeyDown(Keys.Z)) rollDelta -= RollSpeed * Game.LastFrameTime;
+                        if (IsRawKeyDown(Keys.X)) rollDelta += RollSpeed * Game.LastFrameTime;
                         if (rollDelta != 0f && _mainCamera != null && _mainCamera.Exists())
                         {
                             Vector3 rot = _mainCamera.Rotation;
@@ -305,7 +310,7 @@ namespace ModdedCamera
                 Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 35, 0)
             };
             _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 0, array[3], array[2], array[1], array[0], "Движение" });
-            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 5, "X / Z", "Наклон" });
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 5, "Z / X / C", "Наклон (влево/вправо/сброс)" });
             _instructionalButtons.CallFunction("SET_BACKGROUND_COLOUR", new object[] { 0, 0, 0, 80 });
             _instructionalButtons.CallFunction("DRAW_INSTRUCTIONAL_BUTTONS", new object[] { 0 });
             _instructionalButtons.Render2D();
