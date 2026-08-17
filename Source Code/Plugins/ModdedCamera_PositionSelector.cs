@@ -16,6 +16,7 @@ namespace ModdedCamera
         private Camera _mainCamera;
         private Vector3 _previousPos;
         private Timer _renderSceneTimer;
+        private Scaleform _instructionalButtons;
         private float _currentLerpTime;
         private readonly float LerpTime = 0.5f;
         private readonly float RotationSpeed = 0.7f;
@@ -40,6 +41,8 @@ namespace ModdedCamera
             this.GamepadHandler.LeftStickChanged += LeftStickChanged;
             this.GamepadHandler.RightStickChanged += RightStickChanged;
             this.GamepadHandler.LeftStickPressed += LeftStickPressed;
+
+            _instructionalButtons = Scaleform.RequestMovie("instructional_buttons");
 
             _mainCamera = Camera.Create("DEFAULT_SCRIPTED_CAMERA", position, rotation, 50f);
             _mainCamera.IsActive = false;
@@ -75,6 +78,11 @@ namespace ModdedCamera
                     GamepadHandler.LeftStickPressed -= LeftStickPressed;
                     GamepadHandler.Dispose();
                     GamepadHandler = null;
+                }
+                if (_instructionalButtons != null)
+                {
+                    _instructionalButtons.Dispose();
+                    _instructionalButtons = null;
                 }
                 if (_mainCamera != null && _mainCamera.Exists())
                 {
@@ -274,54 +282,33 @@ namespace ModdedCamera
 
         private void RenderInstructionalButtons()
         {
-            try
+            _instructionalButtons.CallFunction("CLEAR_ALL", new object[0]);
+            _instructionalButtons.CallFunction("TOGGLE_MOUSE_BUTTONS", new object[] { false });
+
+            string text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 24, 0);
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 4, text, "Выбрать позицию" });
+
+            text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 3, 17, 0);
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 3, text, "Длительность +" });
+
+            text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 1, 16, 0);
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 2, text, "Длительность -" });
+
+            text = Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 25, 0);
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 1, text, "Выход" });
+
+            string[] array = new string[]
             {
-                string[] lines = new string[]
-                {
-                    "ЛКМ — добавить узел",
-                    "ПКМ / Enter — выход",
-                    "Колесо — длительность ±",
-                    "X / Z — наклон (roll)",
-                    "WASD / стики — движение",
-                };
-
-                float margin = 20f;
-                float lineHeight = 24f;
-                float bgTop = 16f;
-                float bgW = 330f;
-                float bgH = lines.Length * lineHeight + 16f;
-                float sw = (float)GTA.UI.Screen.Width;
-                float sh = (float)GTA.UI.Screen.Height;
-                float bgRight = sw - margin;
-                float bgLeft = bgRight - bgW;
-
-                // Полупрозрачный фон справа сверху.
-                Function.Call(Hash.DRAW_RECT,
-                    (bgLeft + bgW / 2f) / sw,
-                    (bgTop + bgH / 2f) / sh,
-                    bgW / sw,
-                    bgH / sh,
-                    0, 0, 0, 150);
-
-                float textX = bgRight - 10f;
-                float textY = bgTop + 10f;
-                foreach (string line in lines)
-                {
-                    var t = new GTA.UI.TextElement(
-                        line,
-                        new System.Drawing.PointF(textX, textY),
-                        0.42f);
-                    t.Alignment = GTA.UI.Alignment.Right;
-                    t.Outline = true;
-                    t.Color = System.Drawing.Color.White;
-                    t.Draw();
-                    textY += lineHeight;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Debug("RenderInstructionalButtons warning: " + ex.Message);
-            }
+                Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 32, 0),
+                Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 34, 0),
+                Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 33, 0),
+                Function.Call<string>(NativeHashes.GET_CONTROL_ACTION_NAME, 2, 35, 0)
+            };
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 0, array[3], array[2], array[1], array[0], "Движение" });
+            _instructionalButtons.CallFunction("SET_DATA_SLOT", new object[] { 5, "X / Z", "Наклон" });
+            _instructionalButtons.CallFunction("SET_BACKGROUND_COLOUR", new object[] { 0, 0, 0, 80 });
+            _instructionalButtons.CallFunction("DRAW_INSTRUCTIONAL_BUTTONS", new object[] { 0 });
+            _instructionalButtons.Render2D();
         }
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
