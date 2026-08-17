@@ -46,6 +46,10 @@ namespace ModdedCamera.Services
 
         public int NodeDuration { get; set; }
 
+        // Вызывается после правки узла во время воспроизведения, когда
+        // воспроизведение было временно остановлено и затем возобновлено.
+        public event Action<int> OnNodeEditResumed;
+
         private bool _selectorWasUsed = false;
         private bool _splineCamWasUsed = false;
         private bool _isPlayerFollowing = false;
@@ -58,6 +62,7 @@ namespace ModdedCamera.Services
         private float _lastTimeScale = 1f;
         private long _playbackStartMs = 0;
         private int _editNodeIndex = -1;
+        private bool _resumePlaybackAfterNodeEdit = false;
 
         public CameraService()
         {
@@ -146,10 +151,19 @@ namespace ModdedCamera.Services
                     GTA.UI.Notification.PostTicker("~r~Узел не найден!", false, false);
                     return;
                 }
-                if (IsSelectorActive || IsSplineCamActive)
+                if (IsSelectorActive)
                 {
                     GTA.UI.Notification.PostTicker("Камера уже активна.", false, false);
                     return;
+                }
+                if (IsSplineCamActive)
+                {
+                    // Во время воспроизведения spline-камера занята. Временно
+                    // останавливаем её, чтобы открыть свободную камеру узла для
+                    // правки. После применения изменений воспроизведение
+                    // возобновится (см. AddNodeAtCurrentPosition).
+                    _resumePlaybackAfterNodeEdit = true;
+                    StopPlayback();
                 }
 
                 Logger.Info("CameraService: Entering point selector to edit node " + nodeIndex);
@@ -198,6 +212,7 @@ namespace ModdedCamera.Services
 
                 if (_editNodeIndex >= 0)
                 {
+                    int editedNodeIndex = _editNodeIndex;
                     if (_editNodeIndex < SplineCamera.Nodes.Count)
                     {
                         SplineCamera.SetNodePosition(_editNodeIndex, pos, rot);
@@ -205,6 +220,12 @@ namespace ModdedCamera.Services
                     }
                     ExitPointSelector();
                     GTA.UI.Notification.PostTicker("~g~Узел обновлён!", false, false);
+                    if (_resumePlaybackAfterNodeEdit)
+                    {
+                        _resumePlaybackAfterNodeEdit = false;
+                        StartPlayback();
+                        if (OnNodeEditResumed != null) OnNodeEditResumed(editedNodeIndex);
+                    }
                     return true;
                 }
 

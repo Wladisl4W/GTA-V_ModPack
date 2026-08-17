@@ -78,6 +78,20 @@ namespace ModdedCamera.Services
             CreateNodeEditorMenu();
             CreateMainMenu();
 
+            _cameraService.OnNodeEditResumed += delegate(int editedNodeIndex)
+            {
+                try
+                {
+                    _lastSelectedNodeIndex = editedNodeIndex;
+                    RefreshNodeEditorMenu();
+                    NodeEditorMenu.Visible = true;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex, "MenuService: Error reopening node editor after resume");
+                }
+            };
+
             ActivePool = new ObjectPool();
             ActivePool.Add(MainMenu);
             ActivePool.Add(CameraOptionsMenu);
