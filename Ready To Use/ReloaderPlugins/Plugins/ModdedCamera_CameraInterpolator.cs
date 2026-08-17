@@ -198,15 +198,13 @@ namespace ModdedCamera
                 float t = (float)segmentElapsedMs / segmentDurationMs;
                 t = Math.Min(Math.Max(t, 0f), 1f);
 
-                int modeOut = (currentSegment < _segmentModes.Count) ? _segmentModes[currentSegment] : 2;
-                int modeIn = (currentSegment + 1 < _segmentModes.Count) ? _segmentModes[currentSegment + 1] : modeOut;
+                int modeNodeA = (currentSegment < _segmentModes.Count) ? _segmentModes[currentSegment] : 2;
+                int modeNodeB = (currentSegment + 1 < _segmentModes.Count) ? _segmentModes[currentSegment + 1] : modeNodeA;
 
-                float fStart = Ease(modeOut, t);
-                float fEnd = Ease(modeIn, t);
+                float fStart = Ease(modeNodeA, t);
+                float fEnd = Ease(modeNodeB, t);
                 float blend = t * t * (3f - 2f * t);
                 float f = fStart + (fEnd - fStart) * blend;
-
-                bool round = (modeOut == 1 || modeIn == 1);
 
                 Vector3 p0 = (currentSegment > 0) ? _positions[currentSegment - 1] : _positions[currentSegment];
                 Vector3 p1 = _positions[currentSegment];
@@ -216,25 +214,40 @@ namespace ModdedCamera
                 Vector3 straightPos = Vector3.Lerp(p1, p2, f);
                 Vector3 straightRot = InterpolateRotationShortest(currentSegment, f);
 
-                if (round)
-                {
-                    Vector3 splinePos = CubicHermite(p0, p1, p2, p3, f, _tanScale);
-                    Vector3 r0 = (currentSegment > 0) ? _rotations[currentSegment - 1] : _rotations[currentSegment];
-                    Vector3 r1 = _rotations[currentSegment];
-                    Vector3 r2 = UnwrapRotation(r1, _rotations[currentSegment + 1]);
-                    Vector3 r3 = (currentSegment + 2 < _rotations.Count) ? UnwrapRotation(r2, _rotations[currentSegment + 2]) : r2;
-                    Vector3 splineRot = CubicHermiteRot(r0, r1, r2, r3, f, _tanScale);
-                    position = splinePos;
-                    rotation = splineRot;
-                }
-                else
-                {
-                    position = straightPos;
-                    rotation = straightRot;
-                }
+                // Режим 1 («плавно без остановки»): локализованная фаска строго
+                // внутри угла узла. Прямые участки (ноги V) остаются прямыми, а
+                // в окне _filletWidth ДО и ПОСЛЕ узла траектория, поворот камеры
+                // и FOV плавно скругляются через Catmull-Rom, касательный к
+                // соседним сегментам (остаётся вписанным в угол). Скорость НЕ
+                // замедляется (easing линейный для mode 1) — камера просто
+                // сглаживает прохождение узла, не останавливаясь.
+                float s = 0f;
+                if (modeNodeB == 1 && t > 1f - _filletWidth)
+                    s = Smooth01((t - (1f - _filletWidth)) / _filletWidth);
+                if (modeNodeA == 1 && t < _filletWidth)
+                    s = Math.Max(s, 1f - Smooth01(t / _filletWidth));
+
+                Vector3 splinePos = CubicHermite(p0, p1, p2, p3, f, _tanScale);
+                Vector3 r0 = (currentSegment > 0) ? _rotations[currentSegment - 1] : _rotations[currentSegment];
+                Vector3 r1 = _rotations[currentSegment];
+                Vector3 r2 = UnwrapRotation(r1, _rotations[currentSegment + 1]);
+                Vector3 r3 = (currentSegment + 2 < _rotations.Count) ? UnwrapRotation(r2, _rotations[currentSegment + 2]) : r2;
+                Vector3 splineRot = CubicHermiteRot(r0, r1, r2, r3, f, _tanScale);
+
+                position = Vector3.Lerp(straightPos, splinePos, s);
+                rotation = LerpRotation(straightRot, splineRot, s);
 
                 if (_fovs != null && currentSegment + 1 < _fovs.Count)
-                    fov = _fovs[currentSegment] + (_fovs[currentSegment + 1] - _fovs[currentSegment]) * f;
+                {
+                    int fc = _fovs.Count;
+                    float fp0 = _fovs[Math.Max(0, currentSegment - 1)];
+                    float fp1 = _fovs[currentSegment];
+                    float fp2 = _fovs[currentSegment + 1];
+                    float fp3 = _fovs[Math.Min(fc - 1, currentSegment + 2)];
+                    float straightFov = fp1 + (fp2 - fp1) * f;
+                    float splineFov = CubicHermiteScalar(fp0, fp1, fp2, fp3, f, _tanScale);
+                    fov = straightFov + (splineFov - straightFov) * s;
+                }
             }
             catch (Exception ex)
             {
@@ -305,6 +318,33 @@ namespace ModdedCamera
             return delta;
         }
 
+        private static float Smooth01(float x)
+        {
+            x = Math.Min(Math.Max(x, 0f), 1f);
+            return x * x * (3f - 2f * x);
+        }
+
+        private static float CubicHermiteScalar(float a, float b, float c, float d, float t, float tanScale)
+        {
+            float m1 = (c - a) * (0.5f * tanScale);
+            float m2 = (d - b) * (0.5f * tanScale);
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float h00 = 2f * t3 - 3f * t2 + 1f;
+            float h10 = t3 - 2f * t2 + t;
+            float h01 = -2f * t3 + 3f * t2;
+            float h11 = t3 - t2;
+            return h00 * b + h10 * m1 + h01 * c + h11 * m2;
+        }
+
+        private Vector3 LerpRotation(Vector3 a, Vector3 b, float s)
+        {
+            return new Vector3(
+                LerpAngle(a.X, b.X, s),
+                LerpAngle(a.Y, b.Y, s),
+                LerpAngle(a.Z, b.Z, s));
+        }
+
         private const float _easeFrac = 0.2f;
 
         private float Ease(int mode, float t)
@@ -339,6 +379,11 @@ namespace ModdedCamera
         }
 
         private const float _tanScale = 0.5f;
+
+        // Ширина локализованной фаски (в долях длительности сегмента) вокруг
+        // узла в режиме «плавно без остановки»: скругляем за 10% ДО и 10% ПОСЛЕ
+        // узла, а прямые участки оставляем прямыми.
+        private const float _filletWidth = 0.1f;
 
         public void Clear()
         {
