@@ -14,6 +14,9 @@ namespace ModdedCamera
         private InputService _inputService;
         private MenuService _menuService;
 
+        private string _durationDisplayText = null;
+        private int _durationDisplayUntilMs = 0;
+
         public void OnStart()
         {
             try
@@ -63,6 +66,8 @@ namespace ModdedCamera
         {
             try
             {
+                DrawDurationDisplay();
+
                 bool playerOk = Game.Player != null && Game.Player.Character != null && Game.Player.Character.Exists();
                 // Don't drop the camera update (and its fade machine) just because the
                 // player entity is briefly missing (loading/transition) while a camera is active.
@@ -163,7 +168,29 @@ namespace ModdedCamera
         private void ShowDurationNotification()
         {
             int durationMs = _menuService.GetNodeDuration();
-            GTA.UI.Screen.ShowSubtitle("Длительность: " + ((float)durationMs / 1000f).ToString("F2") + "с", 1500);
+            _durationDisplayText = "Длительность узла: " + ((float)durationMs / 1000f).ToString("F2") + " с";
+            _durationDisplayUntilMs = Game.GameTime + 1500;
+        }
+
+        private void DrawDurationDisplay()
+        {
+            if (_durationDisplayText == null || Game.GameTime > _durationDisplayUntilMs) return;
+            try
+            {
+                float sw = (float)GTA.UI.Screen.Width;
+                var t = new GTA.UI.TextElement(
+                    _durationDisplayText,
+                    new System.Drawing.PointF(sw / 2f, 28f),
+                    0.55f);
+                t.Alignment = GTA.UI.Alignment.Center;
+                t.Outline = true;
+                t.Color = System.Drawing.Color.White;
+                t.Draw();
+            }
+            catch (Exception ex)
+            {
+                Logger.Debug("DrawDurationDisplay warning: " + ex.Message);
+            }
         }
     }
 }
