@@ -223,9 +223,9 @@ namespace ModdedCamera
                 // сглаживает прохождение узла, не останавливаясь.
                 float s = 0f;
                 if (modeNodeB == 1 && t > 1f - _filletWidth)
-                    s = Smooth01((t - (1f - _filletWidth)) / _filletWidth);
+                    s = Smoother01((t - (1f - _filletWidth)) / _filletWidth);
                 if (modeNodeA == 1 && t < _filletWidth)
-                    s = Math.Max(s, 1f - Smooth01(t / _filletWidth));
+                    s = Math.Max(s, 1f - Smoother01(t / _filletWidth));
 
                 Vector3 splinePos = CubicHermite(p0, p1, p2, p3, f, _tanScale);
                 Vector3 r0 = (currentSegment > 0) ? _rotations[currentSegment - 1] : _rotations[currentSegment];
@@ -324,6 +324,15 @@ namespace ModdedCamera
             return x * x * (3f - 2f * x);
         }
 
+        // C2-гладкое окно (функция 5-го порядка): первая И вторая производные
+        // равны нулю на краях, поэтому кривизна нарастает плавно — нет рывка
+        // при входе/выходе из скругления узла.
+        private static float Smoother01(float x)
+        {
+            x = Math.Min(Math.Max(x, 0f), 1f);
+            return x * x * x * (x * (x * 6f - 15f) + 10f);
+        }
+
         private static float CubicHermiteScalar(float a, float b, float c, float d, float t, float tanScale)
         {
             float m1 = (c - a) * (0.5f * tanScale);
@@ -381,9 +390,11 @@ namespace ModdedCamera
         private const float _tanScale = 0.5f;
 
         // Ширина локализованной фаски (в долях длительности сегмента) вокруг
-        // узла в режиме «плавно без остановки»: скругляем за 10% ДО и 10% ПОСЛЕ
-        // узла, а прямые участки оставляем прямыми.
-        private const float _filletWidth = 0.1f;
+        // узла в режиме «плавно без остановки»: скругляем за ~18% ДО и ПОСЛЕ
+        // узла, а прямые участки (середина сегмента, «линейный» режим)
+        // оставляем прямыми. Окно шире _tanScale-перехода, чтобы кривизна
+        // нарастала мягко, без рывка.
+        private const float _filletWidth = 0.18f;
 
         public void Clear()
         {
