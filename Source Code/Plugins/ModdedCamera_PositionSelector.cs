@@ -161,8 +161,23 @@ namespace ModdedCamera
             // контролы каждый тик, поэтому однократного вызова недостаточно.
             Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, 0);
             Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, 2);
-            // Явно отключаем колесо переключения оружия (мышь), т.к. на ПК оно
-            // может проскочить мимо DISABLE_ALL_CONTROL_ACTIONS и вызвать меню оружия.
+
+            // Контролы, которыми САМА камера расстановки управляет своим
+            // движением/взглядом (стики 218-221, вперёд/назад 8, нажатие
+            // стика 230), нужно ВЕРНУТЬ во включённое состояние — иначе
+            // GET_CONTROL_VALUE возвращает 0 и камеру нельзя будет двигать.
+            // Герой при этом заморожен (IsPositionFrozen), поэтому на него
+            // это не влияет, а всё остальное (ходьба, стрельба, колесо оружия)
+            // остаётся выключенным.
+            int[] cameraControls = new int[] { 8, 218, 219, 220, 221, 230 };
+            foreach (int c in cameraControls)
+            {
+                Function.Call(Hash.ENABLE_CONTROL_ACTION, 0, c, true);
+                Function.Call(Hash.ENABLE_CONTROL_ACTION, 2, c, true);
+            }
+
+            // Явно держим колесо переключения оружия (мышь) выключенным,
+            // чтобы не всплывало меню оружия при прокрутке для смены длительности.
             Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 237, true);
             Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 237, true);
             Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 238, true);
