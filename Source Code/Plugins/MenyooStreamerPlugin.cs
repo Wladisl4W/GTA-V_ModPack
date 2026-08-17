@@ -722,6 +722,9 @@ namespace MenyooStreamer
                     if (IsPedAnimated(ped))
                         continue;
 
+                    if (IsPedAttached(ped))
+                        continue;
+
                     records.Add(new PedRecord
                     {
                         ModelHash = ped.Model.Hash,
@@ -764,6 +767,22 @@ namespace MenyooStreamer
 
                 if (Function.Call<bool>(Hash.GET_IS_TASK_ACTIVE, ped.Handle, TaskSynchronizedScene))
                     return true;
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        private bool IsPedAttached(Ped ped)
+        {
+            try
+            {
+                // Пед привязан к любой другой сущности (объекту/пропсу/машине/педу),
+                // например через Menyoo Object Spooner (ATTACH_ENTITY_TO_ENTITY).
+                // Таких не трогаем: не захватываем и не удаляем.
+                return Function.Call<bool>(Hash.IS_ENTITY_ATTACHED, ped.Handle);
             }
             catch
             {
