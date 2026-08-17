@@ -177,6 +177,7 @@ namespace ModdedCamera
                     if (_interpolator != null)
                     {
                         _interpolator.Start();
+                        _lastFrameMs = Utils.NowMs();
                         Logger.Info("Interpolator playback STARTED");
                     }
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
@@ -254,10 +255,10 @@ namespace ModdedCamera
                     Logger.Error("AddNode: Camera does not exist!");
                     return;
                 }
-                if (duration < 0)
+                if (duration < 1)
                 {
-                    Logger.Warn("AddNode: Negative duration, using 0ms");
-                    duration = 0;
+                    Logger.Warn("AddNode: Duration below 1ms, clamping to 1ms");
+                    duration = 1;
                 }
 
                 _nodes.Add(new Tuple<Vector3, Vector3>(position, rotation));
@@ -365,9 +366,9 @@ namespace ModdedCamera
         public void SetNodeDuration(int index, int durationMs)
         {
             if (index < 0 || index >= _baseDurations.Count) return;
-            if (durationMs < 0) durationMs = 0;
+            if (durationMs < 1) durationMs = 1;
             _baseDurations[index] = durationMs;
-            _durations[index] = (int)Math.Max(0, durationMs / _currentSpeedMult);
+            _durations[index] = (int)Math.Max(1, durationMs / _currentSpeedMult);
         }
 
         public List<int> GetNodeColors()
@@ -499,6 +500,7 @@ namespace ModdedCamera
                 _interpolator.Start();
                 _startNodeIndex = 0;
                 Logger.Info("Interpolator restarted");
+                _lastFrameMs = Utils.NowMs();
             }
             catch (Exception ex)
             {
@@ -575,11 +577,12 @@ namespace ModdedCamera
                 Vector3 interpRot;
                 float interpFov;
                 long realNow = Utils.NowMs();
-                int extrapolateMs = (int)(realNow - _lastFrameMs);
-                if (extrapolateMs < 0) extrapolateMs = 0;
-                if (extrapolateMs > 250) extrapolateMs = 250;
+                long frameDelta = realNow - _lastFrameMs;
                 _lastFrameMs = realNow;
-                _interpolator.UpdateAt(realNow + extrapolateMs, out interpPos, out interpRot, out interpFov);
+                if (frameDelta < 0) frameDelta = 0;
+                if (frameDelta > 250) frameDelta = 250;
+                _interpolator.Advance(frameDelta);
+                _interpolator.UpdateAt(_interpolator.ElapsedMs, out interpPos, out interpRot, out interpFov);
 
                 _mainCamera.Position = interpPos;
                 _mainCamera.Rotation = interpRot;

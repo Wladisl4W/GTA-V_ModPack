@@ -16,17 +16,24 @@ namespace ModdedCamera
         private List<int> _segmentModes;
         private List<int> _fovs;
         private bool _isPlaying = false;
-        private long _playbackStartTimeMs = 0;
+        private long _playbackElapsedMs = 0;
         private int _totalDurationMs = 0;
 
         public bool IsPlaying { get { return _isPlaying; } }
         public float PlaybackProgress { get; private set; }
 
+        // Accumulated playback time in ms. Advanced by the caller each active
+        // frame (clamped frame delta). Playback pauses automatically whenever
+        // no Update is fed (e.g. dropped ticks / IsActive flicker) instead of
+        // jumping forward by wall-clock time.
+        public void Advance(long ms) { if (ms > 0) _playbackElapsedMs += ms; }
+        public long ElapsedMs { get { return _playbackElapsedMs; } }
+
         private int _startNodeIndex = 0;
 
         public void SetPlaybackOffset(int elapsedMs)
         {
-            _playbackStartTimeMs = Utils.NowMs() - elapsedMs;
+            _playbackElapsedMs = elapsedMs;
         }
 
         public void SetStartNodeIndex(int index)
@@ -60,7 +67,9 @@ namespace ModdedCamera
 
                 _positions = new List<Vector3>(positions);
                 _rotations = new List<Vector3>(rotations);
-                _durations = new List<int>(durations);
+                _durations = new List<int>(durations.Count);
+                for (int i = 0; i < durations.Count; i++)
+                    _durations.Add(Math.Max(1, durations[i]));
 
                 _segmentModes = new List<int>();
                 int modeCount = (segmentModes != null) ? segmentModes.Count : 0;
@@ -73,7 +82,7 @@ namespace ModdedCamera
 
                 _totalDurationMs = 0;
                 for (int i = 0; i < _durations.Count; i++)
-                    _totalDurationMs += Math.Max(1, _durations[i]);
+                    _totalDurationMs += _durations[i];
 
                 Logger.Info("Path set with " + _positions.Count + " waypoints, total duration: " + _totalDurationMs + "ms");
             }
@@ -107,8 +116,8 @@ namespace ModdedCamera
                 int limit = Math.Min(_startNodeIndex, _durations.Count - 1);
                 long offsetMs = 0;
                 for (int i = 0; i < limit; i++)
-                    offsetMs += Math.Max(0, _durations[i]);
-                _playbackStartTimeMs = Utils.NowMs() - (int)offsetMs;
+                    offsetMs += _durations[i];
+                _playbackElapsedMs = offsetMs;
                 _startNodeIndex = 0;
                 PlaybackProgress = 0f;
                 Logger.Info("Playback started - total duration: " + _totalDurationMs + "ms" + (offsetMs > 0 ? ", offset: " + offsetMs + "ms" : ""));
@@ -129,15 +138,15 @@ namespace ModdedCamera
         public void Update(out Vector3 position, out Vector3 rotation)
         {
             float fov;
-            UpdateAt(Utils.NowMs(), out position, out rotation, out fov);
+            UpdateAt(_playbackElapsedMs, out position, out rotation, out fov);
         }
 
         public void Update(out Vector3 position, out Vector3 rotation, out float fov)
         {
-            UpdateAt(Utils.NowMs(), out position, out rotation, out fov);
+            UpdateAt(_playbackElapsedMs, out position, out rotation, out fov);
         }
 
-        public void UpdateAt(long now, out Vector3 position, out Vector3 rotation, out float fov)
+        public void UpdateAt(long elapsedMs, out Vector3 position, out Vector3 rotation, out float fov)
         {
             position = Vector3.Zero;
             rotation = Vector3.Zero;
@@ -148,23 +157,7 @@ namespace ModdedCamera
 
             try
             {
-                long elapsedMs = now - (long)_playbackStartTimeMs;
-
-                if (elapsedMs < 0)
-                {
-                    Logger.Warn("Timing overflow detected, resetting playback");
-                    _playbackStartTimeMs = Utils.NowMs();
-                    elapsedMs = 0;
-                }
-
-                if (_totalDurationMs == 0)
-                {
-                    Logger.Warn("Update called with zero total duration - returning last position");
-                    position = _positions[_positions.Count - 1];
-                    rotation = _rotations[_rotations.Count - 1];
-                    if (_fovs != null && _fovs.Count > 0) fov = _fovs[_fovs.Count - 1];
-                    return;
-                }
+                if (elapsedMs < 0) elapsedMs = 0;
 
                 double cycleTime = elapsedMs % _totalDurationMs;
                 PlaybackProgress = (float)cycleTime / _totalDurationMs;

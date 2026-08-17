@@ -151,7 +151,10 @@ namespace ModdedCamera
 
             private int GetControlValue(int control)
             {
-                return Function.Call<int>(NativeHashes.GET_CONTROL_NORMAL, 0, control);
+                // GET_CONTROL_NORMAL collided with GET_DISABLED_CONTROL_NORMAL in
+                // NativeHashes. The selector disables player controls, so reading the
+                // "disabled" control value is both correct and avoids a wrong native hash.
+                return Function.Call<int>(NativeHashes.GET_DISABLED_CONTROL_NORMAL, 0, control);
             }
 
             public void Dispose()

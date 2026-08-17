@@ -194,7 +194,6 @@ namespace ModdedCamera
         public const Hash DRAW_MARKER_SPRITE = unchecked((Hash)(-4939229729199161819L));
         public const Hash GET_DISABLED_CONTROL_NORMAL = unchecked((Hash)(-2783653480577029081L));
         public const Hash IS_DISABLED_CONTROL_PRESSED = (Hash)6342219533232326959L;
-        public const Hash GET_CONTROL_NORMAL = unchecked((Hash)(-2783653480577029081L));
 
         // Native function hashes (raw values not in SHVDN3 Hash enum)
         public const Hash GET_CONTROL_VALUE = unchecked((Hash)(-1424092350868114077L));

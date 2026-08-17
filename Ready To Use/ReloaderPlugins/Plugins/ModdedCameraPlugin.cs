@@ -63,7 +63,10 @@ namespace ModdedCamera
         {
             try
             {
-                if (!Game.Player.Character.Exists()) return;
+                bool playerOk = Game.Player != null && Game.Player.Character != null && Game.Player.Character.Exists();
+                // Don't drop the camera update (and its fade machine) just because the
+                // player entity is briefly missing (loading/transition) while a camera is active.
+                if (!playerOk && !_cameraService.IsAnyCameraActive) return;
 
                 _saveService.Update();
                 if (_saveService.State != SaveService.SaveState.None)

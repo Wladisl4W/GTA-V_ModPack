@@ -431,7 +431,11 @@ namespace ModdedCamera.Services
             MainMenu = new NativeMenu("ModdedCamera", "Кинематографическая камера");
 
             _startItem = new NativeItem("~g~Воспроизвести путь", "");
-            _startItem.Activated += (s, e) => _cameraService.StartPlayback();
+            _startItem.Activated += (s, e) =>
+            {
+                ActivePool.HideAll();
+                _cameraService.StartPlayback();
+            };
             MainMenu.Add(_startItem);
 
             _stopItem = new NativeItem("~r~Остановить воспроизведение", "");
@@ -566,7 +570,7 @@ namespace ModdedCamera.Services
 
                         // Duration list item: 0.00..30.00 in 0.25s steps
                         NativeListItem<string> durItem = new NativeListItem<string>("Длительность", "Длительность узла в секундах");
-                        for (int d = 0; d <= 30000; d += 250)
+                        for (int d = 250; d <= 30000; d += 250)
                             durItem.Items.Add(((float)d / 1000f).ToString("F2"));
                         string foundDur = durSec.ToString("F2");
                         if (durItem.Items.Contains(foundDur))

@@ -320,6 +320,13 @@ namespace ModdedCamera
 
         public FadeState State { get; private set; }
 
+        // Safety net: if a fade never reaches the expected screen state
+        // (e.g. overlapping fades from other scripts/mods), force the
+        // transition anyway so the machine can't get stuck and leave
+        // IsActive inconsistent with reality.
+        private const long FADE_TIMEOUT_MS = 5000;
+        private long _fadeStartMs;
+
         public FadeStateMachine(Action onActivate, Action onDeactivate, string logPrefix)
         {
             this.State = FadeState.None;
@@ -331,12 +338,14 @@ namespace ModdedCamera
         public void StartFadeOut(int fadeOutMs = 1200)
         {
             State = FadeState.FadingOut;
+            _fadeStartMs = Utils.NowMs();
             Function.Call(Hash.DO_SCREEN_FADE_OUT, fadeOutMs);
         }
 
         public void StartFadeOutExit(int fadeOutMs = 1200)
         {
             State = FadeState.FadingOutExit;
+            _fadeStartMs = Utils.NowMs();
             Function.Call(Hash.DO_SCREEN_FADE_OUT, fadeOutMs);
         }
 
@@ -345,32 +354,36 @@ namespace ModdedCamera
             if (State == FadeState.None) return;
             try
             {
+                long fadeElapsed = Utils.NowMs() - _fadeStartMs;
+
                 if (State == FadeState.FadingOut)
                 {
-                    if (Function.Call<bool>(Hash.IS_SCREEN_FADED_OUT))
+                    if (Function.Call<bool>(Hash.IS_SCREEN_FADED_OUT) || fadeElapsed > FADE_TIMEOUT_MS)
                     {
                         if (_onActivate != null) _onActivate();
                         State = FadeState.Activating;
+                        _fadeStartMs = Utils.NowMs();
                         Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
                     }
                 }
                 else if (State == FadeState.Activating)
                 {
-                    if (Function.Call<bool>(Hash.IS_SCREEN_FADED_IN))
+                    if (Function.Call<bool>(Hash.IS_SCREEN_FADED_IN) || fadeElapsed > FADE_TIMEOUT_MS)
                         State = FadeState.None;
                 }
                 else if (State == FadeState.FadingOutExit)
                 {
-                    if (Function.Call<bool>(Hash.IS_SCREEN_FADED_OUT))
+                    if (Function.Call<bool>(Hash.IS_SCREEN_FADED_OUT) || fadeElapsed > FADE_TIMEOUT_MS)
                     {
                         if (_onDeactivate != null) _onDeactivate();
                         State = FadeState.Deactivating;
+                        _fadeStartMs = Utils.NowMs();
                         Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
                     }
                 }
                 else if (State == FadeState.Deactivating)
                 {
-                    if (Function.Call<bool>(Hash.IS_SCREEN_FADED_IN))
+                    if (Function.Call<bool>(Hash.IS_SCREEN_FADED_IN) || fadeElapsed > FADE_TIMEOUT_MS)
                         State = FadeState.None;
                 }
             }

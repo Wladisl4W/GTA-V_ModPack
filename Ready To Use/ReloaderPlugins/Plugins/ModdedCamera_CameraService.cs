@@ -231,6 +231,13 @@ namespace ModdedCamera.Services
                     return false;
                 }
 
+                if (IsSelectorActive)
+                {
+                    GTA.UI.Notification.PostTicker("~y~Сначала выйдите из режима расстановки.", false, false);
+                    Logger.Warn("CameraService: StartPlayback rejected - selector still active");
+                    return false;
+                }
+
                 if (SplineCamera.Nodes.Count < 2)
                 {
                     GTA.UI.Notification.PostTicker("Сначала создайте минимум 2 узла!", false, false);
