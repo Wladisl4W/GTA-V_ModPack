@@ -255,10 +255,10 @@ namespace ModdedCamera
                     Logger.Error("AddNode: Camera does not exist!");
                     return;
                 }
-                if (duration < 1)
+                if (duration < 0)
                 {
-                    Logger.Warn("AddNode: Duration below 1ms, clamping to 1ms");
-                    duration = 1;
+                    Logger.Warn("AddNode: Negative duration, using 0ms");
+                    duration = 0;
                 }
 
                 _nodes.Add(new Tuple<Vector3, Vector3>(position, rotation));
@@ -366,9 +366,9 @@ namespace ModdedCamera
         public void SetNodeDuration(int index, int durationMs)
         {
             if (index < 0 || index >= _baseDurations.Count) return;
-            if (durationMs < 1) durationMs = 1;
+            if (durationMs < 0) durationMs = 0;
             _baseDurations[index] = durationMs;
-            _durations[index] = (int)Math.Max(1, durationMs / _currentSpeedMult);
+            _durations[index] = (int)Math.Max(0, durationMs / _currentSpeedMult);
         }
 
         public List<int> GetNodeColors()

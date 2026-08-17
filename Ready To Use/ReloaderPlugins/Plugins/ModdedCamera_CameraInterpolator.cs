@@ -69,7 +69,7 @@ namespace ModdedCamera
                 _rotations = new List<Vector3>(rotations);
                 _durations = new List<int>(durations.Count);
                 for (int i = 0; i < durations.Count; i++)
-                    _durations.Add(Math.Max(1, durations[i]));
+                    _durations.Add(Math.Max(0, durations[i]));
 
                 _segmentModes = new List<int>();
                 int modeCount = (segmentModes != null) ? segmentModes.Count : 0;
