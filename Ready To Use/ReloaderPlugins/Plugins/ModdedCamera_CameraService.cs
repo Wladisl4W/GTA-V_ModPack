@@ -164,6 +164,12 @@ namespace ModdedCamera.Services
                     // возобновится (см. AddNodeAtCurrentPosition).
                     _resumePlaybackAfterNodeEdit = true;
                     StopPlayback();
+                    // Сразу гасим spline-камеру и отменяем её отложенный
+                    // onDeactivate, иначе он сработает ~1.2с спустя и убьёт
+                    // рендер селектора, который сейчас включится.
+                    if (SplineCamera != null && SplineCamera.MainCamera != null && SplineCamera.MainCamera.Exists())
+                        SplineCamera.MainCamera.IsActive = false;
+                    if (SplineCamera != null) SplineCamera.AbortPendingFade();
                 }
 
                 Logger.Info("CameraService: Entering point selector to edit node " + nodeIndex);
@@ -223,6 +229,14 @@ namespace ModdedCamera.Services
                     if (_resumePlaybackAfterNodeEdit)
                     {
                         _resumePlaybackAfterNodeEdit = false;
+                        // Камера селектора деактивируется только по завершении
+                        // fade-out (асинхронно ~1.2с). Принудительно гасим её
+                        // сейчас и отменяем отложенный onDeactivate, иначе
+                        // StartPlayback увидит IsSelectorActive==true и не
+                        // запустится, а позже onDeactivate убьёт рендер spline-камеры.
+                        if (PositionSelector != null && PositionSelector.MainCamera != null && PositionSelector.MainCamera.Exists())
+                            PositionSelector.MainCamera.IsActive = false;
+                        if (PositionSelector != null) PositionSelector.AbortPendingFade();
                         StartPlayback();
                         if (OnNodeEditResumed != null) OnNodeEditResumed(editedNodeIndex);
                     }

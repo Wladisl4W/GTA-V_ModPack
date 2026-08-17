@@ -155,6 +155,14 @@ namespace ModdedCamera
             EnablePlayerControls();
         }
 
+        // Принудительно гасим состояние fade-машины, чтобы её отложенный
+        // onDeactivate (который глобально выключает рендер script-cams) не
+        // сработал уже после возобновления воспроизведения spline-камеры.
+        public void AbortPendingFade()
+        {
+            try { _fadeMachine.Reset(); } catch (Exception ex) { Logger.Debug("AbortPendingFade warning: " + ex.Message); }
+        }
+
         private void DisablePlayerControls()
         {
             // Глушим ВСЕ действия управления каждый кадр: игра заново включает

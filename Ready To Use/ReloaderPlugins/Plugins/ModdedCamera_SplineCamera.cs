@@ -198,6 +198,11 @@ namespace ModdedCamera
             );
         }
 
+        public void AbortPendingFade()
+        {
+            try { _fadeMachine.Reset(); } catch (Exception ex) { Logger.Debug("AbortPendingFade warning: " + ex.Message); }
+        }
+
         public void Dispose()
         {
             try
