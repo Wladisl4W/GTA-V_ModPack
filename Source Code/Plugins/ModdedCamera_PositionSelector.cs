@@ -157,8 +157,16 @@ namespace ModdedCamera
 
         private void DisablePlayerControls()
         {
+            // Глушим ВСЕ действия управления каждый кадр: игра заново включает
+            // контролы каждый тик, поэтому однократного вызова недостаточно.
             Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, 0);
             Function.Call(Hash.DISABLE_ALL_CONTROL_ACTIONS, 2);
+            // Явно отключаем колесо переключения оружия (мышь), т.к. на ПК оно
+            // может проскочить мимо DISABLE_ALL_CONTROL_ACTIONS и вызвать меню оружия.
+            Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 237, true);
+            Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 237, true);
+            Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 238, true);
+            Function.Call(Hash.DISABLE_CONTROL_ACTION, 2, 238, true);
         }
 
         private void EnablePlayerControls()
@@ -179,44 +187,48 @@ namespace ModdedCamera
                 }
 
                 bool isActive = _mainCamera.IsActive;
-                if (isActive)
+                // Демобилизуем героя на ВЕСЬ сеанс расстановки (включая фейды входа/выхода),
+                // чтобы нельзя было ничего делать за него: движение, стрельба, меню оружия и т.п.
+                bool sessionActive = isActive || _fadeMachine.State != FadeState.None;
+                if (sessionActive)
                 {
-                    if (!_controlsDisabled)
+                    DisablePlayerControls();
+                    _controlsDisabled = true;
+
+                    if (isActive)
                     {
-                        _controlsDisabled = true;
-                        DisablePlayerControls();
+                        bool shouldRender = _renderSceneTimer.Enabled && _renderSceneTimer.Check();
+                        if (shouldRender)
+                        {
+                            CameraRenderer.UpdateFocusArea(_mainCamera.Position);
+                            CameraRenderer.DrawPositionMarker(_mainCamera.Position, _previousPos);
+                            _renderSceneTimer.Reset();
+                        }
+
+                        _previousPos = _mainCamera.Position;
+                        RenderEntityPosition();
+
+                        try { GamepadHandler.Update(); } catch (Exception ex) { Logger.Debug("GamepadHandler.Update warning: " + ex.Message); }
+
+                        // Roll (наклон горизонта / Dutch-angle) по клавишам X / Z.
+                        // IsRawKeyDown — сырое состояние клавиш через WinAPI, работает даже
+                        // при DisablePlayerControls() (IS_CONTROL_PRESSED был бы заблокирован).
+                        float rollDelta = 0f;
+                        if (IsRawKeyDown(Keys.X)) rollDelta -= RollSpeed * Game.LastFrameTime;
+                        if (IsRawKeyDown(Keys.Z)) rollDelta += RollSpeed * Game.LastFrameTime;
+                        if (rollDelta != 0f && _mainCamera != null && _mainCamera.Exists())
+                        {
+                            Vector3 rot = _mainCamera.Rotation;
+                            _mainCamera.Rotation = new Vector3(rot.X, rot.Y + rollDelta, rot.Z);
+                        }
+
+                        // Подсказку управления рисуем КАЖДЫЙ кадр: scaleform держится на
+                        // экране только пока вызывается Render2D() каждый тик, иначе он
+                        // мигает (пропадает между редкими перерисовками).
+                        try { RenderInstructionalButtons(); } catch (Exception ex) { Logger.Debug("RenderInstructionalButtons warning: " + ex.Message); }
+
+                        if (_currentLerpTime > 0f) _currentLerpTime -= 0.01f;
                     }
-                    bool shouldRender = _renderSceneTimer.Enabled && _renderSceneTimer.Check();
-                    if (shouldRender)
-                    {
-                        CameraRenderer.UpdateFocusArea(_mainCamera.Position);
-                        CameraRenderer.DrawPositionMarker(_mainCamera.Position, _previousPos);
-                        _renderSceneTimer.Reset();
-                    }
-
-                    _previousPos = _mainCamera.Position;
-                    RenderEntityPosition();
-
-                    try { GamepadHandler.Update(); } catch (Exception ex) { Logger.Debug("GamepadHandler.Update warning: " + ex.Message); }
-
-                    // Roll (наклон горизонта / Dutch-angle) по клавишам X / Z.
-                    // IsRawKeyDown — сырое состояние клавиш через WinAPI, работает даже
-                    // при DisablePlayerControls() (IS_CONTROL_PRESSED был бы заблокирован).
-                    float rollDelta = 0f;
-                    if (IsRawKeyDown(Keys.X)) rollDelta -= RollSpeed * Game.LastFrameTime;
-                    if (IsRawKeyDown(Keys.Z)) rollDelta += RollSpeed * Game.LastFrameTime;
-                    if (rollDelta != 0f && _mainCamera != null && _mainCamera.Exists())
-                    {
-                        Vector3 rot = _mainCamera.Rotation;
-                        _mainCamera.Rotation = new Vector3(rot.X, rot.Y + rollDelta, rot.Z);
-                    }
-
-                    // Подсказку управления рисуем КАЖДЫЙ кадр: scaleform держится на
-                    // экране только пока вызывается Render2D() каждый тик, иначе он
-                    // мигает (пропадает между редкими перерисовками).
-                    try { RenderInstructionalButtons(); } catch (Exception ex) { Logger.Debug("RenderInstructionalButtons warning: " + ex.Message); }
-
-                    if (_currentLerpTime > 0f) _currentLerpTime -= 0.01f;
                 }
                 else if (_controlsDisabled)
                 {
