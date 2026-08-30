@@ -90,6 +90,7 @@ namespace WeaponManager
                         }
                         catch { }
                     }
+                    Function.Call(Hash.SET_PED_CAN_SWITCH_WEAPON, player.Handle, true);
                     GTA.UI.Notification.PostTicker("~g~Оружие выдано", false);
                 }
                 else
