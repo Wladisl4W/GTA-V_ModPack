@@ -52,6 +52,12 @@ namespace ModdedCamera.Services
 
         private bool _selectorWasUsed = false;
         private bool _splineCamWasUsed = false;
+
+        // True между ExitPointSelector() и фактическим завершением фейда.
+        // Пока висит — селектор продолжает тикать, чтобы его fade-машина
+        // дошла до None (иначе ранний выход клинит FadingOutExit навсегда
+        // и игрок потом дёргается "покадрово").
+        private bool _selectorExitPending = false;
         private bool _isPlayerFollowing = false;
         private bool _savedPlayerVisible = true;
         private bool _savedPlayerCollision = true;
@@ -128,7 +134,25 @@ namespace ModdedCamera.Services
                 Logger.Info("CameraService: Entering point selector mode");
                 Game.Player.Character.IsPositionFrozen = true;
                 _selectorWasUsed = true;
-                PositionSelector.EnterCameraView(Game.Player.Character.GetOffsetPosition(new Vector3(0f, 0f, 10f)));
+                try
+                {
+                    // Повторный вход, пока старый выходной фейд ещё не догорел:
+                    // гасим его, чтобы поздний onDeactivate не убил новую сессию.
+                    if (_selectorExitPending)
+                    {
+                        PositionSelector.AbortPendingFade();
+                        _selectorExitPending = false;
+                    }
+                    PositionSelector.EnterCameraView(Game.Player.Character.GetOffsetPosition(new Vector3(0f, 0f, 10f)));
+                }
+                catch
+                {
+                    // Откат: никогда не оставляем героя замороженным при неудачном входе.
+                    try { Game.Player.Character.IsPositionFrozen = false; } catch { }
+                    _selectorWasUsed = false;
+                    _selectorExitPending = false;
+                    throw;
+                }
             }
             catch (Exception ex)
             {
@@ -176,10 +200,26 @@ namespace ModdedCamera.Services
                 _editNodeIndex = nodeIndex;
                 Game.Player.Character.IsPositionFrozen = true;
                 _selectorWasUsed = true;
-                var node = SplineCamera.Nodes[nodeIndex];
-                PositionSelector.EnterCameraView(node.Item1);
-                if (PositionSelector.MainCamera != null)
-                    PositionSelector.MainCamera.Rotation = node.Item2;
+                try
+                {
+                    if (_selectorExitPending)
+                    {
+                        PositionSelector.AbortPendingFade();
+                        _selectorExitPending = false;
+                    }
+                    var node = SplineCamera.Nodes[nodeIndex];
+                    PositionSelector.EnterCameraView(node.Item1);
+                    if (PositionSelector.MainCamera != null)
+                        PositionSelector.MainCamera.Rotation = node.Item2;
+                }
+                catch
+                {
+                    try { Game.Player.Character.IsPositionFrozen = false; } catch { }
+                    _selectorWasUsed = false;
+                    _selectorExitPending = false;
+                    _editNodeIndex = -1;
+                    throw;
+                }
             }
             catch (Exception ex)
             {
@@ -193,11 +233,20 @@ namespace ModdedCamera.Services
             try
             {
                 Logger.Info("CameraService: Exiting point selector mode");
-                if (PositionSelector != null)
-                    PositionSelector.ExitCameraView();
-                Game.Player.Character.IsPositionFrozen = false;
-                Function.Call(Hash.SET_TIME_SCALE, 1f);
-                _selectorWasUsed = false;
+                try
+                {
+                    if (PositionSelector != null)
+                        PositionSelector.ExitCameraView();
+                }
+                finally
+                {
+                    // Разморозка и сброс времени — всегда, даже если выход бросил.
+                    // _selectorWasUsed гасится только по завершении фейда (см. Update),
+                    // чтобы fade-машина продолжала тикать до None.
+                    try { Game.Player.Character.IsPositionFrozen = false; } catch { }
+                    try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                    _selectorExitPending = true;
+                }
                 _editNodeIndex = -1;
             }
             catch (Exception ex)
@@ -465,14 +514,28 @@ namespace ModdedCamera.Services
 
                 UpdatePlayerFollow();
 
-                if (IsSelectorActive || _selectorWasUsed)
+                if (IsSelectorActive || _selectorWasUsed || _selectorExitPending)
                 {
                     if (SplineCamera != null && SplineCamera.Nodes.Count > 0)
                         SplineCamera.DrawNodeMarkers();
                     if (PositionSelector != null && PositionSelector.MainCamera != null && PositionSelector.MainCamera.Exists())
+                    {
                         PositionSelector.Update();
-                    else if (PositionSelector != null)
-                        Logger.Warn("CameraService: PositionSelector no longer exists");
+                        // Выход считается завершённым только когда fade-машина
+                        // селектора дошла до None. Только тогда гасим флаги.
+                        if (_selectorExitPending && PositionSelector.FadeState == FadeState.None)
+                        {
+                            _selectorExitPending = false;
+                            _selectorWasUsed = false;
+                        }
+                    }
+                    else
+                    {
+                        if (PositionSelector != null)
+                            Logger.Warn("CameraService: PositionSelector no longer exists");
+                        _selectorExitPending = false;
+                        _selectorWasUsed = false;
+                    }
                 }
             }
             catch (Exception ex)
