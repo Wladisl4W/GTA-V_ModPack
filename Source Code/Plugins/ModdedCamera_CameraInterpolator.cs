@@ -196,11 +196,15 @@ namespace ModdedCamera
 
                 // Past the end, or inside the final dwell period (the last
                 // duration is a hold at the final node, not a segment): park
-                // on the last waypoint.
+                // on the last waypoint. Use unwrapped rotation for continuity
+                // (raw would jump 360° when the path wrapped around).
                 if (currentSegment == -1 || currentSegment == _durations.Count - 1)
                 {
                     position = _positions[_positions.Count - 1];
-                    rotation = _rotations[_rotations.Count - 1];
+                    if (_rotationsU != null && _rotationsU.Count > 0)
+                        rotation = _rotationsU[_rotationsU.Count - 1];
+                    else
+                        rotation = _rotations[_rotations.Count - 1];
                     if (_fovs != null && _fovs.Count > 0) fov = _fovs[_fovs.Count - 1];
                     if (currentSegment == -1) PlaybackProgress = 1f;
                     return;
