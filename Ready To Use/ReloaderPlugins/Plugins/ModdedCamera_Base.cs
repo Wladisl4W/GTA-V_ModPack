@@ -190,6 +190,7 @@ namespace ModdedCamera
         public const Hash UNDO_SCREEN_FADE = unchecked((Hash)(-3104983138485256141L));
         public const Hash RENDER_SCRIPT_CAMS = Hash.RENDER_SCRIPT_CAMS;
         public const Hash SET_FOCUS_AREA = (Hash)658611830838489950L;
+        public const Hash CLEAR_FOCUS = Hash.CLEAR_FOCUS;
         public const Hash DRAW_MARKER = (Hash)2902427857584726153L;
         public const Hash DRAW_MARKER_SPRITE = unchecked((Hash)(-4939229729199161819L));
         public const Hash GET_DISABLED_CONTROL_NORMAL = unchecked((Hash)(-2783653480577029081L));

@@ -177,7 +177,7 @@ namespace ModdedCamera
                     if (_interpolator != null)
                     {
                         _interpolator.Start();
-                        _lastFrameMs = Utils.NowMs();
+                        _lastFrameMs = Game.GameTime;
                         Logger.Info("Interpolator playback STARTED");
                     }
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
@@ -505,7 +505,7 @@ namespace ModdedCamera
                 _interpolator.Start();
                 _startNodeIndex = 0;
                 Logger.Info("Interpolator restarted");
-                _lastFrameMs = Utils.NowMs();
+                _lastFrameMs = Game.GameTime;
             }
             catch (Exception ex)
             {
@@ -581,10 +581,11 @@ namespace ModdedCamera
                 Vector3 interpPos;
                 Vector3 interpRot;
                 float interpFov;
-                long realNow = Utils.NowMs();
-                long frameDelta = realNow - _lastFrameMs;
-                _lastFrameMs = realNow;
-                if (frameDelta < 0) frameDelta = 0;
+                // Игровой тик (а не реальные часы): при slow-mo (SET_TIME_SCALE)
+                // камера тоже замедляется и остаётся синхронна с миром.
+                int gameNow = Game.GameTime;
+                long frameDelta = (long)unchecked((uint)(gameNow - (int)_lastFrameMs));
+                _lastFrameMs = gameNow;
                 if (frameDelta > 250) frameDelta = 250;
                 _interpolator.Advance(frameDelta);
                 _interpolator.UpdateAt(_interpolator.ElapsedMs, out interpPos, out interpRot, out interpFov);
@@ -611,11 +612,21 @@ namespace ModdedCamera
                     Logger.Warn("UpdateRenderScene: Camera not available");
                     return;
                 }
+                // Не трогаем фокус стриминга пока идёт выходной фейд: ExitCameraView
+                // уже сделал CLEAR_FOCUS, повторный SET_FOCUS_AREA вернул бы залипание.
+                if (_fadeMachine != null && (_fadeMachine.State == FadeState.FadingOutExit || _fadeMachine.State == FadeState.Deactivating))
+                    return;
 
                 bool shouldRender = _renderSceneTimer.Enabled && _renderSceneTimer.Check();
                 if (shouldRender)
                 {
-                    CameraRenderer.UpdateFocusArea(_mainCamera.Position);
+                    // Стриминг держим на игроке (он телепортируется за камерой),
+                    // а не на свободной камере — иначе мир вокруг игрока выгружается.
+                    Ped player = Game.Player.Character;
+                    if (player != null && player.Exists())
+                        CameraRenderer.UpdateFocusArea(player.Position);
+                    else
+                        CameraRenderer.UpdateFocusArea(_mainCamera.Position);
                     _renderSceneTimer.Reset();
                 }
             }

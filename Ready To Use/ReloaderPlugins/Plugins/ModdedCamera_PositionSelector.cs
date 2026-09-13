@@ -283,7 +283,10 @@ namespace ModdedCamera
                     {
                         // Стриминг — на игроке (каждые 500мс), а не на свободной
                         // камере: иначе область героя выгружается и игра встаёт.
-                        if (_focusTimer != null && _focusTimer.Enabled && _focusTimer.Check())
+                        // Во время выходного фейда фокус уже сброшен CLEAR_FOCUS в
+                        // ExitCameraView — не возвращаем залипание.
+                        bool fadingOut = _fadeMachine != null && (_fadeMachine.State == FadeState.FadingOutExit || _fadeMachine.State == FadeState.Deactivating);
+                        if (!fadingOut && _focusTimer != null && _focusTimer.Enabled && _focusTimer.Check())
                         {
                             try
                             {

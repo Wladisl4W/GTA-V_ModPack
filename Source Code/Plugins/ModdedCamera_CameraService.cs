@@ -348,7 +348,12 @@ namespace ModdedCamera.Services
         {
             try
             {
-                if (SplineCamera != null && IsSplineCamActive)
+                // Гасим флаг даже если камера уже не активна (гонка с AbortPendingFade
+                // или повторный Stop из меню) — иначе _splineCamWasUsed залипает true
+                // и SplineCamera.Update тикает вечно.
+                bool wasActive = SplineCamera != null && IsSplineCamActive;
+                bool hadSession = _splineCamWasUsed;
+                if (wasActive)
                 {
                     long realMs = Utils.NowMs() - _playbackStartMs;
                     Logger.Info("CameraService: Stopping playback. Real elapsed: " + realMs + " ms; nominal duration: "
@@ -356,15 +361,21 @@ namespace ModdedCamera.Services
                         + SplineCamera.CurrentDurationMs + " ms; speed x" + SplineCamera.Speed.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                         + ". Ratio real/nominal: " + (SplineCamera.NominalDurationMs > 0 ? ((double)realMs / SplineCamera.NominalDurationMs).ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "n/a"));
                     Logger.Info("CameraService: Stopping playback");
-                    SplineCamera.ExitCameraView();
-                    _splineCamWasUsed = false;
+                    try { SplineCamera.ExitCameraView(); } catch (Exception ex2) { Logger.Debug("StopPlayback ExitCameraView: " + ex2.Message); }
                 }
+                // Флаг чистим в любом случае, даже если Exit бросил исключение.
+                if (hadSession) _splineCamWasUsed = false;
+                else if (wasActive) _splineCamWasUsed = false;
+
                 TeleportPlayerBehindCamera();
                 RestorePlayerState();
             }
             catch (Exception ex)
             {
+                // Страховка: не оставляем вечный тик spline.
+                _splineCamWasUsed = false;
                 Logger.Error(ex, "CameraService: Error in StopPlayback");
+                try { RestorePlayerState(); } catch { }
             }
         }
 
@@ -432,16 +443,33 @@ namespace ModdedCamera.Services
             {
                 if (!_isPlayerFollowing) return;
                 var player = Game.Player.Character;
-                if (player == null) return;
-                player.IsVisible = _savedPlayerVisible;
-                player.IsCollisionEnabled = _savedPlayerCollision;
-                player.IsInvincible = _savedPlayerInvincible;
-                player.IsPositionFrozen = _savedPlayerPosFrozen;
+                // Флаг чистим ВСЕГДА, даже если пед временно null (стриминг/телепорт/
+                // Menyoo-карта в океане). Иначе _isPlayerFollowing залипает true
+                // и UpdatePlayerFollow вечно телепортирует к мёртвой камере.
+                bool restored = false;
+                if (player != null && player.Exists())
+                {
+                    try
+                    {
+                        player.IsVisible = _savedPlayerVisible;
+                        player.IsCollisionEnabled = _savedPlayerCollision;
+                        player.IsInvincible = _savedPlayerInvincible;
+                        player.IsPositionFrozen = _savedPlayerPosFrozen;
+                        restored = true;
+                    }
+                    catch (Exception ex2)
+                    {
+                        Logger.Debug("RestorePlayerState apply warning: " + ex2.Message);
+                    }
+                }
                 _isPlayerFollowing = false;
-                Logger.Info("CameraService: Player state restored");
+                if (restored) Logger.Info("CameraService: Player state restored");
+                else Logger.Info("CameraService: Player follow flag cleared (player not available)");
             }
             catch (Exception ex)
             {
+                // Страховка: даже при исключении флаг не должен залипнуть.
+                _isPlayerFollowing = false;
                 Logger.Error(ex, "CameraService: Error restoring player state");
             }
         }
@@ -560,8 +588,8 @@ namespace ModdedCamera.Services
                 }
                 if (Math.Abs(target - _lastTimeScale) > 0.001f)
                 {
-                    _lastTimeScale = target;
                     Function.Call(Hash.SET_TIME_SCALE, target);
+                    _lastTimeScale = target;
                 }
             }
             catch (Exception ex)
@@ -579,7 +607,11 @@ namespace ModdedCamera.Services
                 CameraRenderer.ClearFocus();
                 RestorePlayerState();
                 _lastTimeScale = 1f;
-                Function.Call(Hash.SET_TIME_SCALE, 1f);
+                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                _isPlayerFollowing = false;
+                _selectorExitPending = false;
+                _selectorWasUsed = false;
+                _splineCamWasUsed = false;
 
                 if (SplineCamera != null)
                 {
@@ -599,19 +631,29 @@ namespace ModdedCamera.Services
 
                 ScriptCameraDirector.StopRendering(false);
                 Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
+                CameraRenderer.ClearFocus();
 
-                Game.Player.Character.IsPositionFrozen = false;
+                try { Game.Player.Character.IsPositionFrozen = false; } catch { }
 
                 SplineCamera = new SplineCamera();
                 PositionSelector = new PositionSelector(Vector3.Zero, Vector3.Zero);
                 _selectorWasUsed = false;
                 _splineCamWasUsed = false;
+                _selectorExitPending = false;
+                _isPlayerFollowing = false;
                 ApplyCameraSettings();
 
                 Logger.Info("CameraService: ResetAll completed");
             }
             catch (Exception ex)
             {
+                _isPlayerFollowing = false;
+                _selectorExitPending = false;
+                _selectorWasUsed = false;
+                _splineCamWasUsed = false;
+                _lastTimeScale = 1f;
+                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                try { CameraRenderer.ClearFocus(); } catch { }
                 Logger.Error(ex, "CameraService: Error in ResetAll");
             }
         }
@@ -624,7 +666,9 @@ namespace ModdedCamera.Services
                 Function.Call(NativeHashes.UNDO_SCREEN_FADE);
                 CameraRenderer.ClearFocus();
                 _lastTimeScale = 1f;
-                Function.Call(Hash.SET_TIME_SCALE, 1f);
+                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                _isPlayerFollowing = false;
+                _selectorExitPending = false;
 
                 if (SplineCamera != null)
                 {
@@ -648,12 +692,23 @@ namespace ModdedCamera.Services
                 ScriptCameraDirector.StopRendering(false);
                 Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
                 CameraRenderer.ClearFocus();
-                RestorePlayerState();
+                try { RestorePlayerState(); } catch { }
+                _isPlayerFollowing = false;
+                _selectorExitPending = false;
+                _selectorWasUsed = false;
+                _splineCamWasUsed = false;
 
                 Logger.Info("CameraService: Disposed");
             }
             catch (Exception ex)
             {
+                _isPlayerFollowing = false;
+                _selectorExitPending = false;
+                _selectorWasUsed = false;
+                _splineCamWasUsed = false;
+                _lastTimeScale = 1f;
+                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                try { CameraRenderer.ClearFocus(); } catch { }
                 Logger.Error(ex, "CameraService: Error during Dispose");
             }
         }

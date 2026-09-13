@@ -283,12 +283,11 @@ namespace ModdedCamera
         {
             try
             {
-                // Не сбрасываем фокус в (0,0,0): это привязывает детализацию/стриминг
-                // мира к началу карты и вызывает фризы ("слайд-шоу" у персонажа).
-                // Возвращаем фокус на игрока, как делает игра по умолчанию.
-                var p = Game.Player.Character;
-                if (p != null && p.Exists())
-                    Function.Call(NativeHashes.SET_FOCUS_AREA, p.Position.X, p.Position.Y, p.Position.Z);
+                // Настоящий сброс фокуса стриминга. Предыдущий вариант ставил
+                // SET_FOCUS_AREA на точку выхода — фокус залипал там навсегда:
+                // карта вокруг игрока переставала грузиться, педы вставали
+                // рывками. CLEAR_FOCUS возвращает управление движку.
+                Function.Call(NativeHashes.CLEAR_FOCUS);
             }
             catch (Exception ex)
             {
