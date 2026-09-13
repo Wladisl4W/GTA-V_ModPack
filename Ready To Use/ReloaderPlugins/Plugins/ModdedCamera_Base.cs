@@ -200,4 +200,17 @@ namespace ModdedCamera
         public const Hash GET_CONTROL_VALUE = unchecked((Hash)(-1424092350868114077L));
         public const Hash GET_CONTROL_ACTION_NAME = (Hash)331533201183454215L;
     }
+
+    /// <summary>
+    /// Per-node interpolation mode for the new per-node interpolation system.
+    /// Linear = straight line, no smoothing.
+    /// SmoothStop = camera eases to a full stop at the node, then eases out.
+    /// SmoothNoStop = camera cuts the corner with a smooth Bezier arc, maintaining speed.
+    /// </summary>
+    public enum NodeInterpMode
+    {
+        Linear = 0,
+        SmoothStop = 1,
+        SmoothNoStop = 2
+    }
 }

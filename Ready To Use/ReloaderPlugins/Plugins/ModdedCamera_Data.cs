@@ -230,6 +230,7 @@ namespace ModdedCamera
                     path.Durations.Add(path.DefaultDuration);
             }
             // Backward compat: old paths without NodeInterpolationModes
+            // New per-node system: default all nodes to Linear (0)
             if (path.NodeInterpolationModes == null || path.NodeInterpolationModes.Count == 0)
             {
                 // Convert old int Speed (1-100, normal=3) to new float multiplier (normal=1.0)
@@ -250,7 +251,7 @@ namespace ModdedCamera
                 path.NodeInterpolationModes = new List<int>();
                 int nodeCount = (path.Positions != null) ? path.Positions.Count : 0;
                 for (int i = 0; i < nodeCount; i++)
-                    path.NodeInterpolationModes.Add(path.InterpolationMode);
+                    path.NodeInterpolationModes.Add(0); // Linear = 0
             }
             path.Version = 1;
             return path;

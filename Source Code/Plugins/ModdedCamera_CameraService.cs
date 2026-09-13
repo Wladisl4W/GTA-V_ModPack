@@ -292,7 +292,7 @@ namespace ModdedCamera.Services
                     return true;
                 }
 
-                SplineCamera.AddNode(pos, rot, NodeDuration, 2, Color.White.ToArgb(), CurrentFov);
+                SplineCamera.AddNode(pos, rot, NodeDuration, 0, Color.White.ToArgb(), CurrentFov);
                 GTA.UI.Notification.PostTicker("Узел добавлен\nПоз: (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")\nДлительность: " + ((float)NodeDuration / 1000f).ToString("F2") + "с", false, false);
 
                 Logger.Info("CameraService: Node added at (" + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1") + ")");
@@ -505,7 +505,7 @@ namespace ModdedCamera.Services
                 for (int i = 0; i < nodes.Count; i++)
                 {
                     int dur = (path.Durations.Count > i) ? path.Durations[i] : path.DefaultDuration;
-                    int nodeMode = (path.NodeInterpolationModes.Count > i) ? path.NodeInterpolationModes[i] : 2;
+                    int nodeMode = (path.NodeInterpolationModes.Count > i) ? path.NodeInterpolationModes[i] : 0;
                     int nodeColor = path.GetNodeColor(i);
                     int nodeFov = (path.NodeFovs != null && i < path.NodeFovs.Count) ? path.NodeFovs[i] : 50;
                     SplineCamera.AddNode(nodes[i].Item1, nodes[i].Item2, dur, nodeMode, nodeColor, nodeFov);

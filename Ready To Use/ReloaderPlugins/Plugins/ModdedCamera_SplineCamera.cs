@@ -16,7 +16,7 @@ namespace ModdedCamera
         private List<Tuple<Vector3, Vector3>> _nodes;
         private List<int> _durations = new List<int>();
         private List<int> _baseDurations = new List<int>();
-        private List<int> _nodeInterpolationModes = new List<int>();
+        private List<NodeInterpMode> _nodeInterpModes = new List<NodeInterpMode>();
         private List<int> _nodeColors = new List<int>();
         private List<int> _nodeFovs = new List<int>();
         private int _defaultDuration = 5000;
@@ -270,7 +270,7 @@ namespace ModdedCamera
                 _baseDurations.Add(duration);
                 int adjustedDuration = (int)Math.Max(0, duration / _currentSpeedMult);
                 _durations.Add(adjustedDuration);
-                _nodeInterpolationModes.Add(interpolationMode);
+                _nodeInterpModes.Add((NodeInterpMode)interpolationMode);
                 _nodeColors.Add(color);
                 _nodeFovs.Add(fov);
                 _defaultDuration = duration;
@@ -309,7 +309,7 @@ namespace ModdedCamera
                 _nodes.Clear();
                 _durations.Clear();
                 _baseDurations.Clear();
-                _nodeInterpolationModes.Clear();
+                _nodeInterpModes.Clear();
                 _nodeColors.Clear();
                 _nodeFovs.Clear();
                 _startNodeIndex = 0;
@@ -329,20 +329,20 @@ namespace ModdedCamera
 
                 var savedNodes = new List<Tuple<Vector3, Vector3>>(_nodes);
                 var savedBaseDurations = new List<int>(_baseDurations);
-                var savedModes = new List<int>(_nodeInterpolationModes);
+                var savedModes = new List<NodeInterpMode>(_nodeInterpModes);
                 var savedColors = new List<int>(_nodeColors);
                 var savedFovs = new List<int>(_nodeFovs);
 
                 _nodes.Clear();
                 _durations.Clear();
                 _baseDurations.Clear();
-                _nodeInterpolationModes.Clear();
+                _nodeInterpModes.Clear();
                 _nodeColors.Clear();
 
                 for (int i = 0; i < savedNodes.Count; i++)
                 {
                     int originalDuration = (savedBaseDurations.Count > i) ? savedBaseDurations[i] : _defaultDuration;
-                    int nodeMode = (savedModes.Count > i) ? savedModes[i] : 2;
+                    int nodeMode = (savedModes.Count > i) ? (int)savedModes[i] : 0;
                     int nodeColor = (savedColors.Count > i) ? savedColors[i] : Color.White.ToArgb();
                     int nodeFov = (savedFovs.Count > i) ? savedFovs[i] : _defaultFov;
                     AddNode(savedNodes[i].Item1, savedNodes[i].Item2, originalDuration, nodeMode, nodeColor, nodeFov);
@@ -357,14 +357,16 @@ namespace ModdedCamera
 
         public List<int> GetNodeInterpolationModes()
         {
-            return new List<int>(_nodeInterpolationModes);
+            var result = new List<int>(_nodeInterpModes.Count);
+            foreach (var m in _nodeInterpModes) result.Add((int)m);
+            return result;
         }
 
         public void SetNodeInterpolationMode(int index, int mode)
         {
-            if (index >= 0 && index < _nodeInterpolationModes.Count)
+            if (index >= 0 && index < _nodeInterpModes.Count)
             {
-                _nodeInterpolationModes[index] = mode;
+                _nodeInterpModes[index] = (NodeInterpMode)mode;
             }
         }
 
@@ -407,7 +409,7 @@ namespace ModdedCamera
                 _nodes.RemoveAt(index);
                 _baseDurations.RemoveAt(index);
                 _durations.RemoveAt(index);
-                _nodeInterpolationModes.RemoveAt(index);
+                _nodeInterpModes.RemoveAt(index);
                 _nodeColors.RemoveAt(index);
                 _nodeFovs.RemoveAt(index);
                 if (_startNodeIndex > index) _startNodeIndex--;
@@ -430,7 +432,7 @@ namespace ModdedCamera
                 _nodes.Insert(insertAt, new Tuple<Vector3, Vector3>(_nodes[index].Item1, _nodes[index].Item2));
                 _baseDurations.Insert(insertAt, _baseDurations[index]);
                 _durations.Insert(insertAt, _durations[index]);
-                _nodeInterpolationModes.Insert(insertAt, _nodeInterpolationModes[index]);
+                _nodeInterpModes.Insert(insertAt, _nodeInterpModes[index]);
                 _nodeColors.Insert(insertAt, _nodeColors[index]);
                 _nodeFovs.Insert(insertAt, _nodeFovs[index]);
                 Logger.Info("Node duplicated at index " + insertAt + ", total: " + _nodes.Count);

@@ -568,7 +568,7 @@ namespace ModdedCamera.Services
                         int duration = spline.GetDurations()[i];
                         int nodeMode = (i < spline.GetNodeInterpolationModes().Count) ? spline.GetNodeInterpolationModes()[i] : 2;
 
-                        string modeLabel = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно (без остановки)" : "Плавно";
+                        string modeLabel = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно с остановкой" : "Плавно без остановки";
                         float durSec = (float)duration / 1000f;
                         totalSec += durSec;
                         string label = "Узел " + (i + 1) + "  (" + durSec.ToString("F2") + "с, " + modeLabel + ") | всего: " + totalSec.ToString("F2") + "с";
@@ -611,13 +611,13 @@ namespace ModdedCamera.Services
                         // Interpolation mode
                         NativeListItem<string> modeItem = new NativeListItem<string>("Интерполяция", "Режим движения камеры для узла");
                         modeItem.Items.Add("Линейно");
-                        modeItem.Items.Add("Плавно (без остановки)");
-                        modeItem.Items.Add("Плавно");
-                        modeItem.SelectedItem = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно (без остановки)" : "Плавно";
+                        modeItem.Items.Add("Плавно с остановкой");
+                        modeItem.Items.Add("Плавно без остановки");
+                        modeItem.SelectedItem = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно с остановкой" : "Плавно без остановки";
                         int capturedIndex2 = nodeIndex;
                         modeItem.ItemChanged += delegate(object sender, ItemChangedEventArgs<string> args)
                         {
-                            int newMode = (args.Object == "Линейно") ? 0 : (args.Object == "Плавно (без остановки)") ? 1 : 2;
+                            int newMode = (args.Object == "Линейно") ? 0 : (args.Object == "Плавно с остановкой") ? 1 : 2;
                             var sp = _cameraService.SplineCamera;
                             if (sp != null)
                             {
