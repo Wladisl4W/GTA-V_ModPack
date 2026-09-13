@@ -133,8 +133,8 @@ namespace ModdedCamera
                 Logger.Info("Disposing ModdedCamera...");
                 if (_cameraService != null) _cameraService.Dispose();
                 if (_menuService != null) _menuService.Dispose();
-                Logger.Flush();
                 Logger.Info("ModdedCamera disposed successfully.");
+                Logger.Flush();
             }
             catch (Exception ex)
             {

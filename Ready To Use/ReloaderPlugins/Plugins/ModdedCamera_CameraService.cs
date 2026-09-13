@@ -367,6 +367,8 @@ namespace ModdedCamera.Services
                 if (hadSession) _splineCamWasUsed = false;
                 else if (wasActive) _splineCamWasUsed = false;
 
+                _lastTimeScale = 1f;
+                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
                 TeleportPlayerBehindCamera();
                 RestorePlayerState();
             }
@@ -580,7 +582,7 @@ namespace ModdedCamera.Services
                 // ВЕСЬ мир пропорционально, чтобы камера и мир двигались синхронно.
                 // При выходе из камеры (IsSplineCamActive=false) время всегда сбрасывается в 1.
                 float target = 1f;
-                if (IsSplineCamActive && SplineCamera != null)
+                if (_splineCamWasUsed && IsSplineCamActive && SplineCamera != null)
                 {
                     float s = CurrentSpeed;
                     if (s > 0.05f && s < 1f)

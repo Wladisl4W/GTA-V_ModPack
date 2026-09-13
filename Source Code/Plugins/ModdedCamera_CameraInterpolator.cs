@@ -6,27 +6,27 @@ using GTA.Math;
 namespace ModdedCamera
 {
     /// <summary>
-    /// Pure linear baseline: straight lines between waypoints, constant speed
-    /// within each segment (segment duration defines speed). All interpolation
-    /// modes were removed and are ignored - nodeModes / InterpolationMode are
-    /// accepted only for backward compatibility (callers, menu, saves).
+    /// Camera path interpolation modeled after Rockstar Editor blend markers.
+    /// Linear segments stay exact and predictable. SmoothStop keeps the node
+    /// exact and eases to/from a full stop. SmoothNoStop treats the marker as
+    /// an approximate guide point, like Rockstar Editor Smooth Blend: the
+    /// camera bends near it instead of being forced to hit it exactly.
     /// Rotation: the look direction is slerped (constant angular velocity),
     /// roll is lerped along the shortest path. Per-component Euler lerp is
     /// NOT used because it bends the view direction whenever more than one
     /// axis changes at once.
-    /// TODO: design and implement the new interpolation system on top of this.
     /// </summary>
     public class CameraInterpolator
     {
         private List<Vector3> _positions;
         private List<Vector3> _rotations;
         private List<int> _durations;
+        private List<int> _nodeModes;
         private List<int> _fovs;
         private bool _isPlaying = false;
         private long _playbackElapsedMs = 0;
         private int _totalDurationMs = 0;
 
-        // Accepted but ignored: kept so existing callers keep compiling.
         private int _interpMode = 0;
         public int InterpolationMode
         {
@@ -60,6 +60,7 @@ namespace ModdedCamera
             _positions = new List<Vector3>();
             _rotations = new List<Vector3>();
             _durations = new List<int>();
+            _nodeModes = new List<int>();
             _fovs = new List<int>();
         }
 
@@ -75,7 +76,6 @@ namespace ModdedCamera
 
         public void SetPath(List<Vector3> positions, List<Vector3> rotations, List<int> durations, List<int> nodeModes, List<int> fovs)
         {
-            // nodeModes is intentionally ignored: pure linear baseline.
             try
             {
                 if (positions == null) throw new ArgumentNullException("positions");
@@ -90,6 +90,14 @@ namespace ModdedCamera
                 _durations = new List<int>(durations.Count);
                 for (int i = 0; i < durations.Count; i++)
                     _durations.Add(Math.Max(10, durations[i]));
+
+                _nodeModes = new List<int>();
+                int modeCount = (nodeModes != null) ? nodeModes.Count : 0;
+                for (int i = 0; i < _positions.Count; i++)
+                {
+                    int mode = (i < modeCount) ? nodeModes[i] : _interpMode;
+                    _nodeModes.Add(NormalizeMode(mode));
+                }
 
                 _fovs = new List<int>();
                 int fovCount = (fovs != null) ? fovs.Count : 0;
@@ -182,14 +190,14 @@ namespace ModdedCamera
                     accumulatedMs += segmentDuration;
                 }
 
-                // Past the end, or inside the final dwell period (the last
-                // duration is a hold at the final node, not a segment): park
-                // on the last waypoint.
+                // The last node duration is a still hold. When the cycle wraps,
+                // playback cuts sharply back to node 1 instead of flying there.
                 if (currentSegment == -1 || currentSegment == _durations.Count - 1)
                 {
-                    position = _positions[_positions.Count - 1];
-                    rotation = _rotations[_rotations.Count - 1];
-                    if (_fovs != null && _fovs.Count > 0) fov = _fovs[_fovs.Count - 1];
+                    int lastNode = _positions.Count - 1;
+                    position = _positions[lastNode];
+                    rotation = _rotations[lastNode];
+                    if (_fovs != null && _fovs.Count > 0) fov = _fovs[lastNode];
                     if (currentSegment == -1) PlaybackProgress = 1f;
                     return;
                 }
@@ -199,11 +207,15 @@ namespace ModdedCamera
                 float t = (segmentDurationMs > 0) ? (float)(segmentElapsedMs / segmentDurationMs) : 0f;
                 t = Math.Min(Math.Max(t, 0f), 1f);
 
-                position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], t);
-                rotation = InterpolateRotationSlerp(currentSegment, t);
+                float interpT = ApplyStopTiming(currentSegment, t);
+
+                position = InterpolatePosition(currentSegment, t);
+                rotation = InterpolateRotation(currentSegment, t, interpT);
 
                 if (_fovs != null && currentSegment + 1 < _fovs.Count)
-                    fov = _fovs[currentSegment] + (_fovs[currentSegment + 1] - _fovs[currentSegment]) * t;
+                {
+                    fov = _fovs[currentSegment] + (_fovs[currentSegment + 1] - _fovs[currentSegment]) * interpT;
+                }
             }
             catch (Exception ex)
             {
@@ -214,24 +226,312 @@ namespace ModdedCamera
             }
         }
 
+        private int GetNodeMode(int node)
+        {
+            if (_nodeModes != null && node >= 0 && node < _nodeModes.Count)
+                return NormalizeMode(_nodeModes[node]);
+            return NormalizeMode(_interpMode);
+        }
+
+        private static int NormalizeMode(int mode)
+        {
+            return (mode == 0 || mode == 1 || mode == 2) ? mode : 0;
+        }
+
+        private float ApplyStopTiming(int segment, float t)
+        {
+            bool startStop = GetNodeMode(segment) == 1;
+            bool endStop = GetNodeMode(segment + 1) == 1;
+
+            if (startStop && endStop)
+                return SmoothStep(t);
+
+            if (startStop)
+                return EaseOutOfStop(t);
+
+            if (endStop)
+                return EaseIntoStop(t);
+
+            return t;
+        }
+
+        private static float SmoothStep(float t)
+        {
+            return t * t * (3f - 2f * t);
+        }
+
+        // Starts at rest and reaches ordinary segment speed at t = 1.
+        private static float EaseOutOfStop(float t)
+        {
+            return -t * t * t + 2f * t * t;
+        }
+
+        // Arrives at rest while retaining ordinary segment speed at t = 0.
+        private static float EaseIntoStop(float t)
+        {
+            return -t * t * t + t * t + t;
+        }
+
+        private Vector3 InterpolatePosition(int segment, float t)
+        {
+            int startMode = GetNodeMode(segment);
+            int endMode = GetNodeMode(segment + 1);
+
+            if (startMode == 0 && endMode == 0)
+                return Vector3.Lerp(_positions[segment], _positions[segment + 1], t);
+
+            if (startMode != 2 && endMode != 2)
+                return Vector3.Lerp(_positions[segment], _positions[segment + 1], ApplyStopTiming(segment, t));
+
+            Vector3 start = GetNodeBlendPosition(segment);
+            Vector3 end = GetNodeBlendPosition(segment + 1);
+            Vector3 tangentStart = GetNodeTangent(segment, segment);
+            Vector3 tangentEnd = GetNodeTangent(segment + 1, segment);
+            return CubicHermite(start, tangentStart, end, tangentEnd, t);
+        }
+
+        private Vector3 GetNodeBlendPosition(int node)
+        {
+            if (GetNodeMode(node) != 2 || node <= 0 || node >= _positions.Count - 1)
+                return _positions[node];
+
+            // Uniform cubic B-spline point at this marker. The real marker
+            // strongly pulls the path, but the camera is allowed to pass near
+            // it instead of snapping exactly onto it.
+            return (_positions[node - 1] + _positions[node] * 4f + _positions[node + 1]) * (1f / 6f);
+        }
+
+        private Vector3 GetNodeTangent(int node, int segment)
+        {
+            int mode = GetNodeMode(node);
+            if (mode == 1)
+                return Vector3.Zero;
+
+            Vector3 segmentDelta = GetNodeBlendPosition(segment + 1) - GetNodeBlendPosition(segment);
+            if (mode == 0 || node <= 0 || node >= _positions.Count - 1)
+                return segmentDelta;
+
+            float incomingDuration = Math.Max(10, _durations[node - 1]);
+            float outgoingDuration = Math.Max(10, _durations[node]);
+            float segmentDuration = Math.Max(10, _durations[segment]);
+            Vector3 incomingVelocity = (GetNodeBlendPosition(node) - GetNodeBlendPosition(node - 1)) * (1f / incomingDuration);
+            Vector3 outgoingVelocity = (GetNodeBlendPosition(node + 1) - GetNodeBlendPosition(node)) * (1f / outgoingDuration);
+            Vector3 blendedVelocity = (incomingVelocity + outgoingVelocity) * 0.5f;
+            return blendedVelocity * segmentDuration;
+        }
+
+        private static Vector3 CubicHermite(Vector3 p0, Vector3 m0, Vector3 p1, Vector3 m1, float t)
+        {
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float h00 = 2f * t3 - 3f * t2 + 1f;
+            float h10 = t3 - 2f * t2 + t;
+            float h01 = -2f * t3 + 3f * t2;
+            float h11 = t3 - t2;
+            return p0 * h00 + m0 * h10 + p1 * h01 + m1 * h11;
+        }
+
         // Rotation with constant angular velocity: slerp the look direction
         // between the two endpoint orientations, lerp roll shortest-path.
         // Per-component Euler lerp is deliberately avoided: it curves the
         // view direction and varies its speed whenever pitch and yaw change
         // together.
+        private Vector3 InterpolateRotation(int segment, float rawT, float timedT)
+        {
+            int startMode = GetNodeMode(segment);
+            int endMode = GetNodeMode(segment + 1);
+
+            if (startMode != 2 && endMode != 2)
+                return InterpolateRotationSlerp(segment, timedT);
+
+            return InterpolateRotationSmoothBlend(segment, rawT);
+        }
+
+        private Vector3 InterpolateRotationSmoothBlend(int segment, float t)
+        {
+            return InterpolateRotationEulerSmoothBlend(segment, t);
+        }
+
+        private Vector3 InterpolateRotationEulerSmoothBlend(int segment, float t)
+        {
+            float pitch0 = GetNodeBlendPitch(segment);
+            float pitch1 = GetNodeBlendPitch(segment + 1);
+            float yaw0 = GetNodeBlendYaw(segment);
+            float yaw1 = UnwrapAngleNear(GetNodeBlendYaw(segment + 1), yaw0);
+            float roll0 = GetNodeBlendRoll(segment);
+            float roll1 = UnwrapAngleNear(GetNodeBlendRoll(segment + 1), roll0);
+
+            float pitch = CubicHermite(pitch0, GetPitchTangent(segment, segment), pitch1, GetPitchTangent(segment + 1, segment), t);
+            float yaw = CubicHermite(yaw0, GetYawTangent(segment, segment), yaw1, GetYawTangent(segment + 1, segment), t);
+            float roll = CubicHermite(roll0, GetRollTangent(segment, segment), roll1, GetRollTangent(segment + 1, segment), t);
+            return new Vector3(pitch, roll, yaw);
+        }
+
+        private Vector3 GetNodeBlendDirection(int node)
+        {
+            if (GetNodeMode(node) != 2 || node <= 0 || node >= _rotations.Count - 1)
+                return RotationToDirection(_rotations[node]);
+
+            Vector3 previous = RotationToDirection(_rotations[node - 1]);
+            Vector3 current = RotationToDirection(_rotations[node]);
+            Vector3 next = RotationToDirection(_rotations[node + 1]);
+            Vector3 blended = (previous + current * 4f + next) * (1f / 6f);
+            float len = blended.Length();
+            return (len > 0.000001f) ? blended * (1f / len) : current;
+        }
+
+        private Vector3 GetDirectionTangent(int node, int segment)
+        {
+            int mode = GetNodeMode(node);
+            if (mode == 1)
+                return Vector3.Zero;
+
+            Vector3 segmentDelta = GetNodeBlendDirection(segment + 1) - GetNodeBlendDirection(segment);
+            if (mode == 0 || node <= 0 || node >= _rotations.Count - 1)
+                return segmentDelta;
+
+            float incomingDuration = Math.Max(10, _durations[node - 1]);
+            float outgoingDuration = Math.Max(10, _durations[node]);
+            float segmentDuration = Math.Max(10, _durations[segment]);
+            Vector3 incomingVelocity = (GetNodeBlendDirection(node) - GetNodeBlendDirection(node - 1)) * (1f / incomingDuration);
+            Vector3 outgoingVelocity = (GetNodeBlendDirection(node + 1) - GetNodeBlendDirection(node)) * (1f / outgoingDuration);
+            Vector3 blendedVelocity = (incomingVelocity + outgoingVelocity) * 0.5f;
+            return blendedVelocity * segmentDuration;
+        }
+
+        private float InterpolateRollSmoothBlend(int segment, float t)
+        {
+            float r0 = GetNodeBlendRoll(segment);
+            float r1 = UnwrapAngleNear(GetNodeBlendRoll(segment + 1), r0);
+            float m0 = GetRollTangent(segment, segment);
+            float m1 = GetRollTangent(segment + 1, segment);
+            return CubicHermite(r0, m0, r1, m1, t);
+        }
+
+        private float GetNodeBlendYaw(int node)
+        {
+            if (GetNodeMode(node) != 2 || node <= 0 || node >= _rotations.Count - 1)
+                return _rotations[node].Z;
+
+            float current = _rotations[node].Z;
+            float previous = UnwrapAngleNear(_rotations[node - 1].Z, current);
+            float next = UnwrapAngleNear(_rotations[node + 1].Z, current);
+            return (previous + current * 4f + next) * (1f / 6f);
+        }
+
+        private float GetNodeBlendPitch(int node)
+        {
+            if (GetNodeMode(node) != 2 || node <= 0 || node >= _rotations.Count - 1)
+                return _rotations[node].X;
+
+            float current = _rotations[node].X;
+            float previous = UnwrapAngleNear(_rotations[node - 1].X, current);
+            float next = UnwrapAngleNear(_rotations[node + 1].X, current);
+            return (previous + current * 4f + next) * (1f / 6f);
+        }
+
+        private float GetNodeBlendRoll(int node)
+        {
+            if (GetNodeMode(node) != 2 || node <= 0 || node >= _rotations.Count - 1)
+                return _rotations[node].Y;
+
+            float current = _rotations[node].Y;
+            float previous = UnwrapAngleNear(_rotations[node - 1].Y, current);
+            float next = UnwrapAngleNear(_rotations[node + 1].Y, current);
+            return (previous + current * 4f + next) * (1f / 6f);
+        }
+
+        private float GetRollTangent(int node, int segment)
+        {
+            int mode = GetNodeMode(node);
+            if (mode == 1)
+                return 0f;
+
+            float segmentStart = GetNodeBlendRoll(segment);
+            float segmentEnd = UnwrapAngleNear(GetNodeBlendRoll(segment + 1), segmentStart);
+            float segmentDelta = segmentEnd - segmentStart;
+            if (mode == 0 || node <= 0 || node >= _rotations.Count - 1)
+                return segmentDelta;
+
+            float center = GetNodeBlendRoll(node);
+            float previous = UnwrapAngleNear(GetNodeBlendRoll(node - 1), center);
+            float next = UnwrapAngleNear(GetNodeBlendRoll(node + 1), center);
+            float incomingDuration = Math.Max(10, _durations[node - 1]);
+            float outgoingDuration = Math.Max(10, _durations[node]);
+            float segmentDuration = Math.Max(10, _durations[segment]);
+            float incomingVelocity = (center - previous) / incomingDuration;
+            float outgoingVelocity = (next - center) / outgoingDuration;
+            return ((incomingVelocity + outgoingVelocity) * 0.5f) * segmentDuration;
+        }
+
+        private float GetYawTangent(int node, int segment)
+        {
+            return GetAngleTangent(node, segment, true);
+        }
+
+        private float GetPitchTangent(int node, int segment)
+        {
+            return GetAngleTangent(node, segment, false);
+        }
+
+        private float GetAngleTangent(int node, int segment, bool yaw)
+        {
+            int mode = GetNodeMode(node);
+            if (mode == 1)
+                return 0f;
+
+            float segmentStart = yaw ? GetNodeBlendYaw(segment) : GetNodeBlendPitch(segment);
+            float segmentEnd = yaw ? GetNodeBlendYaw(segment + 1) : GetNodeBlendPitch(segment + 1);
+            segmentEnd = UnwrapAngleNear(segmentEnd, segmentStart);
+            float segmentDelta = segmentEnd - segmentStart;
+            if (mode == 0 || node <= 0 || node >= _rotations.Count - 1)
+                return segmentDelta;
+
+            float center = yaw ? GetNodeBlendYaw(node) : GetNodeBlendPitch(node);
+            float previous = yaw ? GetNodeBlendYaw(node - 1) : GetNodeBlendPitch(node - 1);
+            float next = yaw ? GetNodeBlendYaw(node + 1) : GetNodeBlendPitch(node + 1);
+            previous = UnwrapAngleNear(previous, center);
+            next = UnwrapAngleNear(next, center);
+            float incomingDuration = Math.Max(10, _durations[node - 1]);
+            float outgoingDuration = Math.Max(10, _durations[node]);
+            float segmentDuration = Math.Max(10, _durations[segment]);
+            float incomingVelocity = (center - previous) / incomingDuration;
+            float outgoingVelocity = (next - center) / outgoingDuration;
+            return ((incomingVelocity + outgoingVelocity) * 0.5f) * segmentDuration;
+        }
+
+        private Vector3 InterpolateRotationBetween(Vector3 r1, Vector3 r2, float t)
+        {
+            float pitch = LerpAngle(r1.X, r2.X, t);
+            float roll = LerpAngle(r1.Y, r2.Y, t);
+            float yaw = LerpAngle(r1.Z, r2.Z, t);
+            return new Vector3(pitch, roll, yaw);
+        }
+
         private Vector3 InterpolateRotationSlerp(int segment, float t)
         {
             Vector3 r1 = _rotations[segment];
             Vector3 r2 = _rotations[segment + 1];
+            return InterpolateRotationBetween(r1, r2, t);
+        }
 
-            Vector3 f0 = RotationToDirection(r1);
-            Vector3 f1 = RotationToDirection(r2);
-            Vector3 f = SlerpDirection(f0, f1, t);
+        private static float CubicHermite(float p0, float m0, float p1, float m1, float t)
+        {
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float h00 = 2f * t3 - 3f * t2 + 1f;
+            float h10 = t3 - 2f * t2 + t;
+            float h01 = -2f * t3 + 3f * t2;
+            float h11 = t3 - t2;
+            return p0 * h00 + m0 * h10 + p1 * h01 + m1 * h11;
+        }
 
-            float fallbackYaw = LerpAngle(r1.Z, r2.Z, t);
-            Vector3 pr = DirectionToRotation(f, fallbackYaw);
-            float roll = LerpAngle(r1.Y, r2.Y, t);
-            return new Vector3(pr.X, roll, pr.Z);
+        private static float UnwrapAngleNear(float angle, float reference)
+        {
+            float result = angle;
+            while (result - reference > 180f) result -= 360f;
+            while (result - reference < -180f) result += 360f;
+            return result;
         }
 
         private float LerpAngle(float a, float b, float t)
@@ -321,6 +621,7 @@ namespace ModdedCamera
             _positions.Clear();
             _rotations.Clear();
             _durations.Clear();
+            _nodeModes.Clear();
             _fovs.Clear();
             _isPlaying = false;
             _totalDurationMs = 0;

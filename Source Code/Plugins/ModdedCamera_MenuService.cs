@@ -566,7 +566,7 @@ namespace ModdedCamera.Services
                         int nodeIndex = i;
                         Vector3 pos = spline.Nodes[i].Item1;
                         int duration = spline.GetDurations()[i];
-                        int nodeMode = (i < spline.GetNodeInterpolationModes().Count) ? spline.GetNodeInterpolationModes()[i] : 2;
+                        int nodeMode = (i < spline.GetNodeInterpolationModes().Count) ? spline.GetNodeInterpolationModes()[i] : 0;
 
                         string modeLabel = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно с остановкой" : "Плавно без остановки";
                         float durSec = (float)duration / 1000f;

@@ -16,6 +16,7 @@ namespace ModdedCamera
         private static readonly string PathsFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ReloaderPlugins", "Paths");
         private const string JsonExtension = ".json";
         private const string XmlExtension = ".xml";
+        private const int CurrentPathVersion = 2;
         private static readonly XmlSerializer PathXmlSerializer = new XmlSerializer(typeof(CameraPath));
         private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings();
         private static bool _jsonSettingsInitialized = false;
@@ -92,7 +93,7 @@ namespace ModdedCamera
                     Logger.Error("SavePath: path name is empty");
                     return null;
                 }
-                path.Version = 1;
+                path.Version = CurrentPathVersion;
                 string fileName = SanitizeFileName(path.Name) + JsonExtension;
                 string filePath = Path.Combine(PathsFolder, fileName);
                 string json = JsonConvert.SerializeObject(path, JsonSettings);
@@ -214,47 +215,88 @@ namespace ModdedCamera
         private static CameraPath ApplyBackwardCompatibility(CameraPath path)
         {
             if (path == null) return null;
+
+            int originalVersion = path.Version;
+            bool legacyPath = originalVersion < 1;
+            bool legacyInterpolationModes = originalVersion < CurrentPathVersion;
+            if (path.Positions == null) path.Positions = new List<Vector3>();
+            if (path.Rotations == null) path.Rotations = new List<Vector3>();
+            if (path.Durations == null) path.Durations = new List<int>();
+            if (path.NodeInterpolationModes == null) path.NodeInterpolationModes = new List<int>();
             if (path.NodeColors == null) path.NodeColors = new List<int>();
-            if (path.Version >= 1) return path;
+            if (path.NodeFovs == null) path.NodeFovs = new List<int>();
 
             if (path.Fov <= 0) path.Fov = 50;
             if (path.Speed <= 0) path.Speed = 1.0f;
             if (path.DefaultDuration <= 0) path.DefaultDuration = 5000;
-            if (path.InterpolationMode != 0 && path.InterpolationMode != 2)
-                path.InterpolationMode = 2;
-            if (path.Durations == null || path.Durations.Count == 0)
-            {
-                path.Durations = new List<int>();
-                int nodeCount = (path.Positions != null) ? path.Positions.Count : 0;
-                for (int i = 0; i < nodeCount; i++)
-                    path.Durations.Add(path.DefaultDuration);
-            }
-            // Backward compat: old paths without NodeInterpolationModes
-            // New per-node system: default all nodes to Linear (0)
-            if (path.NodeInterpolationModes == null || path.NodeInterpolationModes.Count == 0)
+            path.InterpolationMode = NormalizeInterpolationMode(path.InterpolationMode);
+
+            int nodeCount = Math.Min(path.Positions.Count, path.Rotations.Count);
+            while (path.Durations.Count < nodeCount)
+                path.Durations.Add(path.DefaultDuration);
+            if (path.Durations.Count > nodeCount)
+                path.Durations.RemoveRange(nodeCount, path.Durations.Count - nodeCount);
+            for (int i = 0; i < path.Durations.Count; i++)
+                path.Durations[i] = Math.Max(0, path.Durations[i]);
+
+            bool missingNodeModes = path.NodeInterpolationModes.Count == 0;
+            if (legacyPath && missingNodeModes)
             {
                 // Convert old int Speed (1-100, normal=3) to new float multiplier (normal=1.0)
                 path.Speed = path.Speed / 3.0f;
-                // Snap to nearest valid speed value
-                float nearestSpd = Utils.ValidSpeeds[0];
-                float minDiffSpd = Math.Abs(path.Speed - nearestSpd);
-                for (int si = 1; si < Utils.ValidSpeeds.Length; si++)
-                {
-                    float diffSpd = Math.Abs(path.Speed - Utils.ValidSpeeds[si]);
-                    if (diffSpd < minDiffSpd)
-                    {
-                        minDiffSpd = diffSpd;
-                        nearestSpd = Utils.ValidSpeeds[si];
-                    }
-                }
-                path.Speed = nearestSpd;
-                path.NodeInterpolationModes = new List<int>();
-                int nodeCount = (path.Positions != null) ? path.Positions.Count : 0;
-                for (int i = 0; i < nodeCount; i++)
-                    path.NodeInterpolationModes.Add(0); // Linear = 0
             }
-            path.Version = 1;
+
+            path.Speed = SnapSpeed(path.Speed);
+
+            while (path.NodeInterpolationModes.Count < nodeCount)
+                path.NodeInterpolationModes.Add(missingNodeModes ? 0 : path.InterpolationMode);
+            if (path.NodeInterpolationModes.Count > nodeCount)
+                path.NodeInterpolationModes.RemoveRange(nodeCount, path.NodeInterpolationModes.Count - nodeCount);
+            for (int i = 0; i < path.NodeInterpolationModes.Count; i++)
+                path.NodeInterpolationModes[i] = NormalizeInterpolationMode(path.NodeInterpolationModes[i], legacyInterpolationModes);
+
+            while (path.NodeColors.Count < nodeCount)
+                path.NodeColors.Add(Color.White.ToArgb());
+            if (path.NodeColors.Count > nodeCount)
+                path.NodeColors.RemoveRange(nodeCount, path.NodeColors.Count - nodeCount);
+
+            while (path.NodeFovs.Count < nodeCount)
+                path.NodeFovs.Add(path.Fov);
+            if (path.NodeFovs.Count > nodeCount)
+                path.NodeFovs.RemoveRange(nodeCount, path.NodeFovs.Count - nodeCount);
+            for (int i = 0; i < path.NodeFovs.Count; i++)
+                path.NodeFovs[i] = Math.Max(1, Math.Min(130, path.NodeFovs[i]));
+
+            path.Version = CurrentPathVersion;
             return path;
+        }
+
+        private static int NormalizeInterpolationMode(int mode)
+        {
+            return NormalizeInterpolationMode(mode, false);
+        }
+
+        private static int NormalizeInterpolationMode(int mode, bool legacyInterpolationModes)
+        {
+            if (legacyInterpolationModes && mode == 2)
+                return 0;
+            return (mode == 0 || mode == 1 || mode == 2) ? mode : 0;
+        }
+
+        private static float SnapSpeed(float speed)
+        {
+            float nearestSpd = Utils.ValidSpeeds[0];
+            float minDiffSpd = Math.Abs(speed - nearestSpd);
+            for (int si = 1; si < Utils.ValidSpeeds.Length; si++)
+            {
+                float diffSpd = Math.Abs(speed - Utils.ValidSpeeds[si]);
+                if (diffSpd < minDiffSpd)
+                {
+                    minDiffSpd = diffSpd;
+                    nearestSpd = Utils.ValidSpeeds[si];
+                }
+            }
+            return nearestSpd;
         }
 
         private static string SanitizeFileName(string name)

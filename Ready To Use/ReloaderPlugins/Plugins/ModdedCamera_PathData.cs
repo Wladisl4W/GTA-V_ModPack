@@ -80,13 +80,15 @@ namespace ModdedCamera
             this.DefaultDuration = 5000;
             this.Fov = 50;
             this.Speed = 1.0f;
-            this.InterpolationMode = 2;
+            this.Version = 2;
+            this.InterpolationMode = 0;
         }
 
         public CameraPath(string name, List<Tuple<Vector3, Vector3>> nodes, List<int> nodeModes, int defaultDuration, int fov, float speed, int interpolationMode)
         {
             if (nodes == null) throw new ArgumentNullException("nodes", "Node list cannot be null");
             this.Name = name;
+            this.Version = 2;
             this.Positions = new List<Vector3>();
             this.Rotations = new List<Vector3>();
             this.Durations = new List<int>();
@@ -110,6 +112,7 @@ namespace ModdedCamera
         public CameraPath(string name, List<Vector3> positions, List<Vector3> rotations, List<int> durations, List<int> nodeModes, int defaultDuration, int fov, float speed, int interpolationMode)
         {
             this.Name = name;
+            this.Version = 2;
             this.Positions = (positions != null) ? positions : new List<Vector3>();
             this.Rotations = (rotations != null) ? rotations : new List<Vector3>();
             this.Durations = (durations != null) ? durations : new List<int>();

@@ -34,7 +34,14 @@ namespace ModdedCamera.Services
 
         public bool StartSave()
         {
-            if (_cameraService.SplineCamera != null && _cameraService.SplineCamera.Nodes.Count < 2)
+            if (_cameraService.SplineCamera == null)
+            {
+                GTA.UI.Notification.PostTicker("~r~SplineCamera не найдена!", false, false);
+                Logger.Error("SaveService.StartSave: SplineCamera is null");
+                return false;
+            }
+
+            if (_cameraService.SplineCamera.Nodes.Count < 2)
             {
                 GTA.UI.Notification.PostTicker("Нужно минимум 2 узла!", false, false);
                 return false;
@@ -155,7 +162,7 @@ namespace ModdedCamera.Services
                     _cameraService.NodeDuration,
                     _cameraService.CurrentFov,
                     _cameraService.CurrentSpeed,
-                    2
+                    0
                 );
                 cp.NodeColors = new List<int>(nodeColors);
                 cp.NodeFovs = new List<int>(_cameraService.SplineCamera.GetNodeFovs());

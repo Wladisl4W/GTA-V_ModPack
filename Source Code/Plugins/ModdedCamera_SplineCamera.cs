@@ -233,7 +233,7 @@ namespace ModdedCamera
 
         public void AddNode(Vector3 position, Vector3 rotation, int duration)
         {
-            AddNode(position, rotation, duration, 2, Color.White.ToArgb(), _defaultFov);
+            AddNode(position, rotation, duration, 0, Color.White.ToArgb(), _defaultFov);
         }
 
         public void AddNode(Vector3 position, Vector3 rotation, int duration, int interpolationMode)
@@ -270,7 +270,7 @@ namespace ModdedCamera
                 _baseDurations.Add(duration);
                 int adjustedDuration = (int)Math.Max(0, duration / _currentSpeedMult);
                 _durations.Add(adjustedDuration);
-                _nodeInterpModes.Add((NodeInterpMode)interpolationMode);
+                _nodeInterpModes.Add((NodeInterpMode)NormalizeInterpolationMode(interpolationMode));
                 _nodeColors.Add(color);
                 _nodeFovs.Add(fov);
                 _defaultDuration = duration;
@@ -338,6 +338,7 @@ namespace ModdedCamera
                 _baseDurations.Clear();
                 _nodeInterpModes.Clear();
                 _nodeColors.Clear();
+                _nodeFovs.Clear();
 
                 for (int i = 0; i < savedNodes.Count; i++)
                 {
@@ -366,8 +367,13 @@ namespace ModdedCamera
         {
             if (index >= 0 && index < _nodeInterpModes.Count)
             {
-                _nodeInterpModes[index] = (NodeInterpMode)mode;
+                _nodeInterpModes[index] = (NodeInterpMode)NormalizeInterpolationMode(mode);
             }
+        }
+
+        private static int NormalizeInterpolationMode(int mode)
+        {
+            return (mode == 0 || mode == 1 || mode == 2) ? mode : 0;
         }
 
         public void SetNodeDuration(int index, int durationMs)
