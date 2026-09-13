@@ -10,6 +10,10 @@ namespace ModdedCamera
     /// within each segment (segment duration defines speed). All interpolation
     /// modes were removed and are ignored - nodeModes / InterpolationMode are
     /// accepted only for backward compatibility (callers, menu, saves).
+    /// Rotation: the look direction is slerped (constant angular velocity),
+    /// roll is lerped along the shortest path. Per-component Euler lerp is
+    /// NOT used because it bends the view direction whenever more than one
+    /// axis changes at once.
     /// TODO: design and implement the new interpolation system on top of this.
     /// </summary>
     public class CameraInterpolator
@@ -21,9 +25,6 @@ namespace ModdedCamera
         private bool _isPlaying = false;
         private long _playbackElapsedMs = 0;
         private int _totalDurationMs = 0;
-
-        // Unwrapped rotation chain (no +/-360 jumps), built in SetPath.
-        private List<Vector3> _rotationsU;
 
         // Accepted but ignored: kept so existing callers keep compiling.
         private int _interpMode = 0;
@@ -60,7 +61,6 @@ namespace ModdedCamera
             _rotations = new List<Vector3>();
             _durations = new List<int>();
             _fovs = new List<int>();
-            _rotationsU = new List<Vector3>();
         }
 
         public void SetPath(List<Vector3> positions, List<Vector3> rotations, List<int> durations)
@@ -100,24 +100,12 @@ namespace ModdedCamera
                 for (int i = 0; i < _durations.Count; i++)
                     _totalDurationMs += _durations[i];
 
-                BuildRotationUnwrap();
-
                 Logger.Info("Path set with " + _positions.Count + " waypoints, total duration: " + _totalDurationMs + "ms");
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, "SetPath error");
                 throw;
-            }
-        }
-
-        private void BuildRotationUnwrap()
-        {
-            _rotationsU = new List<Vector3>(_positions.Count);
-            for (int i = 0; i < _positions.Count; i++)
-            {
-                if (i == 0) _rotationsU.Add(_rotations[0]);
-                else _rotationsU.Add(UnwrapRotation(_rotationsU[i - 1], _rotations[i]));
             }
         }
 
@@ -196,15 +184,11 @@ namespace ModdedCamera
 
                 // Past the end, or inside the final dwell period (the last
                 // duration is a hold at the final node, not a segment): park
-                // on the last waypoint. Use unwrapped rotation for continuity
-                // (raw would jump 360° when the path wrapped around).
+                // on the last waypoint.
                 if (currentSegment == -1 || currentSegment == _durations.Count - 1)
                 {
                     position = _positions[_positions.Count - 1];
-                    if (_rotationsU != null && _rotationsU.Count > 0)
-                        rotation = _rotationsU[_rotationsU.Count - 1];
-                    else
-                        rotation = _rotations[_rotations.Count - 1];
+                    rotation = _rotations[_rotations.Count - 1];
                     if (_fovs != null && _fovs.Count > 0) fov = _fovs[_fovs.Count - 1];
                     if (currentSegment == -1) PlaybackProgress = 1f;
                     return;
@@ -216,7 +200,7 @@ namespace ModdedCamera
                 t = Math.Min(Math.Max(t, 0f), 1f);
 
                 position = Vector3.Lerp(_positions[currentSegment], _positions[currentSegment + 1], t);
-                rotation = InterpolateRotationShortest(currentSegment, t);
+                rotation = InterpolateRotationSlerp(currentSegment, t);
 
                 if (_fovs != null && currentSegment + 1 < _fovs.Count)
                     fov = _fovs[currentSegment] + (_fovs[currentSegment + 1] - _fovs[currentSegment]) * t;
@@ -230,18 +214,24 @@ namespace ModdedCamera
             }
         }
 
-        private Vector3 InterpolateRotationShortest(int segment, float t)
+        // Rotation with constant angular velocity: slerp the look direction
+        // between the two endpoint orientations, lerp roll shortest-path.
+        // Per-component Euler lerp is deliberately avoided: it curves the
+        // view direction and varies its speed whenever pitch and yaw change
+        // together.
+        private Vector3 InterpolateRotationSlerp(int segment, float t)
         {
-            Vector3 r1 = (_rotationsU != null && segment + 1 < _rotationsU.Count)
-                ? _rotationsU[segment]
-                : _rotations[segment];
-            Vector3 r2 = (_rotationsU != null && segment + 1 < _rotationsU.Count)
-                ? _rotationsU[segment + 1]
-                : UnwrapRotation(r1, _rotations[segment + 1]);
-            return new Vector3(
-                LerpAngle(r1.X, r2.X, t),
-                LerpAngle(r1.Y, r2.Y, t),
-                LerpAngle(r1.Z, r2.Z, t));
+            Vector3 r1 = _rotations[segment];
+            Vector3 r2 = _rotations[segment + 1];
+
+            Vector3 f0 = RotationToDirection(r1);
+            Vector3 f1 = RotationToDirection(r2);
+            Vector3 f = SlerpDirection(f0, f1, t);
+
+            float fallbackYaw = LerpAngle(r1.Z, r2.Z, t);
+            Vector3 pr = DirectionToRotation(f, fallbackYaw);
+            float roll = LerpAngle(r1.Y, r2.Y, t);
+            return new Vector3(pr.X, roll, pr.Z);
         }
 
         private float LerpAngle(float a, float b, float t)
@@ -252,20 +242,78 @@ namespace ModdedCamera
             return a + delta * t;
         }
 
-        private Vector3 UnwrapRotation(Vector3 reference, Vector3 target)
+        // Look direction of a camera Euler rotation (pitch=X, yaw=Z, degrees).
+        // Same convention as Utils.RotationToDirection.
+        private static Vector3 RotationToDirection(Vector3 rotation)
         {
+            double yaw = (double)(rotation.Z * 0.01745329f);
+            double pitch = (double)(rotation.X * 0.01745329f);
+            double cp = Math.Abs(Math.Cos(pitch));
             return new Vector3(
-                reference.X + DeltaAngle(reference.X, target.X),
-                reference.Y + DeltaAngle(reference.Y, target.Y),
-                reference.Z + DeltaAngle(reference.Z, target.Z));
+                (float)(-(Math.Sin(yaw) * cp)),
+                (float)(Math.Cos(yaw) * cp),
+                (float)Math.Sin(pitch));
         }
 
-        private float DeltaAngle(float a, float b)
+        // Inverse of RotationToDirection: pitch/yaw (degrees) for a unit
+        // direction. Roll is left at 0 - the caller fills it in.
+        private static Vector3 DirectionToRotation(Vector3 dir, float fallbackYaw)
         {
-            float delta = b - a;
-            while (delta > 180f) delta -= 360f;
-            while (delta < -180f) delta += 360f;
-            return delta;
+            float len = dir.Length();
+            Vector3 d = (len > 0.000001f) ? dir * (1f / len) : new Vector3(0f, 1f, 0f);
+            float z = d.Z;
+            if (z > 1f) z = 1f;
+            if (z < -1f) z = -1f;
+            float pitch = (float)(Math.Asin(z) * 57.29578f);
+            float yaw;
+            float cp = (float)Math.Sqrt(Math.Max(0f, 1f - z * z));
+            if (cp < 0.0001f)
+                yaw = fallbackYaw; // looking straight up/down: yaw undefined
+            else
+                yaw = (float)(Math.Atan2(-d.X, d.Y) * 57.29578f);
+            return new Vector3(pitch, 0f, yaw);
+        }
+
+        // Spherical interpolation between two unit direction vectors:
+        // constant angular velocity from 'from' (t=0) to 'to' (t=1).
+        private static Vector3 SlerpDirection(Vector3 from, Vector3 to, float t)
+        {
+            float dot = from.X * to.X + from.Y * to.Y + from.Z * to.Z;
+            if (dot > 1f) dot = 1f;
+            if (dot < -1f) dot = -1f;
+
+            if (dot > 0.9995f)
+            {
+                // Nearly identical: normalized lerp avoids division by ~0.
+                Vector3 l = from + (to - from) * t;
+                float len = l.Length();
+                return (len > 0.000001f) ? l * (1f / len) : from;
+            }
+
+            if (dot < -0.9995f)
+            {
+                // Opposite directions: no unique great circle. Rotate around
+                // an arbitrary axis perpendicular to 'from'.
+                Vector3 axis = (Math.Abs(from.Z) < 0.99f)
+                    ? new Vector3(0f, 0f, 1f)
+                    : new Vector3(0f, 1f, 0f);
+                float d = axis.X * from.X + axis.Y * from.Y + axis.Z * from.Z;
+                axis = axis - from * d;
+                float alen = axis.Length();
+                if (alen < 0.000001f)
+                    return from;
+                axis = axis * (1f / alen);
+                float ang = (float)Math.PI * t;
+                float c = (float)Math.Cos(ang);
+                float s = (float)Math.Sin(ang);
+                return from * c + axis * s;
+            }
+
+            float omega = (float)Math.Acos(dot);
+            float sinO = (float)Math.Sin(omega);
+            float s0 = (float)Math.Sin((1f - t) * omega) / sinO;
+            float s1 = (float)Math.Sin(t * omega) / sinO;
+            return from * s0 + to * s1;
         }
 
         public void Clear()
@@ -274,7 +322,6 @@ namespace ModdedCamera
             _rotations.Clear();
             _durations.Clear();
             _fovs.Clear();
-            if (_rotationsU != null) _rotationsU.Clear();
             _isPlaying = false;
             _totalDurationMs = 0;
             PlaybackProgress = 0f;
