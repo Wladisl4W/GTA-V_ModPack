@@ -213,9 +213,7 @@ namespace ModdedCamera
                 rotation = InterpolateRotation(currentSegment, t, interpT);
 
                 if (_fovs != null && currentSegment + 1 < _fovs.Count)
-                {
-                    fov = _fovs[currentSegment] + (_fovs[currentSegment + 1] - _fovs[currentSegment]) * interpT;
-                }
+                    fov = InterpolateFov(currentSegment, t, interpT);
             }
             catch (Exception ex)
             {
@@ -288,6 +286,55 @@ namespace ModdedCamera
             Vector3 tangentStart = GetNodeTangent(segment, segment);
             Vector3 tangentEnd = GetNodeTangent(segment + 1, segment);
             return CubicHermite(start, tangentStart, end, tangentEnd, t);
+        }
+
+        private float InterpolateFov(int segment, float rawT, float timedT)
+        {
+            int startMode = GetNodeMode(segment);
+            int endMode = GetNodeMode(segment + 1);
+
+            if (startMode == 0 && endMode == 0)
+                return LerpFloat(_fovs[segment], _fovs[segment + 1], rawT);
+
+            if (startMode != 2 && endMode != 2)
+                return LerpFloat(_fovs[segment], _fovs[segment + 1], timedT);
+
+            float start = GetNodeBlendFov(segment);
+            float end = GetNodeBlendFov(segment + 1);
+            float tangentStart = GetFovTangent(segment, segment);
+            float tangentEnd = GetFovTangent(segment + 1, segment);
+            return CubicHermite(start, tangentStart, end, tangentEnd, rawT);
+        }
+
+        private float GetNodeBlendFov(int node)
+        {
+            if (GetNodeMode(node) != 2 || node <= 0 || node >= _fovs.Count - 1)
+                return _fovs[node];
+
+            return (_fovs[node - 1] + _fovs[node] * 4f + _fovs[node + 1]) * (1f / 6f);
+        }
+
+        private float GetFovTangent(int node, int segment)
+        {
+            int mode = GetNodeMode(node);
+            if (mode == 1)
+                return 0f;
+
+            float segmentDelta = GetNodeBlendFov(segment + 1) - GetNodeBlendFov(segment);
+            if (mode == 0 || node <= 0 || node >= _fovs.Count - 1)
+                return segmentDelta;
+
+            float incomingDuration = Math.Max(10, _durations[node - 1]);
+            float outgoingDuration = Math.Max(10, _durations[node]);
+            float segmentDuration = Math.Max(10, _durations[segment]);
+            float incomingVelocity = (GetNodeBlendFov(node) - GetNodeBlendFov(node - 1)) / incomingDuration;
+            float outgoingVelocity = (GetNodeBlendFov(node + 1) - GetNodeBlendFov(node)) / outgoingDuration;
+            return ((incomingVelocity + outgoingVelocity) * 0.5f) * segmentDuration;
+        }
+
+        private static float LerpFloat(float a, float b, float t)
+        {
+            return a + (b - a) * t;
         }
 
         private Vector3 GetNodeBlendPosition(int node)

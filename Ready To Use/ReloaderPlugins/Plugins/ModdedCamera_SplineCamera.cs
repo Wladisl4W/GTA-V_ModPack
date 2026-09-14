@@ -177,7 +177,7 @@ namespace ModdedCamera
                     if (_interpolator != null)
                     {
                         _interpolator.Start();
-                        _lastFrameMs = Game.GameTime;
+                        _lastFrameMs = Utils.NowMs();
                         Logger.Info("Interpolator playback STARTED");
                     }
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
@@ -513,7 +513,7 @@ namespace ModdedCamera
                 _interpolator.Start();
                 _startNodeIndex = 0;
                 Logger.Info("Interpolator restarted");
-                _lastFrameMs = Game.GameTime;
+                _lastFrameMs = Utils.NowMs();
             }
             catch (Exception ex)
             {
@@ -589,11 +589,13 @@ namespace ModdedCamera
                 Vector3 interpPos;
                 Vector3 interpRot;
                 float interpFov;
-                // Игровой тик (а не реальные часы): при slow-mo (SET_TIME_SCALE)
-                // камера тоже замедляется и остаётся синхронна с миром.
-                int gameNow = Game.GameTime;
-                long frameDelta = (long)unchecked((uint)(gameNow - (int)_lastFrameMs));
-                _lastFrameMs = gameNow;
+                // Camera timing uses real elapsed time. Speed is already baked
+                // into segment durations, while SET_TIME_SCALE only affects the
+                // world; using Game.GameTime here would apply slow-mo twice.
+                long now = Utils.NowMs();
+                long frameDelta = now - _lastFrameMs;
+                _lastFrameMs = now;
+                if (frameDelta < 0) frameDelta = 0;
                 if (frameDelta > 250) frameDelta = 250;
                 _interpolator.Advance(frameDelta);
                 _interpolator.UpdateAt(_interpolator.ElapsedMs, out interpPos, out interpRot, out interpFov);
