@@ -13,6 +13,9 @@ namespace ModdedCamera.Services
         private const int DefaultGravityLevel = 2;
         private const int NormalGravityLevel = 0;
         private const float MaxFallbackDamageDistanceSq = 250f * 250f;
+        private const float FixedCameraDistance = 7f;
+        private const float BaseLaunchForce = 224f;
+        private const float BaseVelocityBoost = 84f;
 
         private Camera _camera;
         private Ped _target;
@@ -22,6 +25,8 @@ namespace ModdedCamera.Services
         private long _attackIntentStartedMs;
         private Vector3 _cameraPosition;
         private Vector3 _cameraRotation;
+        private Vector3 _fixedCameraForward;
+        private Vector3 _lastTravelDirection;
         private bool _active;
         private bool _enabled;
         private bool _worldStateApplied;
@@ -30,11 +35,13 @@ namespace ModdedCamera.Services
 
         public int FollowDurationMs { get; set; }
         public int GravityLevel { get; set; }
+        public float HitForceMultiplier { get; set; }
 
         public FollowCameraService()
         {
             FollowDurationMs = DefaultFollowDurationMs;
             GravityLevel = DefaultGravityLevel;
+            HitForceMultiplier = 1f;
         }
 
         public bool Enabled
@@ -131,7 +138,7 @@ namespace ModdedCamera.Services
                 bool damagedByPlayer = Function.Call<bool>(Hash.HAS_ENTITY_BEEN_DAMAGED_BY_ENTITY, ped.Handle, player.Handle, true);
                 bool damagedByWeapon = selectedWeapon != 0 && Function.Call<bool>(Hash.HAS_ENTITY_BEEN_DAMAGED_BY_WEAPON, ped.Handle, selectedWeapon, 0);
                 bool freshVitalityDrop = HasFreshVitalityDrop(ped) && recentAttackIntent && distSq < MaxFallbackDamageDistanceSq;
-                bool freshAttackFall = HasFreshAttackFall(ped) && recentAttackIntent && distSq < 16f;
+                bool freshAttackFall = HasFreshAttackFall(ped) && recentAttackIntent && distSq < 36f;
 
                 RememberVitality(ped);
                 RememberFallingState(ped);
@@ -173,6 +180,11 @@ namespace ModdedCamera.Services
 
             _cameraPosition = startPos;
             _cameraRotation = startRot;
+            _fixedCameraForward = Utils.RotationToDirection(_cameraRotation);
+            if (_fixedCameraForward.Length() < 0.01f)
+                _fixedCameraForward = new Vector3(0f, 1f, 0f);
+            _fixedCameraForward.Normalize();
+            _lastTravelDirection = GetLaunchDirection(player, target);
 
             _camera = Camera.Create("DEFAULT_SCRIPTED_CAMERA", startPos, startRot, startFov);
             if (_camera == null || !_camera.Exists())
@@ -201,21 +213,17 @@ namespace ModdedCamera.Services
             Vector3 targetPos = _target.Position + new Vector3(0f, 0f, 0.9f);
             Vector3 velocity = GetEntityVelocity(_target);
             Vector3 travelDir = velocity;
-            if (travelDir.Length() < 0.1f)
-                travelDir = Utils.RotationToDirection(_target.Rotation);
-            travelDir.Normalize();
+            if (travelDir.Length() > 0.45f)
+            {
+                travelDir.Normalize();
+                _lastTravelDirection = travelDir;
+            }
+            else
+            {
+                travelDir = _lastTravelDirection;
+            }
 
-            Vector3 side = Vector3.Cross(travelDir, new Vector3(0f, 0f, 1f));
-            if (side.Length() < 0.1f)
-                side = new Vector3(1f, 0f, 0f);
-            side.Normalize();
-
-            Vector3 desiredPos = targetPos - travelDir * 5.5f + side * 2.2f + new Vector3(0f, 0f, 1.7f);
-            Vector3 desiredRot = DirectionToRotation(targetPos - desiredPos, _cameraRotation.Z);
-
-            float blend = elapsed < 550 ? 0.10f : 0.18f;
-            _cameraPosition = Vector3.Lerp(_cameraPosition, desiredPos, blend);
-            _cameraRotation = LerpRotation(_cameraRotation, desiredRot, blend);
+            _cameraPosition = targetPos - _fixedCameraForward * FixedCameraDistance;
 
             if (_camera != null && _camera.Exists())
             {
@@ -285,21 +293,40 @@ namespace ModdedCamera.Services
         {
             try
             {
-                Vector3 dir = target.Position - player.Position;
-                if (dir.Length() < 0.1f)
-                    dir = Utils.RotationToDirection(player.Rotation);
-                dir.Normalize();
+                Vector3 dir = GetLaunchDirection(player, target);
+                float forceMultiplier = NormalizeHitForceMultiplier(HitForceMultiplier);
 
                 Function.Call(Hash.SET_PED_TO_RAGDOLL, target.Handle, 7000, 7000, 0, true, true, false);
                 Function.Call(Hash.APPLY_FORCE_TO_ENTITY, target.Handle, 1,
-                    dir.X * 34f, dir.Y * 34f, 10.5f,
+                    dir.X * BaseLaunchForce * forceMultiplier, dir.Y * BaseLaunchForce * forceMultiplier, 5.5f,
                     0f, 0f, 0f,
                     0, false, true, true, false, true);
+
+                Vector3 velocity = GetEntityVelocity(target);
+                Function.Call(Hash.SET_ENTITY_VELOCITY, target.Handle,
+                    velocity.X + dir.X * BaseVelocityBoost * forceMultiplier,
+                    velocity.Y + dir.Y * BaseVelocityBoost * forceMultiplier,
+                    Math.Max(velocity.Z + 2.5f, 2.5f));
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, "FollowCameraService: LaunchTarget");
             }
+        }
+
+        private static Vector3 GetLaunchDirection(Ped player, Ped target)
+        {
+            Vector3 dir = target.Position - player.Position;
+            dir.Z = 0f;
+            if (dir.Length() < 0.1f)
+            {
+                dir = Utils.RotationToDirection(player.Rotation);
+                dir.Z = 0f;
+            }
+            if (dir.Length() < 0.1f)
+                dir = new Vector3(0f, 1f, 0f);
+            dir.Normalize();
+            return dir;
         }
 
         private static Ped GetPlayerPed()
@@ -357,6 +384,13 @@ namespace ModdedCamera.Services
             if (level < 0) return 0;
             if (level > 3) return 3;
             return level;
+        }
+
+        private static float NormalizeHitForceMultiplier(float value)
+        {
+            if (value < 0.25f) return 0.25f;
+            if (value > 3f) return 3f;
+            return value;
         }
 
         private void RememberVitality(Ped ped)

@@ -67,10 +67,11 @@ GTA V\scripts\ReloaderPlugins\Plugins
 
 ## Current release state
 
-- Latest release target: `v1.2`
-- Release title: `ModPack 1.2`
-- Asset: `ModPack-Plugins-1.2.zip`
-- `v1.2` includes the separate Modded Camera follow mode.
+- Latest release target: `v1.3`
+- Release title: `ModPack 1.3`
+- Asset: `ModPack-Plugins-1.3.zip`
+- `v1.3` includes follow-camera tuning for fixed rotation, stronger horizontal
+  launch, and configurable hit force.
 
 ## Modded Camera notes
 
@@ -103,8 +104,8 @@ paths compatible.
   player to a ped starts a scripted follow camera with a smoothed entry, sets
   time scale to `0.75`, applies configurable gravity, launches the target,
   disables player controls during the shot, then cuts back to gameplay camera
-  and restores world state. Follow duration and gravity live in a separate
-  `Настройки следования` submenu.
+  and restores world state. Follow duration, gravity, and hit force live in a
+  separate `Настройки следования` submenu.
 
 ## Rainbow Paint notes
 

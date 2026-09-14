@@ -33,6 +33,7 @@ namespace ModdedCamera.Services
         private NativeListItem<string> _speedListItem;
         private NativeListItem<string> _followDurationListItem;
         private NativeListItem<string> _followGravityListItem;
+        private NativeListItem<string> _followHitForceListItem;
         private NativeCheckboxItem _usePlayerViewCheckbox;
 
         private readonly List<NativeMenu> _pathSubMenus = new List<NativeMenu>();
@@ -63,6 +64,8 @@ namespace ModdedCamera.Services
         private static readonly string[] FollowDurationLabels = new string[] { "3 с", "5 с", "7 с", "10 с", "15 с" };
         private static readonly int[] FollowGravityValues = new int[] { 0, 1, 2, 3 };
         private static readonly string[] FollowGravityLabels = new string[] { "Обычная", "Лёгкая", "Очень лёгкая", "Лунная" };
+        private static readonly float[] FollowHitForceValues = new float[] { 0.25f, 0.50f, 0.75f, 1.00f, 1.50f, 2.00f, 2.50f, 3.00f };
+        private static readonly string[] FollowHitForceLabels = new string[] { "x0.25", "x0.50", "x0.75", "x1.00", "x1.50", "x2.00", "x2.50", "x3.00" };
 
         public ObjectPool ActivePool { get; private set; }
 
@@ -570,8 +573,15 @@ namespace ModdedCamera.Services
             _followGravityListItem.SelectedItem = "Очень лёгкая";
             FollowOptionsMenu.Add(_followGravityListItem);
 
+            _followHitForceListItem = new NativeListItem<string>("Сила удара", "Множитель горизонтального отлёта цели");
+            for (int i = 0; i < FollowHitForceLabels.Length; i++)
+                _followHitForceListItem.Items.Add(FollowHitForceLabels[i]);
+            _followHitForceListItem.SelectedItem = "x1.00";
+            FollowOptionsMenu.Add(_followHitForceListItem);
+
             _followDurationListItem.ItemChanged += OnFollowDurationChanged;
             _followGravityListItem.ItemChanged += OnFollowGravityChanged;
+            _followHitForceListItem.ItemChanged += OnFollowHitForceChanged;
         }
 
         private void CreateSavedPathsMenu()
@@ -856,12 +866,24 @@ namespace ModdedCamera.Services
             Logger.Info("MenuService: Follow gravity changed to level " + _followCameraService.GravityLevel);
         }
 
+        private void OnFollowHitForceChanged(object sender, ItemChangedEventArgs<string> e)
+        {
+            int index = _followHitForceListItem.SelectedIndex;
+            if (index < 0 || index >= FollowHitForceValues.Length)
+                index = 3;
+
+            _followCameraService.HitForceMultiplier = FollowHitForceValues[index];
+            Logger.Info("MenuService: Follow hit force changed to x" + _followCameraService.HitForceMultiplier.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
         private void SyncFollowOptionsWithMenu()
         {
             if (_followDurationListItem != null)
                 _followDurationListItem.SelectedIndex = FindNearestDurationIndex(_followCameraService.FollowDurationMs);
             if (_followGravityListItem != null)
                 _followGravityListItem.SelectedIndex = FindGravityIndex(_followCameraService.GravityLevel);
+            if (_followHitForceListItem != null)
+                _followHitForceListItem.SelectedIndex = FindNearestHitForceIndex(_followCameraService.HitForceMultiplier);
         }
 
         private void OnCheckboxChanged(object sender, EventArgs e)
@@ -918,6 +940,22 @@ namespace ModdedCamera.Services
                     return i;
             }
             return 2;
+        }
+
+        private static int FindNearestHitForceIndex(float value)
+        {
+            int best = 0;
+            float bestDiff = Math.Abs(value - FollowHitForceValues[0]);
+            for (int i = 1; i < FollowHitForceValues.Length; i++)
+            {
+                float diff = Math.Abs(value - FollowHitForceValues[i]);
+                if (diff < bestDiff)
+                {
+                    best = i;
+                    bestDiff = diff;
+                }
+            }
+            return best;
         }
     }
 }
