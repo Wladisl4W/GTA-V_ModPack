@@ -1,64 +1,132 @@
 GTA V ModPack
 =============
 
-Набор модов для GTA V на базе собственного загрузчика Reloader.
-Загрузчик один (Reloader.dll), а плагины — обычные C# файлы,
-которые компилируются прямо при запуске игры.
+ModPack - набор скриптовых модов для GTA V на базе собственного загрузчика
+Reloader. Загрузчик один (`Reloader.dll`), а сами моды лежат отдельными
+файлами в папке `ReloaderPlugins\Plugins` и компилируются при запуске игры.
+
+GitHub release 1.0:
+  https://github.com/Wladisl4W/GTA-V_ModPack/releases/tag/v1.0
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ДЛЯ ПОЛЬЗОВАТЕЛЕЙ — папка "Ready To Use"
+  БЫСТРОЕ ОБНОВЛЕНИЕ ИЗ РЕЛИЗА
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Для обновления уже установленного ModPack скачайте файл:
+
+  ModPack-Plugins-1.0.zip
+
+Из архива нужно взять все файлы и скопировать их с заменой в папку:
+
+  GTA V\scripts\ReloaderPlugins\Plugins\
+
+Важно:
+  • архив релиза содержит именно содержимое папки `Plugins`;
+  • распаковывать его нужно в `ReloaderPlugins\Plugins`, не в корень GTA V;
+  • `Reloader.dll` в этот архив не входит, потому что он нужен только для
+    полной установки или отдельного обновления загрузчика.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ПОЛНАЯ УСТАНОВКА
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Требования:
-  • Script Hook V            — http://www.dev-c.com/gtav/scripthookv/
-  • Script Hook V .NET 3     — https://github.com/scripthookvdotnet/scripthookvdotnet-nightly/releases
+  • Script Hook V        — http://www.dev-c.com/gtav/scripthookv/
+  • Script Hook V .NET 3 — https://github.com/scripthookvdotnet/scripthookvdotnet-nightly/releases
 
 Установка:
-  1. Установите Script Hook V и Script Hook V .NET в корень GTA V
-  2. Скопируйте Reloader.dll в GTA V\scripts\
-  3. Скопируйте папку ReloaderPlugins целиком в GTA V\scripts\
-  4. Плагины компилируются автоматически при первом запуске игры
+  1. Установите Script Hook V и Script Hook V .NET в корень GTA V.
+  2. Из папки `Ready To Use` скопируйте `Reloader.dll` в:
 
-В GTA V\scripts\ должно быть:
-  • Reloader.dll
-  • ReloaderPlugins\Plugins\*.cs
+       GTA V\scripts\
 
-Плагины и горячие клавиши:
-  • Reloader (F5)            — перезагрузить все плагины без перезапуска игры
-  • Rainbow Paint (I)        — радужная покраска машин
-    — выделение машины работает в Object Spooner (Menyoo):
-      включите его, наведите камеру на машину и нажмите I
-    — 8 цветов + радужный перелив, типы краски, скорость перелива
-    — "Зарандомить все машины" и список исключений (наведитесь на
-      машину в подменю исключений и нажмите Enter)
-  • Remove Dropped Peds (H)  — удаление педов, упавших в воду (включая мёртвых)
-  • MenyooStreamer (U)       — стриминг педов из Menyoo
-  • Modded Camera (T)        — пролёты камеры по точкам, Backspace — назад
-  • Frozen Dynamic (K)       — заморозка/разморозка всех NPC (танцы сохраняются)
-  • Shark Rider              — автономно: в воде рядом спавнится акула и подплывает;
-                                у контакта игрок сам садится на неё; WASD — плыть,
-                                Shift — всплыть, Ctrl — погрузиться; выход на сушу
-                                отпускает акулу
+  3. Из папки `Ready To Use` скопируйте папку `ReloaderPlugins` целиком в:
 
-Файлы модов (создаются автоматически):
-  • scripts\ReloaderPlugins\Reloader.log       — лог загрузчика
-  • scripts\ReloaderPlugins\compile_errors.txt — ошибки компиляции
-  • scripts\ReloaderPlugins\Paths\             — сохранённые пролёты камер
-  • scripts\ReloaderPlugins\Menyoostreamer.ini — настройки стримера
+       GTA V\scripts\
+
+  4. Запустите игру. Плагины скомпилируются автоматически.
+
+После установки структура должна выглядеть так:
+
+  GTA V\scripts\Reloader.dll
+  GTA V\scripts\ReloaderPlugins\Plugins\*.cs
+  GTA V\scripts\ReloaderPlugins\Plugins\Newtonsoft.Json.dll
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ДЛЯ РАЗРАБОТЧИКОВ — папка "Source Code"
+  МОДЫ И ГОРЯЧИЕ КЛАВИШИ
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  • Reloader (F5)
+    Перезагрузить все плагины без перезапуска игры.
+
+  • Modded Camera (T)
+    Кинематографическая камера и пролёты по точкам.
+    Backspace - назад/выход из текущего меню.
+
+    Особенности:
+      - сохранение и загрузка путей камеры;
+      - индивидуальная длительность, FOV, цвет и режим интерполяции для нод;
+      - режимы интерполяции: Linear, SmoothStop, SmoothNoStop;
+      - совместимость со старыми сохранёнными путями;
+      - зацикливание пролётки: последняя нода держится по своей длительности,
+        затем происходит резкий переход к первой ноде.
+
+  • Rainbow Paint (I)
+    Радужная покраска машин.
+    Выделение машины работает в Object Spooner (Menyoo): включите его,
+    наведите камеру на машину и нажмите I.
+
+  • Remove Dropped Peds (H)
+    Удаление педов, упавших в воду, включая мёртвых.
+
+  • MenyooStreamer (U)
+    Стриминг педов из Menyoo.
+
+  • Frozen Dynamic (K)
+    Заморозка/разморозка всех NPC. Танцы сохраняются.
+
+  • Shark Rider
+    Автономный мод: в воде рядом спавнится акула и подплывает к игроку.
+    WASD - плыть, Shift - всплыть, Ctrl - погрузиться. Выход на сушу
+    отпускает акулу.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ФАЙЛЫ, КОТОРЫЕ СОЗДАЮТСЯ АВТОМАТИЧЕСКИ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  • scripts\ReloaderPlugins\Reloader.log
+    Лог загрузчика.
+
+  • scripts\ReloaderPlugins\compile_errors.txt
+    Ошибки компиляции плагинов.
+
+  • scripts\ReloaderPlugins\Paths\
+    Сохранённые пролёты Modded Camera.
+
+  • scripts\ReloaderPlugins\Menyoostreamer.ini
+    Настройки MenyooStreamer.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ДЛЯ РАЗРАБОТЧИКОВ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Исходники лежат в папке:
+
+  Source Code
 
 Структура:
-  • Reloader\ — проект загрузчика (.NET Framework 4.8, Visual Studio)
-  • Plugins\  — исходники плагинов (*.cs)
-  • build.bat — сборка Reloader.dll
+  • Source Code\Reloader\ — проект загрузчика (.NET Framework 4.8)
+  • Source Code\Plugins\  — исходники плагинов (*.cs)
+  • Source Code\build.bat — сборка Reloader.dll
 
-Сборка загрузчика:
+Сборка:
+
   cd "Source Code"
   dotnet build -c Release
 
-Плагины компилируются прямо в игре: положите *.cs в
-scripts\ReloaderPlugins\Plugins\ — Reloader заметит изменения и
-перекомпилирует их сам, без перезапуска игры (или нажмите F5).
+Во время разработки можно менять файлы плагинов в:
+
+  GTA V\scripts\ReloaderPlugins\Plugins\
+
+Reloader заметит изменения и перекомпилирует их при перезагрузке плагинов
+через F5.
