@@ -14,6 +14,7 @@ namespace ModdedCamera.Services
     {
         public NativeMenu MainMenu { get; private set; }
         public NativeMenu CameraOptionsMenu { get; private set; }
+        public NativeMenu FollowOptionsMenu { get; private set; }
         public NativeMenu SavedPathsMenu { get; private set; }
         public NativeMenu NodeEditorMenu { get; private set; }
 
@@ -26,8 +27,12 @@ namespace ModdedCamera.Services
         private NativeItem _resetItem;
         private NativeItem _editNodesItem;
         private NativeItem _closeItem;
+        private NativeCheckboxItem _followCameraCheckbox;
+        private NativeItem _followOptionsItem;
 
         private NativeListItem<string> _speedListItem;
+        private NativeListItem<string> _followDurationListItem;
+        private NativeListItem<string> _followGravityListItem;
         private NativeCheckboxItem _usePlayerViewCheckbox;
 
         private readonly List<NativeMenu> _pathSubMenus = new List<NativeMenu>();
@@ -54,25 +59,34 @@ namespace ModdedCamera.Services
             Color.Turquoise, Color.SaddleBrown
         };
 
+        private static readonly int[] FollowDurationValues = new int[] { 3000, 5000, 7000, 10000, 15000 };
+        private static readonly string[] FollowDurationLabels = new string[] { "3 с", "5 с", "7 с", "10 с", "15 с" };
+        private static readonly int[] FollowGravityValues = new int[] { 0, 1, 2, 3 };
+        private static readonly string[] FollowGravityLabels = new string[] { "Обычная", "Лёгкая", "Очень лёгкая", "Лунная" };
+
         public ObjectPool ActivePool { get; private set; }
 
         private readonly CameraService _cameraService;
         private readonly SaveService _saveService;
         private readonly InputService _inputService;
+        private readonly FollowCameraService _followCameraService;
 
-        public MenuService(CameraService cameraService, SaveService saveService, InputService inputService)
+        public MenuService(CameraService cameraService, SaveService saveService, InputService inputService, FollowCameraService followCameraService)
         {
             if (cameraService == null) throw new ArgumentNullException("cameraService");
             if (saveService == null) throw new ArgumentNullException("saveService");
             if (inputService == null) throw new ArgumentNullException("inputService");
+            if (followCameraService == null) throw new ArgumentNullException("followCameraService");
             _cameraService = cameraService;
             _saveService = saveService;
             _inputService = inputService;
+            _followCameraService = followCameraService;
         }
 
         public void Initialize()
         {
             CreateCameraOptionsMenu();
+            CreateFollowOptionsMenu();
             CreateSavedPathsMenu();
             CreateNodeEditorMenu();
             CreateMainMenu();
@@ -94,6 +108,7 @@ namespace ModdedCamera.Services
             ActivePool = new ObjectPool();
             ActivePool.Add(MainMenu);
             ActivePool.Add(CameraOptionsMenu);
+            ActivePool.Add(FollowOptionsMenu);
             ActivePool.Add(SavedPathsMenu);
             ActivePool.Add(NodeEditorMenu);
 
@@ -184,6 +199,7 @@ namespace ModdedCamera.Services
         {
             SavedPathsMenu.Visible = false;
             CameraOptionsMenu.Visible = false;
+            FollowOptionsMenu.Visible = false;
             MainMenu.Visible = true;
         }
 
@@ -193,6 +209,7 @@ namespace ModdedCamera.Services
             {
                 _speedListItem.SelectedItem = SnapSpeedToNearest(_cameraService.CurrentSpeed);
                 _usePlayerViewCheckbox.Checked = _cameraService.UsePlayerView;
+                SyncFollowOptionsWithMenu();
             }
             catch (Exception ex)
             {
@@ -401,6 +418,13 @@ namespace ModdedCamera.Services
                     return true;
                 }
 
+                if (FollowOptionsMenu.Visible)
+                {
+                    FollowOptionsMenu.Visible = false;
+                    MainMenu.Visible = true;
+                    return true;
+                }
+
                 if (_cameraService.IsSelectorActive)
                 {
                     _cameraService.ExitPointSelector();
@@ -478,6 +502,22 @@ namespace ModdedCamera.Services
             _cameraOptionsItem.Activated += (s, e) => { MainMenu.Visible = false; CameraOptionsMenu.Visible = true; };
             MainMenu.Add(_cameraOptionsItem);
 
+            _followCameraCheckbox = new NativeCheckboxItem("Следование камеры", "Кинематографичная камера за персонажем после удара рукой или оружием ближнего боя", false);
+            _followCameraCheckbox.CheckboxChanged += (s, e) =>
+            {
+                _followCameraService.Enabled = _followCameraCheckbox.Checked;
+            };
+            MainMenu.Add(_followCameraCheckbox);
+
+            _followOptionsItem = new NativeItem("Настройки следования", "Длительность и физика follow-режима");
+            _followOptionsItem.Activated += (s, e) =>
+            {
+                SyncFollowOptionsWithMenu();
+                MainMenu.Visible = false;
+                FollowOptionsMenu.Visible = true;
+            };
+            MainMenu.Add(_followOptionsItem);
+
             _editNodesItem = new NativeItem("~y~Редактор узлов", "Изменить длительность и интерполяцию каждого узла");
             _editNodesItem.Activated += (s, e) =>
             {
@@ -512,6 +552,26 @@ namespace ModdedCamera.Services
 
             _speedListItem.ItemChanged += OnSpeedChanged;
             _usePlayerViewCheckbox.CheckboxChanged += OnCheckboxChanged;
+        }
+
+        private void CreateFollowOptionsMenu()
+        {
+            FollowOptionsMenu = new NativeMenu("Настройки следования", "");
+
+            _followDurationListItem = new NativeListItem<string>("Длительность", "Сколько секунд камера следует за целью");
+            for (int i = 0; i < FollowDurationLabels.Length; i++)
+                _followDurationListItem.Items.Add(FollowDurationLabels[i]);
+            _followDurationListItem.SelectedItem = "7 с";
+            FollowOptionsMenu.Add(_followDurationListItem);
+
+            _followGravityListItem = new NativeListItem<string>("Гравитация", "Насколько легко цель летит во время следования");
+            for (int i = 0; i < FollowGravityLabels.Length; i++)
+                _followGravityListItem.Items.Add(FollowGravityLabels[i]);
+            _followGravityListItem.SelectedItem = "Очень лёгкая";
+            FollowOptionsMenu.Add(_followGravityListItem);
+
+            _followDurationListItem.ItemChanged += OnFollowDurationChanged;
+            _followGravityListItem.ItemChanged += OnFollowGravityChanged;
         }
 
         private void CreateSavedPathsMenu()
@@ -776,6 +836,34 @@ namespace ModdedCamera.Services
             }
         }
 
+        private void OnFollowDurationChanged(object sender, ItemChangedEventArgs<string> e)
+        {
+            int index = _followDurationListItem.SelectedIndex;
+            if (index < 0 || index >= FollowDurationValues.Length)
+                index = 2;
+
+            _followCameraService.FollowDurationMs = FollowDurationValues[index];
+            Logger.Info("MenuService: Follow duration changed to " + _followCameraService.FollowDurationMs + " ms");
+        }
+
+        private void OnFollowGravityChanged(object sender, ItemChangedEventArgs<string> e)
+        {
+            int index = _followGravityListItem.SelectedIndex;
+            if (index < 0 || index >= FollowGravityValues.Length)
+                index = 2;
+
+            _followCameraService.GravityLevel = FollowGravityValues[index];
+            Logger.Info("MenuService: Follow gravity changed to level " + _followCameraService.GravityLevel);
+        }
+
+        private void SyncFollowOptionsWithMenu()
+        {
+            if (_followDurationListItem != null)
+                _followDurationListItem.SelectedIndex = FindNearestDurationIndex(_followCameraService.FollowDurationMs);
+            if (_followGravityListItem != null)
+                _followGravityListItem.SelectedIndex = FindGravityIndex(_followCameraService.GravityLevel);
+        }
+
         private void OnCheckboxChanged(object sender, EventArgs e)
         {
             try
@@ -804,6 +892,32 @@ namespace ModdedCamera.Services
                 }
             }
             return "x" + nearest.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static int FindNearestDurationIndex(int durationMs)
+        {
+            int best = 0;
+            int bestDiff = Math.Abs(durationMs - FollowDurationValues[0]);
+            for (int i = 1; i < FollowDurationValues.Length; i++)
+            {
+                int diff = Math.Abs(durationMs - FollowDurationValues[i]);
+                if (diff < bestDiff)
+                {
+                    best = i;
+                    bestDiff = diff;
+                }
+            }
+            return best;
+        }
+
+        private static int FindGravityIndex(int gravityLevel)
+        {
+            for (int i = 0; i < FollowGravityValues.Length; i++)
+            {
+                if (FollowGravityValues[i] == gravityLevel)
+                    return i;
+            }
+            return 2;
         }
     }
 }

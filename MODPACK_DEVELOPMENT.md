@@ -67,12 +67,10 @@ GTA V\scripts\ReloaderPlugins\Plugins
 
 ## Current release state
 
-- Latest release created in this session: `v1.1`
-- Release title: `ModPack 1.1`
-- Asset: `ModPack-Plugins-1.1.zip`
-- `v1.1` points to commit `51d19b7 Prepare ModPack 1.1 release`
-- README was updated after the release with LemonUI requirements in commit
-  `f890378 Document LemonUI requirement`
+- Latest release target: `v1.2`
+- Release title: `ModPack 1.2`
+- Asset: `ModPack-Plugins-1.2.zip`
+- `v1.2` includes the separate Modded Camera follow mode.
 
 ## Modded Camera notes
 
@@ -99,6 +97,14 @@ paths compatible.
   still available per node.
 - Slow-motion camera timing should use real elapsed time, not GTA scaled game
   time, because world time scale already applies the visual slowdown.
+- The camera follow mode is intentionally separate from path playback. It is a
+  runtime checkbox in the main `T` menu and is implemented in
+  `ModdedCamera_FollowCameraService.cs`. When enabled, fresh damage from the
+  player to a ped starts a scripted follow camera with a smoothed entry, sets
+  time scale to `0.75`, applies configurable gravity, launches the target,
+  disables player controls during the shot, then cuts back to gameplay camera
+  and restores world state. Follow duration and gravity live in a separate
+  `Настройки следования` submenu.
 
 ## Rainbow Paint notes
 
@@ -132,4 +138,3 @@ The public README should mention:
 - Script Hook V
 - Script Hook V .NET 3
 - LemonUI, with `LemonUI.SHVDN3.dll` placed in `GTA V\scripts`
-

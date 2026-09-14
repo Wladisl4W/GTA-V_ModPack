@@ -13,6 +13,7 @@ namespace ModdedCamera
         private SaveService _saveService;
         private InputService _inputService;
         private MenuService _menuService;
+        private FollowCameraService _followCameraService;
 
         private string _durationDisplayText = null;
         private int _durationDisplayUntilMs = 0;
@@ -26,7 +27,8 @@ namespace ModdedCamera
                 _cameraService = new CameraService();
                 _saveService = new SaveService(_cameraService);
                 _inputService = new InputService();
-                _menuService = new MenuService(_cameraService, _saveService, _inputService);
+                _followCameraService = new FollowCameraService();
+                _menuService = new MenuService(_cameraService, _saveService, _inputService, _followCameraService);
 
                 WireInputEvents();
                 WireServiceEvents();
@@ -71,7 +73,14 @@ namespace ModdedCamera
                 bool playerOk = Game.Player != null && Game.Player.Character != null && Game.Player.Character.Exists();
                 // Don't drop the camera update (and its fade machine) just because the
                 // player entity is briefly missing (loading/transition) while a camera is active.
-                if (!playerOk && !_cameraService.IsAnyCameraActive) return;
+                if (!playerOk && !_cameraService.IsAnyCameraActive && (_followCameraService == null || !_followCameraService.IsActive)) return;
+
+                bool followBlocked = _cameraService.IsAnyCameraActive || (_menuService != null && _menuService.AreAnyVisible);
+                if (_followCameraService != null)
+                    _followCameraService.Update(followBlocked);
+
+                if (_followCameraService != null && _followCameraService.IsActive)
+                    return;
 
                 _saveService.Update();
                 if (_saveService.State != SaveService.SaveState.None)
@@ -131,6 +140,7 @@ namespace ModdedCamera
             try
             {
                 Logger.Info("Disposing ModdedCamera...");
+                if (_followCameraService != null) _followCameraService.Dispose();
                 if (_cameraService != null) _cameraService.Dispose();
                 if (_menuService != null) _menuService.Dispose();
                 Logger.Info("ModdedCamera disposed successfully.");
