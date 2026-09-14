@@ -33,9 +33,14 @@ GitHub release 1.1:
 Требования:
   • Script Hook V        — http://www.dev-c.com/gtav/scripthookv/
   • Script Hook V .NET 3 — https://github.com/scripthookvdotnet/scripthookvdotnet-nightly/releases
+  • LemonUI              — https://github.com/LemonUIbyLemon/LemonUI
 
 Установка:
   1. Установите Script Hook V и Script Hook V .NET в корень GTA V.
+     LemonUI.SHVDN3.dll должен лежать в:
+
+       GTA V\scripts\
+
   2. Из папки `Ready To Use` скопируйте `Reloader.dll` в:
 
        GTA V\scripts\
