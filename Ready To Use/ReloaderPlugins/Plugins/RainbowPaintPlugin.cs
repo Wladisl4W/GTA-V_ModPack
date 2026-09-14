@@ -49,6 +49,20 @@ namespace RainbowPaintMod
             }
         }
 
+        private class PaintAssignment
+        {
+            public Vector3 Position;
+            public int PrimaryIndex;
+            public int SecondaryIndex;
+
+            public PaintAssignment(Vector3 position, int primaryIndex, int secondaryIndex)
+            {
+                Position = position;
+                PrimaryIndex = primaryIndex;
+                SecondaryIndex = secondaryIndex;
+            }
+        }
+
         private readonly ObjectPool _pool = new ObjectPool();
         private NativeMenu _menu;
         private NativeCheckboxItem _bothSameCheckbox;
@@ -58,17 +72,30 @@ namespace RainbowPaintMod
         private NativeListItem<string> _speedList;
         private NativeItem _resetItem;
         private NativeItem _randomizeAllItem;
+        private NativeCheckboxItem _smokeMatchesPrimaryCheckbox;
+        private NativeItem _customPlateItem;
+        private NativeMenu _randomColorsMenu;
         private NativeMenu _exceptionsMenu;
         private NativeItem _exceptionsDisplayItem;
+        private readonly List<NativeCheckboxItem> _randomColorItems = new List<NativeCheckboxItem>();
         private readonly List<ModelExclusion> _excludedModels = new List<ModelExclusion>();
-        private readonly string _settingsPath = Path.Combine(
+        private readonly string _exclusionsPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
             "ReloaderPlugins",
             "RainbowPaintExceptions.json"
         );
+        private readonly string _settingsPath = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            "ReloaderPlugins",
+            "RainbowPaintSettings.json"
+        );
         private readonly ExclusionsSerializer _serializer = new ExclusionsSerializer();
+        private readonly SettingsSerializer _settingsSerializer = new SettingsSerializer();
+        private RainbowPaintSettings _settings = new RainbowPaintSettings();
         private bool _menuEnabled;
         private readonly Random _rng = new Random();
+        private bool _keyboardPlateActive;
+        private string _customPlateText = "";
 
         // Типы краски: название + стоковый индекс нужного типа (0-159)
         private static readonly string[] PaintTypeNames =
@@ -102,7 +129,7 @@ namespace RainbowPaintMod
         private const int HueSteps = 256;
 
         // Индекс "Радужный (перелив)" в _rainbowColors — должен оставаться последним
-        private const int RainbowIndex = 8;
+        private int RainbowIndex { get { return _rainbowColors.Count - 1; } }
 
         private readonly List<RainbowColor> _rainbowColors = new List<RainbowColor>
         {
@@ -114,6 +141,9 @@ namespace RainbowPaintMod
             new RainbowColor("Синий", 30, 60, 255),
             new RainbowColor("Фиолетовый", 75, 0, 130),
             new RainbowColor("Розовый", 255, 20, 147),
+            new RainbowColor("Белый", 255, 255, 255),
+            new RainbowColor("Серый", 128, 128, 128),
+            new RainbowColor("Чёрный", 5, 5, 5),
             new RainbowColor("Радужный (перелив)", 0, 0, 0)
         };
 
@@ -140,6 +170,7 @@ namespace RainbowPaintMod
         {
             // Загрузка сохранённых исключений рандомайзера
             LoadExclusions();
+            LoadSettings();
 
             GTA.UI.Notification.PostTicker("~r~R~o~a~y~i~g~n~b~b~p~o~r~w~o~P~y~a~g~i~b~n~p~t~w~ мод загружен~n~Нажми ~y~I~w~ для меню покраски", false, false);
 
@@ -217,6 +248,38 @@ namespace RainbowPaintMod
             _randomizeAllItem = randomizeAllItem;
             _menu.Add(randomizeAllItem);
 
+            _smokeMatchesPrimaryCheckbox = new NativeCheckboxItem(
+                "Дым шин в цвет основного",
+                "Вкл: дым из-под колёс получает цвет основного цвета машины.",
+                false);
+            _smokeMatchesPrimaryCheckbox.Checked = _settings.SmokeMatchesPrimaryColor;
+            _smokeMatchesPrimaryCheckbox.CheckboxChanged += (s, e) =>
+            {
+                _settings.SmokeMatchesPrimaryColor = _smokeMatchesPrimaryCheckbox.Checked;
+                SaveSettings();
+            };
+            _menu.Add(_smokeMatchesPrimaryCheckbox);
+
+            _customPlateItem = new NativeItem("Кастомный номер", "Ввести текст номера и применить ко всем машинам в мире");
+            _customPlateItem.Activated += (s, e) => StartPlateInput();
+            _menu.Add(_customPlateItem);
+
+            _randomColorsMenu = new NativeMenu("Цвета рандомайзера", "Галочка = цвет участвует в рандоме");
+            _pool.Add(_randomColorsMenu);
+            BuildRandomColorsMenu();
+            _randomColorsMenu.Closed += (s, e) =>
+            {
+                _menu.Visible = true;
+            };
+
+            var randomColorsItem = new NativeItem("Цвета рандомайзера", "Выбрать, какие цвета участвуют в рандоме");
+            randomColorsItem.Activated += (s, e) =>
+            {
+                _menu.Visible = false;
+                _randomColorsMenu.Visible = true;
+            };
+            _menu.Add(randomColorsItem);
+
             // Подменю исключений: модели, которые рандомайзер не красит
             _exceptionsMenu = new NativeMenu("Исключения", "Эти модели рандомайзер не красит");
             _pool.Add(_exceptionsMenu);
@@ -264,6 +327,7 @@ namespace RainbowPaintMod
         public void OnTick()
         {
             _pool.Process();
+            UpdatePlateInput();
 
             // Радуга для всех машин в списке — по времени, не по кадрам
             if (_rainbowSlots.Count > 0)
@@ -296,7 +360,10 @@ namespace RainbowPaintMod
                         }
 
                         if (slot.Primary)
+                        {
                             slot.Vehicle.Mods.CustomPrimaryColor = c;
+                            ApplyTyreSmokeColor(slot.Vehicle, c);
+                        }
                         if (slot.Secondary)
                             slot.Vehicle.Mods.CustomSecondaryColor = c;
                     }
@@ -328,7 +395,9 @@ namespace RainbowPaintMod
             Vehicle v = IsSpoonerModeActive() ? GetVehiclePlayerIsLookingAt() : null;
 
             // Меню открыто: навёлся на машину — переключаемся на неё, иначе — закрываем
-            bool menuOpen = _menu.Visible || (_exceptionsMenu != null && _exceptionsMenu.Visible);
+            bool menuOpen = _menu.Visible ||
+                (_exceptionsMenu != null && _exceptionsMenu.Visible) ||
+                (_randomColorsMenu != null && _randomColorsMenu.Visible);
             if (menuOpen)
             {
                 if (v == null || !v.Exists())
@@ -336,11 +405,15 @@ namespace RainbowPaintMod
                     _menu.Visible = false;
                     if (_exceptionsMenu != null)
                         _exceptionsMenu.Visible = false;
+                    if (_randomColorsMenu != null)
+                        _randomColorsMenu.Visible = false;
                     return;
                 }
                 SelectVehicle(v);
                 if (_exceptionsMenu != null)
                     _exceptionsMenu.Visible = false;
+                if (_randomColorsMenu != null)
+                    _randomColorsMenu.Visible = false;
                 GTA.UI.Screen.ShowSubtitle("~g~Машина выделена! Выбирай цвет в меню.", 4000);
                 return;
             }
@@ -394,6 +467,145 @@ namespace RainbowPaintMod
             _resetItem.Enabled = enabled;
         }
 
+        private void BuildRandomColorsMenu()
+        {
+            _randomColorItems.Clear();
+
+            for (int i = 0; i < _rainbowColors.Count; i++)
+            {
+                int colorIndex = i;
+                RainbowColor color = _rainbowColors[i];
+                bool enabled = IsRandomColorEnabled(color.Name);
+                var item = new NativeCheckboxItem(color.Name, "Участвует в рандомной покраске", enabled);
+                item.CheckboxChanged += (s, e) =>
+                {
+                    SetRandomColorEnabled(_rainbowColors[colorIndex].Name, item.Checked);
+                    SaveSettings();
+                };
+                _randomColorItems.Add(item);
+                _randomColorsMenu.Add(item);
+            }
+        }
+
+        private bool IsRandomColorEnabled(string name)
+        {
+            if (_settings.EnabledRandomColors == null)
+                return true;
+
+            for (int i = 0; i < _settings.EnabledRandomColors.Count; i++)
+            {
+                if (string.Equals(_settings.EnabledRandomColors[i], name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private void SetRandomColorEnabled(string name, bool enabled)
+        {
+            if (_settings.EnabledRandomColors == null)
+                _settings.EnabledRandomColors = new List<string>();
+
+            for (int i = _settings.EnabledRandomColors.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(_settings.EnabledRandomColors[i], name, StringComparison.OrdinalIgnoreCase))
+                    _settings.EnabledRandomColors.RemoveAt(i);
+            }
+
+            if (enabled)
+                _settings.EnabledRandomColors.Add(name);
+        }
+
+        private List<int> GetEnabledRandomColorIndices(bool includeRainbow)
+        {
+            List<int> result = new List<int>();
+            for (int i = 0; i < _rainbowColors.Count; i++)
+            {
+                if (!includeRainbow && IsRainbowIndex(i))
+                    continue;
+
+                if (IsRandomColorEnabled(_rainbowColors[i].Name))
+                    result.Add(i);
+            }
+            return result;
+        }
+
+        private void StartPlateInput()
+        {
+            try
+            {
+                _menu.Visible = false;
+                Function.Call(Hash.DISPLAY_ONSCREEN_KEYBOARD, 1, "FMMC_MPM_NA", "", _customPlateText, "", "", "", 8);
+                _keyboardPlateActive = true;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error("RainbowPaint: StartPlateInput", ex);
+            }
+        }
+
+        private void UpdatePlateInput()
+        {
+            if (!_keyboardPlateActive) return;
+
+            try
+            {
+                int status = Function.Call<int>(Hash.UPDATE_ONSCREEN_KEYBOARD);
+                if (status == 0) return;
+
+                _keyboardPlateActive = false;
+                if (status == 2)
+                {
+                    _menu.Visible = true;
+                    return;
+                }
+
+                string input = Function.Call<string>(Hash.GET_ONSCREEN_KEYBOARD_RESULT);
+                if (input == null)
+                    input = "";
+
+                input = input.Trim().ToUpperInvariant();
+                if (input.Length > 8)
+                    input = input.Substring(0, 8);
+
+                _customPlateText = input;
+                _settings.CustomPlateText = input;
+                SaveSettings();
+                ApplyPlateToAllVehicles(input);
+                _menu.Visible = true;
+            }
+            catch (Exception ex)
+            {
+                _keyboardPlateActive = false;
+                _menu.Visible = true;
+                PluginLog.Error("RainbowPaint: UpdatePlateInput", ex);
+            }
+        }
+
+        private void ApplyPlateToAllVehicles(string plateText)
+        {
+            Vehicle[] all = World.GetAllVehicles();
+            int count = 0;
+
+            for (int i = 0; all != null && i < all.Length; i++)
+            {
+                Vehicle veh = all[i];
+                if (veh == null || !veh.Exists())
+                    continue;
+
+                try
+                {
+                    Function.Call(Hash.SET_VEHICLE_NUMBER_PLATE_TEXT, veh.Handle, plateText);
+                    count++;
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Error("RainbowPaint: ApplyPlateToAllVehicles", ex);
+                }
+            }
+
+            GTA.UI.Screen.ShowSubtitle("~g~Номер применён к машинам: " + count + ".", 4000);
+        }
+
         // Красит все машины на карте в случайные цвета по текущим настройкам
         private void RandomizeAllVehicles()
         {
@@ -441,11 +653,19 @@ namespace RainbowPaintMod
                 return 0;
             });
 
+            List<int> enabledSolidColors = GetEnabledRandomColorIndices(false);
+            bool rainbowAllowed = IsRandomColorEnabled(_rainbowColors[RainbowIndex].Name);
+            if (enabledSolidColors.Count == 0 && !rainbowAllowed)
+            {
+                GTA.UI.Screen.ShowSubtitle("~y~Включи хотя бы один цвет в меню цветов рандомайзера.", 4000);
+                return;
+            }
+
             // Радужные машины: один бросок — 80% на первую (случайную),
             // и если она выпала — 20% на вторую (другую случайную). Максимум 2.
             int rainbowFirst = -1;
             int rainbowSecond = -1;
-            if (_rng.NextDouble() < 0.8)
+            if (rainbowAllowed && _rng.NextDouble() < 0.8)
             {
                 rainbowFirst = _rng.Next(0, targets.Count);
                 if (targets.Count > 1 && _rng.NextDouble() < 0.2)
@@ -457,8 +677,7 @@ namespace RainbowPaintMod
             }
 
             bool bothSame = _bothSameCheckbox.Checked;
-            int lastSolidIndex = RainbowIndex - 1;
-            int lastColorIdx = -1;
+            List<PaintAssignment> assignments = new List<PaintAssignment>();
 
             int count = 0;
             int rainbowCount = 0;
@@ -483,19 +702,20 @@ namespace RainbowPaintMod
                         Color hue = ColorFromHSV(_rainbowHue);
                         veh.Mods.CustomPrimaryColor = hue;
                         veh.Mods.CustomSecondaryColor = hue;
+                        ApplyTyreSmokeColor(veh, hue);
                         veh.DirtLevel = 0f;
+                        assignments.Add(new PaintAssignment(veh.Position, RainbowIndex, RainbowIndex));
                         count++;
                         continue;
                     }
 
-                    // Цвет без повтора цвета предыдущей (соседней) машины
-                    int idx = _rng.Next(0, lastSolidIndex);
-                    if (lastColorIdx >= 0 && idx >= lastColorIdx)
-                        idx++;
-                    lastColorIdx = idx;
+                    if (enabledSolidColors.Count == 0)
+                        continue;
 
+                    int idx = PickColorForVehicle(veh, assignments, enabledSolidColors, -1, true);
                     var color = _rainbowColors[idx];
                     Color c = color.Paint;
+                    int idx2 = idx;
 
                     if (bothSame)
                     {
@@ -504,14 +724,14 @@ namespace RainbowPaintMod
                     }
                     else
                     {
-                        int idx2 = _rng.Next(0, lastSolidIndex);
-                        if (lastColorIdx >= 0 && idx2 >= lastColorIdx)
-                            idx2++;
+                        idx2 = PickColorForVehicle(veh, assignments, enabledSolidColors, idx, false);
                         veh.Mods.CustomPrimaryColor = c;
                         veh.Mods.CustomSecondaryColor = _rainbowColors[idx2].Paint;
                     }
 
+                    ApplyTyreSmokeColor(veh, c);
                     veh.DirtLevel = 0f;
+                    assignments.Add(new PaintAssignment(veh.Position, idx, idx2));
                     count++;
                 }
                 catch (Exception ex)
@@ -521,6 +741,84 @@ namespace RainbowPaintMod
             }
 
             GTA.UI.Screen.ShowSubtitle("~g~Покрашено машин: " + count + " (~p~радужных: " + rainbowCount + "~g~)~n~~w~Пропущено (исключения): " + skippedCount + ".", 5000);
+        }
+
+        private int PickColorForVehicle(Vehicle vehicle, List<PaintAssignment> assignments, List<int> allowedColors, int avoidIndex, bool primary)
+        {
+            if (allowedColors.Count == 1)
+                return allowedColors[0];
+
+            int bestScore = int.MaxValue;
+            List<int> best = new List<int>();
+
+            for (int i = 0; i < allowedColors.Count; i++)
+            {
+                int colorIndex = allowedColors[i];
+                if (allowedColors.Count > 1 && colorIndex == avoidIndex)
+                    continue;
+
+                int score = GetNearbyColorScore(vehicle.Position, assignments, colorIndex, primary);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best.Clear();
+                    best.Add(colorIndex);
+                }
+                else if (score == bestScore)
+                {
+                    best.Add(colorIndex);
+                }
+            }
+
+            if (best.Count == 0)
+                return allowedColors[_rng.Next(0, allowedColors.Count)];
+
+            return best[_rng.Next(0, best.Count)];
+        }
+
+        private int GetNearbyColorScore(Vector3 position, List<PaintAssignment> assignments, int colorIndex, bool primary)
+        {
+            const float closeDistance = 12f;
+            const float rowDistance = 24f;
+            int score = 0;
+
+            for (int i = assignments.Count - 1; i >= 0; i--)
+            {
+                float dist = (position - assignments[i].Position).Length();
+                if (dist > rowDistance)
+                    continue;
+
+                int assignedIndex = primary ? assignments[i].PrimaryIndex : assignments[i].SecondaryIndex;
+                if (assignedIndex != colorIndex)
+                    continue;
+
+                if (dist <= closeDistance)
+                    score += 8;
+                else
+                    score += 3;
+
+                int recentDistance = assignments.Count - i;
+                if (recentDistance <= 3)
+                    score += 2;
+            }
+
+            return score;
+        }
+
+        private void ApplyTyreSmokeColor(Vehicle vehicle, Color primaryColor)
+        {
+            if (_smokeMatchesPrimaryCheckbox == null || !_smokeMatchesPrimaryCheckbox.Checked)
+                return;
+
+            try
+            {
+                Function.Call(Hash.TOGGLE_VEHICLE_MOD, vehicle.Handle, 20, true);
+                Function.Call(Hash.SET_VEHICLE_TYRE_SMOKE_COLOR, vehicle.Handle, (int)primaryColor.R, (int)primaryColor.G, (int)primaryColor.B);
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error("RainbowPaint: ApplyTyreSmokeColor", ex);
+            }
         }
 
         // Модель машины в списке исключений?
@@ -608,6 +906,8 @@ namespace RainbowPaintMod
                     _menu.Visible = false;
                 if (_exceptionsMenu != null)
                     _exceptionsMenu.Visible = false;
+                if (_randomColorsMenu != null)
+                    _randomColorsMenu.Visible = false;
             }
             catch (Exception ex)
             {
@@ -615,6 +915,7 @@ namespace RainbowPaintMod
             }
 
             SaveExclusions();
+            SaveSettings();
         }
 
         // Загрузка исключений из файла
@@ -622,10 +923,10 @@ namespace RainbowPaintMod
         {
             try
             {
-                if (!File.Exists(_settingsPath))
+                if (!File.Exists(_exclusionsPath))
                     return;
 
-                string json = File.ReadAllText(_settingsPath);
+                string json = File.ReadAllText(_exclusionsPath);
                 List<ModelExclusion> list = _serializer.Deserialize(json);
                 if (list == null)
                     return;
@@ -649,13 +950,107 @@ namespace RainbowPaintMod
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath));
-                File.WriteAllText(_settingsPath, _serializer.Serialize(_excludedModels));
+                Directory.CreateDirectory(Path.GetDirectoryName(_exclusionsPath));
+                File.WriteAllText(_exclusionsPath, _serializer.Serialize(_excludedModels));
             }
             catch (Exception ex)
             {
                 PluginLog.Error("RainbowPaint: SaveExclusions", ex);
             }
+        }
+
+        private void LoadSettings()
+        {
+            try
+            {
+                if (!File.Exists(_settingsPath))
+                {
+                    _settings = CreateDefaultSettings();
+                    return;
+                }
+
+                string json = File.ReadAllText(_settingsPath);
+                RainbowPaintSettings settings = _settingsSerializer.Deserialize(json);
+                _settings = NormalizeSettings(settings);
+                _customPlateText = _settings.CustomPlateText ?? "";
+            }
+            catch (Exception ex)
+            {
+                _settings = CreateDefaultSettings();
+                PluginLog.Error("RainbowPaint: LoadSettings", ex);
+            }
+        }
+
+        private void SaveSettings()
+        {
+            try
+            {
+                _settings = NormalizeSettings(_settings);
+                Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath));
+                File.WriteAllText(_settingsPath, _settingsSerializer.Serialize(_settings));
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error("RainbowPaint: SaveSettings", ex);
+            }
+        }
+
+        private RainbowPaintSettings CreateDefaultSettings()
+        {
+            RainbowPaintSettings settings = new RainbowPaintSettings();
+            settings.EnabledRandomColors = new List<string>();
+            for (int i = 0; i < _rainbowColors.Count; i++)
+                settings.EnabledRandomColors.Add(_rainbowColors[i].Name);
+            settings.SmokeMatchesPrimaryColor = false;
+            settings.CustomPlateText = "";
+            return settings;
+        }
+
+        private RainbowPaintSettings NormalizeSettings(RainbowPaintSettings settings)
+        {
+            if (settings == null)
+                settings = CreateDefaultSettings();
+
+            if (settings.EnabledRandomColors == null)
+            {
+                settings.EnabledRandomColors = new List<string>();
+                for (int i = 0; i < _rainbowColors.Count; i++)
+                    settings.EnabledRandomColors.Add(_rainbowColors[i].Name);
+            }
+            else
+            {
+                List<string> normalized = new List<string>();
+                for (int i = 0; i < _rainbowColors.Count; i++)
+                {
+                    if (ContainsColorName(settings.EnabledRandomColors, _rainbowColors[i].Name))
+                        normalized.Add(_rainbowColors[i].Name);
+                }
+                settings.EnabledRandomColors = normalized;
+            }
+
+            if (settings.CustomPlateText == null)
+                settings.CustomPlateText = "";
+            if (settings.CustomPlateText.Length > 8)
+                settings.CustomPlateText = settings.CustomPlateText.Substring(0, 8);
+
+            return settings;
+        }
+
+        private bool ContainsColorName(List<string> list, string name)
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (string.Equals(list[i], name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        public class RainbowPaintSettings
+        {
+            public List<string> EnabledRandomColors { get; set; }
+            public bool SmokeMatchesPrimaryColor { get; set; }
+            public string CustomPlateText { get; set; }
         }
 
         // Изолирует использование устаревшего JavaScriptSerializer
@@ -673,6 +1068,23 @@ namespace RainbowPaintMod
             public string Serialize(List<ModelExclusion> exclusions)
             {
                 return _serializer.Serialize(exclusions);
+            }
+        }
+
+        private sealed class SettingsSerializer
+        {
+            private readonly JavaScriptSerializer _serializer = new JavaScriptSerializer();
+
+            public RainbowPaintSettings Deserialize(string json)
+            {
+                if (string.IsNullOrWhiteSpace(json))
+                    return null;
+                return _serializer.Deserialize<RainbowPaintSettings>(json);
+            }
+
+            public string Serialize(RainbowPaintSettings settings)
+            {
+                return _serializer.Serialize(settings);
             }
         }
 
@@ -920,6 +1332,7 @@ namespace RainbowPaintMod
                 slot.Primary = true;
 
                 _currentVehicle.Mods.CustomPrimaryColor = ColorFromHSV(_rainbowHue);
+                ApplyTyreSmokeColor(_currentVehicle, ColorFromHSV(_rainbowHue));
                 _currentVehicle.DirtLevel = 0f;
                 GTA.UI.Screen.ShowSubtitle("~p~Радуга на основной цвет!", 3000);
             }
@@ -934,6 +1347,7 @@ namespace RainbowPaintMod
 
                 var color = _rainbowColors[index];
                 _currentVehicle.Mods.CustomPrimaryColor = color.Paint;
+                ApplyTyreSmokeColor(_currentVehicle, color.Paint);
                 _currentVehicle.DirtLevel = 0f;
 
                 GTA.UI.Screen.ShowSubtitle("~g~Основной цвет: " + color.Name + "!", 3000);
@@ -991,6 +1405,7 @@ namespace RainbowPaintMod
                 Color hueColor = ColorFromHSV(_rainbowHue);
                 _currentVehicle.Mods.CustomPrimaryColor = hueColor;
                 _currentVehicle.Mods.CustomSecondaryColor = hueColor;
+                ApplyTyreSmokeColor(_currentVehicle, hueColor);
                 _currentVehicle.DirtLevel = 0f;
                 GTA.UI.Screen.ShowSubtitle("~p~Радужный режим активирован! Машин в переливе: " + _rainbowSlots.Count + ".", 4000);
             }
@@ -1009,6 +1424,7 @@ namespace RainbowPaintMod
                 var color = _rainbowColors[index];
                 _currentVehicle.Mods.CustomPrimaryColor = color.Paint;
                 _currentVehicle.Mods.CustomSecondaryColor = color.Paint;
+                ApplyTyreSmokeColor(_currentVehicle, color.Paint);
                 _currentVehicle.DirtLevel = 0f;
 
                 GTA.UI.Screen.ShowSubtitle("~g~Покрашено в " + color.Name + "!", 4000);

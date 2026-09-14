@@ -28,7 +28,6 @@ namespace ModdedCamera.Services
         private NativeItem _closeItem;
 
         private NativeListItem<string> _speedListItem;
-        private NativeListItem<string> _fovListItem;
         private NativeCheckboxItem _usePlayerViewCheckbox;
 
         private readonly List<NativeMenu> _pathSubMenus = new List<NativeMenu>();
@@ -192,7 +191,6 @@ namespace ModdedCamera.Services
         {
             try
             {
-                _fovListItem.SelectedItem = _cameraService.CurrentFov.ToString();
                 _speedListItem.SelectedItem = SnapSpeedToNearest(_cameraService.CurrentSpeed);
                 _usePlayerViewCheckbox.Checked = _cameraService.UsePlayerView;
             }
@@ -509,17 +507,10 @@ namespace ModdedCamera.Services
             _speedListItem.SelectedItem = "x1.00";
             CameraOptionsMenu.Add(_speedListItem);
 
-            _fovListItem = new NativeListItem<string>("Поле зрения (FOV)", "");
-            for (int i = 1; i <= 100; i++)
-                _fovListItem.Items.Add(i.ToString());
-            _fovListItem.SelectedItem = "50";
-            CameraOptionsMenu.Add(_fovListItem);
-
             _usePlayerViewCheckbox = new NativeCheckboxItem("Вид от игрока", "(Плавнее рендеринг местности, но ограничено движение)");
             CameraOptionsMenu.Add(_usePlayerViewCheckbox);
 
             _speedListItem.ItemChanged += OnSpeedChanged;
-            _fovListItem.ItemChanged += OnFovChanged;
             _usePlayerViewCheckbox.CheckboxChanged += OnCheckboxChanged;
         }
 
@@ -782,17 +773,6 @@ namespace ModdedCamera.Services
                     }
                     Logger.Info("MenuService: Speed changed to x" + v.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
                 }
-            }
-        }
-
-        private void OnFovChanged(object sender, ItemChangedEventArgs<string> e)
-        {
-            int v;
-            if (int.TryParse(_fovListItem.SelectedItem, out v) && v > 0)
-            {
-                _cameraService.CurrentFov = v;
-                _cameraService.ApplyCameraSettings();
-                Logger.Info("MenuService: FOV changed to: " + v);
             }
         }
 

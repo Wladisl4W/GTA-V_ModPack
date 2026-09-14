@@ -709,9 +709,8 @@ namespace MenyooStreamer
                     var pos = ped.Position;
                     float dx = pos.X - playerPos.X;
                     float dy = pos.Y - playerPos.Y;
-                    float dz = pos.Z - playerPos.Z;
 
-                    if (scanRadius > 0 && (dx * dx + dy * dy + dz * dz) > scanSq)
+                    if (scanRadius > 0 && (dx * dx + dy * dy) > scanSq)
                         continue;
 
                     var rot = ped.Rotation;
@@ -957,8 +956,7 @@ namespace MenyooStreamer
                                 var pedPos = ped.Position;
                                 float dx = pedPos.X - playerPosition.X;
                                 float dy = pedPos.Y - playerPosition.Y;
-                                float dz = pedPos.Z - playerPosition.Z;
-                                float distSq = dx * dx + dy * dy + dz * dz;
+                                float distSq = dx * dx + dy * dy;
                                 if (distSq < minDistSq)
                                     minDistSq = distSq;
                             }
@@ -970,8 +968,7 @@ namespace MenyooStreamer
                         {
                             float dx = record.PosX - playerPosition.X;
                             float dy = record.PosY - playerPosition.Y;
-                            float dz = record.PosZ - playerPosition.Z;
-                            float distSq = dx * dx + dy * dy + dz * dz;
+                            float distSq = dx * dx + dy * dy;
                             if (distSq < minDistSq)
                                 minDistSq = distSq;
                         }
