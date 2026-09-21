@@ -5,6 +5,7 @@
     <OutputType>Library</OutputType>
     <AssemblyName>Reloader</AssemblyName>
     <RootNamespace>Reloader</RootNamespace>
+    <FileVersion>2.0.0.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="ScriptHookVDotNet3">

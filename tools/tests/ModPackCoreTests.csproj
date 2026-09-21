@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ModPackCoreTests.cs" />
+    <Compile Include="../../Source Code/Plugins/ModPack_Core.cs" Link="Core.cs" />
+    <Compile Include="../../Source Code/Plugins/ModPack_Control.cs" Link="Control.cs" />
+  </ItemGroup>
+</Project>

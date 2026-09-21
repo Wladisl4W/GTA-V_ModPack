@@ -561,7 +561,7 @@ namespace ModdedCamera.Services
         {
             FollowOptionsMenu = new NativeMenu("Настройки следования", "");
 
-            _followDurationListItem = new NativeListItem<string>("Длительность", "Сколько секунд камера следует за целью");
+            _followDurationListItem = new NativeListItem<string>("Макс. длительность", "Аварийный лимит следования, если цель долго не останавливается");
             for (int i = 0; i < FollowDurationLabels.Length; i++)
                 _followDurationListItem.Items.Add(FollowDurationLabels[i]);
             _followDurationListItem.SelectedItem = "7 с";
@@ -853,7 +853,7 @@ namespace ModdedCamera.Services
                 index = 2;
 
             _followCameraService.FollowDurationMs = FollowDurationValues[index];
-            Logger.Info("MenuService: Follow duration changed to " + _followCameraService.FollowDurationMs + " ms");
+            Logger.Info("MenuService: Follow max duration changed to " + _followCameraService.FollowDurationMs + " ms");
         }
 
         private void OnFollowGravityChanged(object sender, ItemChangedEventArgs<string> e)

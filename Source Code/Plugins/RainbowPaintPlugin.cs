@@ -1,4 +1,5 @@
 using System;
+using ModPack;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -923,10 +924,10 @@ namespace RainbowPaintMod
         {
             try
             {
-                if (!File.Exists(_exclusionsPath))
+                if (!SafeFiles.Exists(_exclusionsPath))
                     return;
 
-                string json = File.ReadAllText(_exclusionsPath);
+                string json = SafeFiles.Read(_exclusionsPath, ValidateExclusions);
                 List<ModelExclusion> list = _serializer.Deserialize(json);
                 if (list == null)
                     return;
@@ -951,7 +952,7 @@ namespace RainbowPaintMod
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_exclusionsPath));
-                File.WriteAllText(_exclusionsPath, _serializer.Serialize(_excludedModels));
+                SafeFiles.Write(_exclusionsPath, _serializer.Serialize(_excludedModels), ValidateExclusions);
             }
             catch (Exception ex)
             {
@@ -963,13 +964,13 @@ namespace RainbowPaintMod
         {
             try
             {
-                if (!File.Exists(_settingsPath))
+                if (!SafeFiles.Exists(_settingsPath))
                 {
                     _settings = CreateDefaultSettings();
                     return;
                 }
 
-                string json = File.ReadAllText(_settingsPath);
+                string json = SafeFiles.Read(_settingsPath, ValidateSettings);
                 RainbowPaintSettings settings = _settingsSerializer.Deserialize(json);
                 _settings = NormalizeSettings(settings);
                 _customPlateText = _settings.CustomPlateText ?? "";
@@ -981,13 +982,24 @@ namespace RainbowPaintMod
             }
         }
 
+        private void ValidateSettings(string text)
+        {
+            if (new JavaScriptSerializer().Deserialize<RainbowPaintSettings>(text) == null)
+                throw new InvalidDataException("Invalid paint settings");
+        }
+        private void ValidateExclusions(string text)
+        {
+            var entries = new JavaScriptSerializer().Deserialize<List<ModelExclusion>>(text);
+            if (entries == null)
+                throw new InvalidDataException("Invalid paint exclusions");
+        }
         private void SaveSettings()
         {
             try
             {
                 _settings = NormalizeSettings(_settings);
                 Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath));
-                File.WriteAllText(_settingsPath, _settingsSerializer.Serialize(_settings));
+                SafeFiles.Write(_settingsPath, _settingsSerializer.Serialize(_settings), ValidateSettings);
             }
             catch (Exception ex)
             {

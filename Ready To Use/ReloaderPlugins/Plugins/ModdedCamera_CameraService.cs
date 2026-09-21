@@ -7,11 +7,16 @@ using GTA.Math;
 using GTA.Native;
 using LemonUI;
 using LemonUI.Menus;
+using ModPack;
 
 namespace ModdedCamera.Services
 {
     public class CameraService
     {
+        private readonly ControlSession _control = new ControlSession();
+        private bool _splineExitPending;
+        public bool HasControl { get { return _control.Held; } }
+
         public SplineCamera SplineCamera { get; private set; }
         public PositionSelector PositionSelector { get; private set; }
 
@@ -83,8 +88,8 @@ namespace ModdedCamera.Services
             try
             {
                 Logger.Info("CameraService: Initializing cameras...");
-                SplineCamera = new SplineCamera();
-                PositionSelector = new PositionSelector(Vector3.Zero, Vector3.Zero);
+                SplineCamera = new SplineCamera() { HasControl = delegate { return _control.Held; } };
+                PositionSelector = new PositionSelector(Vector3.Zero, Vector3.Zero) { HasControl = delegate { return _control.Held; } };
                 ApplyCameraSettings();
                 Logger.Info("CameraService: Cameras initialized");
             }
@@ -131,6 +136,8 @@ namespace ModdedCamera.Services
                     return;
                 }
 
+                if (!_control.Acquire("Камера", true)) return;
+                DevelopmentDiagnostics.State("Camera", "Position selector");
                 Logger.Info("CameraService: Entering point selector mode");
                 Game.Player.Character.IsPositionFrozen = true;
                 _selectorWasUsed = true;
@@ -148,7 +155,7 @@ namespace ModdedCamera.Services
                 catch
                 {
                     // Откат: никогда не оставляем героя замороженным при неудачном входе.
-                    try { Game.Player.Character.IsPositionFrozen = false; } catch { }
+                    // Original player state is restored by the control session.
                     _selectorWasUsed = false;
                     _selectorExitPending = false;
                     throw;
@@ -158,6 +165,7 @@ namespace ModdedCamera.Services
             {
                 GTA.UI.Notification.PostTicker("~r~Ошибка!", false, false);
                 Logger.Error(ex, "CameraService: Error in EnterPointSelector");
+                EndControlImmediately();
             }
         }
 
@@ -180,6 +188,7 @@ namespace ModdedCamera.Services
                     GTA.UI.Notification.PostTicker("Камера уже активна.", false, false);
                     return;
                 }
+                if (!_control.Acquire("Камера", true)) return;
                 if (IsSplineCamActive)
                 {
                     // Во время воспроизведения spline-камера занята. Временно
@@ -194,6 +203,8 @@ namespace ModdedCamera.Services
                     if (SplineCamera != null && SplineCamera.MainCamera != null && SplineCamera.MainCamera.Exists())
                         SplineCamera.MainCamera.IsActive = false;
                     if (SplineCamera != null) SplineCamera.AbortPendingFade();
+                    _splineExitPending = false;
+                    _splineCamWasUsed = false;
                 }
 
                 Logger.Info("CameraService: Entering point selector to edit node " + nodeIndex);
@@ -214,7 +225,7 @@ namespace ModdedCamera.Services
                 }
                 catch
                 {
-                    try { Game.Player.Character.IsPositionFrozen = false; } catch { }
+                    // Original player state is restored by the control session.
                     _selectorWasUsed = false;
                     _selectorExitPending = false;
                     _editNodeIndex = -1;
@@ -225,11 +236,13 @@ namespace ModdedCamera.Services
             {
                 GTA.UI.Notification.PostTicker("~r~Ошибка!", false, false);
                 Logger.Error(ex, "CameraService: Error in EnterPointSelectorForNode");
+                EndControlImmediately();
             }
         }
 
         public void ExitPointSelector()
         {
+            if (!_control.Held || (!_selectorWasUsed && !IsSelectorActive && !_selectorExitPending)) return;
             try
             {
                 Logger.Info("CameraService: Exiting point selector mode");
@@ -243,8 +256,8 @@ namespace ModdedCamera.Services
                     // Разморозка и сброс времени — всегда, даже если выход бросил.
                     // _selectorWasUsed гасится только по завершении фейда (см. Update),
                     // чтобы fade-машина продолжала тикать до None.
-                    try { Game.Player.Character.IsPositionFrozen = false; } catch { }
-                    try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                    // Original player state is restored by the control session.
+                    try { _control.TimeScale(_control.OriginalTimeScale); } catch { }
                     _selectorExitPending = true;
                 }
                 _editNodeIndex = -1;
@@ -329,6 +342,9 @@ namespace ModdedCamera.Services
                     return false;
                 }
 
+                if (!_control.Acquire("Камера", true)) return false;
+                _splineExitPending = false;
+                DevelopmentDiagnostics.State("Camera", "Path playback");
                 Logger.Info("CameraService: Starting playback with " + SplineCamera.Nodes.Count + " nodes");
                 _splineCamWasUsed = true;
                 _playbackStartMs = Utils.NowMs();
@@ -340,12 +356,14 @@ namespace ModdedCamera.Services
             {
                 GTA.UI.Notification.PostTicker("~r~Ошибка!", false, false);
                 Logger.Error(ex, "CameraService: Error in StartPlayback");
+                EndControlImmediately();
                 return false;
             }
         }
 
         public void StopPlayback()
         {
+            if (!_control.Held) return;
             try
             {
                 // Гасим флаг даже если камера уже не активна (гонка с AbortPendingFade
@@ -353,7 +371,7 @@ namespace ModdedCamera.Services
                 // и SplineCamera.Update тикает вечно.
                 bool wasActive = SplineCamera != null && IsSplineCamActive;
                 bool hadSession = _splineCamWasUsed;
-                if (wasActive)
+                if ((wasActive || hadSession) && SplineCamera != null)
                 {
                     long realMs = Utils.NowMs() - _playbackStartMs;
                     Logger.Info("CameraService: Stopping playback. Real elapsed: " + realMs + " ms; nominal duration: "
@@ -361,14 +379,14 @@ namespace ModdedCamera.Services
                         + SplineCamera.CurrentDurationMs + " ms; speed x" + SplineCamera.Speed.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                         + ". Ratio real/nominal: " + (SplineCamera.NominalDurationMs > 0 ? ((double)realMs / SplineCamera.NominalDurationMs).ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "n/a"));
                     Logger.Info("CameraService: Stopping playback");
-                    try { SplineCamera.ExitCameraView(); } catch (Exception ex2) { Logger.Debug("StopPlayback ExitCameraView: " + ex2.Message); }
+                    SplineCamera.ExitCameraView();
                 }
                 // Флаг чистим в любом случае, даже если Exit бросил исключение.
-                if (hadSession) _splineCamWasUsed = false;
-                else if (wasActive) _splineCamWasUsed = false;
+                _splineExitPending = hadSession || wasActive;
+                _splineCamWasUsed = false;
 
                 _lastTimeScale = 1f;
-                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                try { _control.TimeScale(_control.OriginalTimeScale); } catch { }
                 TeleportPlayerBehindCamera();
                 RestorePlayerState();
             }
@@ -377,6 +395,7 @@ namespace ModdedCamera.Services
                 // Страховка: не оставляем вечный тик spline.
                 _splineCamWasUsed = false;
                 Logger.Error(ex, "CameraService: Error in StopPlayback");
+                EndControlImmediately();
                 try { RestorePlayerState(); } catch { }
             }
         }
@@ -443,8 +462,8 @@ namespace ModdedCamera.Services
         {
             try
             {
-                if (!_isPlayerFollowing) return;
-                var player = Game.Player.Character;
+                if (!_control.Held || !_isPlayerFollowing) return;
+                var player = _control.Player;
                 // Флаг чистим ВСЕГДА, даже если пед временно null (стриминг/телепорт/
                 // Menyoo-карта в океане). Иначе _isPlayerFollowing залипает true
                 // и UpdatePlayerFollow вечно телепортирует к мёртвой камере.
@@ -532,16 +551,26 @@ namespace ModdedCamera.Services
         {
             try
             {
+                if (_control.Held && !_control.Valid) { EndControlImmediately(); return; }
                 ApplyTimeScale();
 
-                if (IsSplineCamActive || _splineCamWasUsed)
+                if (IsSplineCamActive || _splineCamWasUsed || _splineExitPending)
                 {
                     if (SplineCamera != null && SplineCamera.MainCamera != null && SplineCamera.MainCamera.Exists())
                         SplineCamera.Update();
-                    else if (SplineCamera != null)
-                        Logger.Warn("CameraService: SplineCamera no longer exists");
+                    else
+                    {
+                        DevelopmentDiagnostics.Event("Camera", "Stopped: camera entity missing");
+                        EndControlImmediately();
+                        return;
+                    }
                 }
 
+                if (_splineExitPending && (SplineCamera == null || SplineCamera.FadeState == FadeState.None))
+                {
+                    _splineExitPending = false;
+                    _splineCamWasUsed = false;
+                }
                 UpdatePlayerFollow();
 
                 if (IsSelectorActive || _selectorWasUsed || _selectorExitPending)
@@ -571,6 +600,16 @@ namespace ModdedCamera.Services
             catch (Exception ex)
             {
                 Logger.Error(ex, "CameraService: Error in Update");
+                EndControlImmediately();
+            }
+            finally
+            {
+                if (_control.Held && !IsAnyCameraActive && !_selectorWasUsed &&
+                    !_splineCamWasUsed && !_selectorExitPending && !_splineExitPending)
+                {
+                    _control.Dispose();
+                    DevelopmentDiagnostics.State("Camera", "Idle");
+                }
             }
         }
 
@@ -581,7 +620,8 @@ namespace ModdedCamera.Services
                 // Кинематографичный slow-mo: когда скорость пролётки < 1, замедляем
                 // ВЕСЬ мир пропорционально, чтобы камера и мир двигались синхронно.
                 // При выходе из камеры (IsSplineCamActive=false) время всегда сбрасывается в 1.
-                float target = 1f;
+                if (!_control.Held) return;
+                float target = _control.OriginalTimeScale;
                 if (_splineCamWasUsed && IsSplineCamActive && SplineCamera != null)
                 {
                     float s = CurrentSpeed;
@@ -590,7 +630,7 @@ namespace ModdedCamera.Services
                 }
                 if (Math.Abs(target - _lastTimeScale) > 0.001f)
                 {
-                    Function.Call(Hash.SET_TIME_SCALE, target);
+                    _control.TimeScale(target);
                     _lastTimeScale = target;
                 }
             }
@@ -600,16 +640,48 @@ namespace ModdedCamera.Services
             }
         }
 
+        private void EndControlImmediately()
+        {
+            if (!_control.Held) return;
+            try
+            {
+                if (SplineCamera != null)
+                {
+                    SplineCamera.AbortPendingFade();
+                    if (SplineCamera.MainCamera != null && SplineCamera.MainCamera.Exists())
+                        SplineCamera.MainCamera.IsActive = false;
+                }
+                if (PositionSelector != null)
+                {
+                    PositionSelector.AbortPendingFade();
+                    if (PositionSelector.MainCamera != null && PositionSelector.MainCamera.Exists())
+                        PositionSelector.MainCamera.IsActive = false;
+                }
+                ScriptCameraDirector.StopRendering(false);
+                Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
+                Function.Call(NativeHashes.UNDO_SCREEN_FADE);
+                CameraRenderer.ClearFocus();
+                RestorePlayerState();
+            }
+            catch (Exception ex) { Logger.Error(ex, "Camera cleanup"); }
+            finally
+            {
+                _selectorWasUsed = _splineCamWasUsed = _selectorExitPending = _splineExitPending = _isPlayerFollowing = false;
+                _control.Dispose();
+                DevelopmentDiagnostics.State("Camera", "Idle");
+            }
+        }
+
         public void ResetAll()
         {
             try
             {
                 Logger.Info("CameraService: ResetAll called");
-                Function.Call(NativeHashes.UNDO_SCREEN_FADE);
-                CameraRenderer.ClearFocus();
+                if (_control.Held) Function.Call(NativeHashes.UNDO_SCREEN_FADE);
+                if (_control.Held) CameraRenderer.ClearFocus();
                 RestorePlayerState();
                 _lastTimeScale = 1f;
-                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                try { _control.TimeScale(_control.OriginalTimeScale); } catch { }
                 _isPlayerFollowing = false;
                 _selectorExitPending = false;
                 _selectorWasUsed = false;
@@ -631,14 +703,14 @@ namespace ModdedCamera.Services
                     PositionSelector = null;
                 }
 
-                ScriptCameraDirector.StopRendering(false);
-                Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
-                CameraRenderer.ClearFocus();
+                if (_control.Held) ScriptCameraDirector.StopRendering(false);
+                if (_control.Held) Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
+                if (_control.Held) CameraRenderer.ClearFocus();
 
-                try { Game.Player.Character.IsPositionFrozen = false; } catch { }
+                // Original player state is restored by the control session.
 
-                SplineCamera = new SplineCamera();
-                PositionSelector = new PositionSelector(Vector3.Zero, Vector3.Zero);
+                SplineCamera = new SplineCamera() { HasControl = delegate { return _control.Held; } };
+                PositionSelector = new PositionSelector(Vector3.Zero, Vector3.Zero) { HasControl = delegate { return _control.Held; } };
                 _selectorWasUsed = false;
                 _splineCamWasUsed = false;
                 _selectorExitPending = false;
@@ -654,10 +726,11 @@ namespace ModdedCamera.Services
                 _selectorWasUsed = false;
                 _splineCamWasUsed = false;
                 _lastTimeScale = 1f;
-                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
-                try { CameraRenderer.ClearFocus(); } catch { }
+                try { _control.TimeScale(_control.OriginalTimeScale); } catch { }
+                try { if (_control.Held) CameraRenderer.ClearFocus(); } catch { }
                 Logger.Error(ex, "CameraService: Error in ResetAll");
             }
+            finally { EndControlImmediately(); }
         }
 
         public void Dispose()
@@ -665,10 +738,10 @@ namespace ModdedCamera.Services
             try
             {
                 Logger.Info("CameraService: Disposing...");
-                Function.Call(NativeHashes.UNDO_SCREEN_FADE);
-                CameraRenderer.ClearFocus();
+                if (_control.Held) Function.Call(NativeHashes.UNDO_SCREEN_FADE);
+                if (_control.Held) CameraRenderer.ClearFocus();
                 _lastTimeScale = 1f;
-                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
+                try { _control.TimeScale(_control.OriginalTimeScale); } catch { }
                 _isPlayerFollowing = false;
                 _selectorExitPending = false;
 
@@ -691,9 +764,9 @@ namespace ModdedCamera.Services
                     PositionSelector = null;
                 }
 
-                ScriptCameraDirector.StopRendering(false);
-                Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
-                CameraRenderer.ClearFocus();
+                if (_control.Held) ScriptCameraDirector.StopRendering(false);
+                if (_control.Held) Function.Call(NativeHashes.RENDER_SCRIPT_CAMS, false, 0, 0, false, false);
+                if (_control.Held) CameraRenderer.ClearFocus();
                 try { RestorePlayerState(); } catch { }
                 _isPlayerFollowing = false;
                 _selectorExitPending = false;
@@ -709,10 +782,11 @@ namespace ModdedCamera.Services
                 _selectorWasUsed = false;
                 _splineCamWasUsed = false;
                 _lastTimeScale = 1f;
-                try { Function.Call(Hash.SET_TIME_SCALE, 1f); } catch { }
-                try { CameraRenderer.ClearFocus(); } catch { }
+                try { _control.TimeScale(_control.OriginalTimeScale); } catch { }
+                try { if (_control.Held) CameraRenderer.ClearFocus(); } catch { }
                 Logger.Error(ex, "CameraService: Error during Dispose");
             }
+            finally { EndControlImmediately(); }
         }
     }
 

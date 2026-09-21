@@ -1,4 +1,5 @@
 using System;
+using ModPack;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -305,9 +306,9 @@ namespace MenyooStreamer
                 bool needsSave = false;
                 int iniVersion = 0;
 
-                if (File.Exists(_configPath))
+                if (SafeFiles.Exists(_configPath))
                 {
-                    var lines = File.ReadAllLines(_configPath);
+                    var lines = SafeFiles.Read(_configPath, ValidateIni).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
                     foreach (var rawLine in lines)
                     {
@@ -371,6 +372,35 @@ namespace MenyooStreamer
             }
         }
 
+        private static void ValidateIni(string text)
+        {
+            bool recognized = false;
+            foreach (string raw in text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith(";") || line.StartsWith("#") ||
+                    (line.StartsWith("[") && line.EndsWith("]"))) continue;
+                int eq = line.IndexOf('=');
+                if (eq < 1) throw new InvalidDataException("Invalid INI line");
+                string key = line.Substring(0, eq).Trim().ToLowerInvariant();
+                string value = line.Substring(eq + 1).Trim();
+                if (key == "version" || key == "checkinterval" || key == "batchsize" || key == "maxpeds")
+                {
+                    int number;
+                    if (!int.TryParse(value, out number)) throw new InvalidDataException("Invalid INI integer: " + key);
+                    recognized = true;
+                }
+                else if (key == "loadradius" || key == "clearradius" || key == "scanradius" || key == "chunksize")
+                {
+                    float number;
+                    if (!float.TryParse(value, out number) || float.IsNaN(number) || float.IsInfinity(number))
+                        throw new InvalidDataException("Invalid INI number: " + key);
+                    recognized = true;
+                }
+            }
+            if (!recognized) throw new InvalidDataException("No streaming settings found");
+        }
+
         public void Save()
         {
             try
@@ -401,7 +431,7 @@ namespace MenyooStreamer
                     "ChunkSize=" + ChunkSize,
                 };
 
-                File.WriteAllLines(_configPath, lines);
+                SafeFiles.Write(_configPath, string.Join(Environment.NewLine, lines.ToArray()), ValidateIni);
             }
             catch (Exception ex)
             {

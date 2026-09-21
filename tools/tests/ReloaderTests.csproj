@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <LangVersion>latest</LangVersion>
+    <NoWarn>0067</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ReloaderTests.cs" />
+    <Compile Include="../../Source Code/Reloader/Reloader.cs" Link="Reloader.cs" />
+    <Compile Include="../../Source Code/Reloader/PluginCompiler.cs" Link="PluginCompiler.cs" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+</Project>

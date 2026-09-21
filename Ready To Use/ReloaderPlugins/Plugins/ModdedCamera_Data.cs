@@ -8,6 +8,7 @@ using GTA.Math;
 using GTA.Native;
 using GTA.UI;
 using Newtonsoft.Json;
+using ModPack;
 
 namespace ModdedCamera
 {
@@ -59,9 +60,11 @@ namespace ModdedCamera
                             path = (CameraPath)PathXmlSerializer.Deserialize(reader);
                         }
                         string jsonFile = Path.ChangeExtension(xmlFile, JsonExtension);
+                        if (SafeFiles.Exists(jsonFile)) continue;
                         string json = JsonConvert.SerializeObject(path, JsonSettings);
-                        File.WriteAllText(jsonFile, json);
-                        File.Delete(xmlFile);
+                        SafeFiles.Write(jsonFile, json, ValidatePathJson);
+                        SafeFiles.Read(jsonFile, ValidatePathJson);
+                        File.Move(xmlFile, xmlFile + ".archived-" + Guid.NewGuid().ToString("N"));
                         migrated++;
                         Logger.Info("Migrated: " + Path.GetFileName(xmlFile) + " to JSON");
                     }
@@ -76,6 +79,13 @@ namespace ModdedCamera
             {
                 Logger.Error(ex, "Error during XML->JSON migration");
             }
+        }
+
+        private static void ValidatePathJson(string text)
+        {
+            EnsureJsonSettings();
+            if (JsonConvert.DeserializeObject<CameraPath>(text, JsonSettings) == null)
+                throw new InvalidDataException("Invalid camera path");
         }
 
         public static string SavePath(CameraPath path)
@@ -97,7 +107,7 @@ namespace ModdedCamera
                 string fileName = SanitizeFileName(path.Name) + JsonExtension;
                 string filePath = Path.Combine(PathsFolder, fileName);
                 string json = JsonConvert.SerializeObject(path, JsonSettings);
-                File.WriteAllText(filePath, json);
+                SafeFiles.Write(filePath, json, ValidatePathJson);
                 Logger.Info("SavePath: Saved " + fileName);
                 return filePath;
             }
@@ -113,7 +123,7 @@ namespace ModdedCamera
             EnsureJsonSettings();
             string fileName = SanitizeFileName(pathName) + JsonExtension;
             string filePath = Path.Combine(PathsFolder, fileName);
-            if (!File.Exists(filePath))
+            if (!SafeFiles.Exists(filePath))
             {
                 string xmlFile = Path.ChangeExtension(filePath, XmlExtension);
                 if (File.Exists(xmlFile))
@@ -136,7 +146,7 @@ namespace ModdedCamera
             }
             try
             {
-                string json = File.ReadAllText(filePath);
+                string json = SafeFiles.Read(filePath, ValidatePathJson);
                 CameraPath path = JsonConvert.DeserializeObject<CameraPath>(json, JsonSettings);
                 return ApplyBackwardCompatibility(path);
             }
@@ -150,7 +160,7 @@ namespace ModdedCamera
         public static bool PathExists(string pathName)
         {
             string fileName = SanitizeFileName(pathName);
-            return File.Exists(Path.Combine(PathsFolder, fileName + JsonExtension)) ||
+            return SafeFiles.Exists(Path.Combine(PathsFolder, fileName + JsonExtension)) ||
                    File.Exists(Path.Combine(PathsFolder, fileName + XmlExtension));
         }
 
@@ -162,6 +172,11 @@ namespace ModdedCamera
             foreach (string file in jsonFiles)
             {
                 paths.Add(Path.GetFileNameWithoutExtension(file));
+            }
+            foreach (string backup in Directory.GetFiles(PathsFolder, "*.json.bak"))
+            {
+                string name = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(backup));
+                if (!paths.Contains(name)) paths.Add(name);
             }
             string[] xmlFiles = Directory.GetFiles(PathsFolder, "*" + XmlExtension);
             foreach (string file in xmlFiles)
@@ -177,17 +192,10 @@ namespace ModdedCamera
             string fileName = SanitizeFileName(pathName);
             string jsonPath = Path.Combine(PathsFolder, fileName + JsonExtension);
             string xmlPath = Path.Combine(PathsFolder, fileName + XmlExtension);
-            if (File.Exists(jsonPath))
-            {
-                File.Delete(jsonPath);
-                return true;
-            }
-            if (File.Exists(xmlPath))
-            {
-                File.Delete(xmlPath);
-                return true;
-            }
-            return false;
+            bool existed = SafeFiles.Exists(jsonPath) || File.Exists(xmlPath);
+            SafeFiles.Delete(jsonPath);
+            if (File.Exists(xmlPath)) File.Delete(xmlPath);
+            return existed;
         }
 
         public static bool RenamePath(string oldName, string newName)
@@ -197,13 +205,16 @@ namespace ModdedCamera
                 if (string.IsNullOrEmpty(oldName) || string.IsNullOrEmpty(newName)) return false;
                 CameraPath path = LoadPath(oldName);
                 if (path == null) return false;
+                string oldFile = Path.Combine(PathsFolder, SanitizeFileName(oldName) + JsonExtension);
+                string newFile = Path.Combine(PathsFolder, SanitizeFileName(newName) + JsonExtension);
+                if (!string.Equals(oldFile, newFile, StringComparison.OrdinalIgnoreCase) && PathExists(newName))
+                    return false;
                 path.Name = newName;
-                if (DeletePath(oldName))
-                {
-                    string result = SavePath(path);
-                    return result != null;
-                }
-                return false;
+                path.Version = CurrentPathVersion;
+                SafeFiles.Rename(oldFile, newFile, JsonConvert.SerializeObject(path, JsonSettings), ValidatePathJson);
+                string oldXml = Path.ChangeExtension(oldFile, XmlExtension);
+                if (File.Exists(oldXml)) File.Delete(oldXml);
+                return true;
             }
             catch (Exception ex)
             {

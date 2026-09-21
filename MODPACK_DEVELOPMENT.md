@@ -3,6 +3,8 @@
 This document captures practical project knowledge for future work on the
 ModPack.
 
+Russian development guide and command reference: [DEVELOPMENT_RU.md](DEVELOPMENT_RU.md).
+
 ## Project layout
 
 - `Source Code/Reloader` contains the .NET Framework 4.8 loader project.
@@ -21,17 +23,20 @@ ordinary plugin updates.
 When changing a plugin:
 
 1. Edit the file in `Source Code/Plugins`.
-2. Copy the same `.cs` file to `Ready To Use/ReloaderPlugins/Plugins`.
-3. Copy the same `.cs` file to the live GTA `ReloaderPlugins/Plugins` folder.
-4. Run:
+2. Run `.\modpack.cmd Check` to validate all plugin sources with the live CodeDOM compiler.
+3. Run `.\modpack.cmd` to validate, copy changed sources, verify hashes and confirm
+   the exact source fingerprint in the fresh game log. Configure the game path
+   in git-ignored `modpack.local.json`; see `modpack.example.json`.
+4. When modifying the loader itself, additionally run:
 
    ```powershell
    dotnet build "Source Code\Reloader\Reloader.csproj" --no-restore
    ```
 
-The build should validate plugin compilation, but it must not copy
-`Reloader.dll` into the GTA folder. The project file intentionally has no
-post-build copy target.
+The dotnet build validates only the loader, not plugin compilation.
+The project intentionally has no post-build copy target. Update requires loader
+file version 2.0.0.0 or newer; install it once with GTA closed. Routine updates
+never copy Reloader.dll. See the Russian guide for timeout and recovery behavior.
 
 After a GitHub release is created, local release zip files can be deleted. They
 are generated artifacts and should not be committed.
@@ -67,11 +72,13 @@ GTA V\scripts\ReloaderPlugins\Plugins
 
 ## Current release state
 
-- Latest release target: `v1.3`
-- Release title: `ModPack 1.3`
-- Asset: `ModPack-Plugins-1.3.zip`
-- `v1.3` includes follow-camera tuning for fixed rotation, stronger horizontal
-  launch, and configurable hit force.
+- Latest release target: `v1.4`
+- Release title: `ModPack 1.4`
+- Assets: `ModPack-Plugins-1.4.zip` and `Reloader-2.0.zip`
+- `v1.4` adds safe hot reload, one-command validation/deployment, developer
+  diagnostics, shared player-control ownership and atomic settings/path saves.
+- The loader archive is required once for v1.4. Routine plugin updates remain
+  source-only and must not replace `Reloader.dll`.
 
 ## Modded Camera notes
 

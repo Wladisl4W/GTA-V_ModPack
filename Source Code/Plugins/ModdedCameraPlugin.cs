@@ -73,9 +73,9 @@ namespace ModdedCamera
                 bool playerOk = Game.Player != null && Game.Player.Character != null && Game.Player.Character.Exists();
                 // Don't drop the camera update (and its fade machine) just because the
                 // player entity is briefly missing (loading/transition) while a camera is active.
-                if (!playerOk && !_cameraService.IsAnyCameraActive && (_followCameraService == null || !_followCameraService.IsActive)) return;
+                if (!playerOk && !_cameraService.HasControl && !_cameraService.IsAnyCameraActive && (_followCameraService == null || !_followCameraService.IsActive)) return;
 
-                bool followBlocked = _cameraService.IsAnyCameraActive || (_menuService != null && _menuService.AreAnyVisible);
+                bool followBlocked = _cameraService.HasControl || _cameraService.IsAnyCameraActive || (_menuService != null && _menuService.AreAnyVisible);
                 if (_followCameraService != null)
                     _followCameraService.Update(followBlocked);
 

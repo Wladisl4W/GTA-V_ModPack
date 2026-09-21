@@ -1,12 +1,16 @@
 GTA V ModPack
 =============
 
+Разработка модов: DEVELOPMENT_RU.md
+Проверить плагины: modpack.cmd Check
+Проверить и обновить: modpack.cmd (сначала настройте modpack.local.json).
+
 ModPack - набор скриптовых модов для GTA V на базе собственного загрузчика
 Reloader. Загрузчик один (`Reloader.dll`), а сами моды лежат отдельными
 файлами в папке `ReloaderPlugins\Plugins` и компилируются при запуске игры.
 
-GitHub release 1.3:
-  https://github.com/Wladisl4W/GTA-V_ModPack/releases/tag/v1.3
+GitHub release 1.4:
+  https://github.com/Wladisl4W/GTA-V_ModPack/releases/tag/v1.4
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   БЫСТРОЕ ОБНОВЛЕНИЕ ИЗ РЕЛИЗА
@@ -14,7 +18,7 @@ GitHub release 1.3:
 
 Для обновления уже установленного ModPack скачайте файл:
 
-  ModPack-Plugins-1.3.zip
+  ModPack-Plugins-1.4.zip
 
 Из архива нужно взять все файлы и скопировать их с заменой в папку:
 
@@ -25,6 +29,10 @@ GitHub release 1.3:
   • распаковывать его нужно в `ReloaderPlugins\Plugins`, не в корень GTA V;
   • `Reloader.dll` в этот архив не входит, потому что он нужен только для
     полной установки или отдельного обновления загрузчика.
+
+Для версии 1.4 один раз обновите загрузчик: скачайте `Reloader-2.0.zip`,
+закройте GTA V и замените `GTA V\scripts\Reloader.dll`. После этого обычные
+обновления снова требуют только содержимое архива плагинов.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ПОЛНАЯ УСТАНОВКА

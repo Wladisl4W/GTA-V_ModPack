@@ -12,6 +12,7 @@ namespace ModdedCamera
 {
     public class PositionSelector
     {
+        internal Func<bool> HasControl { get; set; }
         private FadeStateMachine _fadeMachine;
         private Camera _mainCamera;
         private Vector3 _previousPos;
@@ -81,11 +82,13 @@ namespace ModdedCamera
 
             _fadeMachine = new FadeStateMachine(
                 onActivate: () => {
+                    if (HasControl == null || !HasControl()) return;
                     this.MainCamera.IsActive = true;
                     ScriptCameraDirector.StartRendering();
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
                 },
                 onDeactivate: () => {
+                    if (HasControl == null || !HasControl()) return;
                     this.MainCamera.IsActive = false;
                     ScriptCameraDirector.StopRendering(false);
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
@@ -98,7 +101,7 @@ namespace ModdedCamera
         {
             try
             {
-                CameraRenderer.ClearFocus();
+                if (HasControl != null && HasControl()) CameraRenderer.ClearFocus();
                 EnablePlayerControls();
                 if (_renderSceneTimer != null)
                 {
@@ -255,12 +258,14 @@ namespace ModdedCamera
 
         private void EnablePlayerControls()
         {
+            if (HasControl == null || !HasControl()) return;
             Function.Call(Hash.ENABLE_ALL_CONTROL_ACTIONS, 0);
             Function.Call(Hash.ENABLE_ALL_CONTROL_ACTIONS, 2);
         }
 
         public void Update()
         {
+            if (HasControl == null || !HasControl()) return;
             try
             {
                 _fadeMachine.Update();

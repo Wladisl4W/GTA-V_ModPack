@@ -1,4 +1,5 @@
 using System;
+using ModPack;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -251,9 +252,9 @@ namespace RemoveDroppedPedsMod
         {
             try
             {
-                if (File.Exists(_settingsPath))
+                if (SafeFiles.Exists(_settingsPath))
                 {
-                    string json = File.ReadAllText(_settingsPath);
+                    string json = SafeFiles.Read(_settingsPath, ValidateSettings);
                     var settings = _serializer.Deserialize(json);
 
                     if (settings != null)
@@ -272,6 +273,12 @@ namespace RemoveDroppedPedsMod
             return new ModSettings();
         }
 
+        private void ValidateSettings(string text)
+        {
+            if (new JavaScriptSerializer().Deserialize<ModSettings>(text) == null)
+                throw new InvalidDataException("Invalid settings");
+        }
+
         private void SaveSettings()
         {
             try
@@ -284,7 +291,7 @@ namespace RemoveDroppedPedsMod
                 }
 
                 string json = _serializer.Serialize(_settings);
-                File.WriteAllText(_settingsPath, json);
+                SafeFiles.Write(_settingsPath, json, ValidateSettings);
                 ModLogger.Info("Настройки сохранены в файл");
             }
             catch (Exception ex)

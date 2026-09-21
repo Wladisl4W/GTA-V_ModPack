@@ -19,6 +19,7 @@ public class Reloader : Script
     private bool _reloadPending;
     private int _reloadCooldown;
     private DateTime _lastFileChange = DateTime.MinValue;
+    private readonly object _reloadLock = new object();
 
     public Reloader()
     {
@@ -54,25 +55,27 @@ public class Reloader : Script
 
     private void OnPluginFileChanged(object sender, FileSystemEventArgs e)
     {
-        _lastFileChange = DateTime.Now;
-        _reloadPending = true;
-        _reloadCooldown = 30;
+        lock (_reloadLock)
+        {
+            _lastFileChange = DateTime.UtcNow;
+            _reloadPending = true;
+            _reloadCooldown = 30;
+        }
     }
 
     private void OnTick(object sender, EventArgs e)
     {
-        if (_reloadPending && _reloadCooldown-- <= 0)
+        bool reload = false;
+        lock (_reloadLock)
         {
-            if ((DateTime.Now - _lastFileChange).TotalMilliseconds > 500)
+            if (_reloadPending && !File.Exists(Path.Combine(_pluginsDir, ".deploy.lock")) &&
+                _reloadCooldown-- <= 0 && (DateTime.UtcNow - _lastFileChange).TotalMilliseconds > 500)
             {
-                ReloadPlugins();
                 _reloadPending = false;
-            }
-            else
-            {
-                _reloadCooldown = 15;
+                reload = true;
             }
         }
+        if (reload) ReloadPlugins();
 
         foreach (var plugin in _plugins)
         {
@@ -88,7 +91,7 @@ public class Reloader : Script
             }
             catch (TargetInvocationException tie)
             {
-                GTA.UI.Notification.Show("~r~Plugin error: " + tie.InnerException?.Message);
+                GTA.UI.Notification.PostTicker("~r~Plugin error: " + tie.InnerException?.Message, false, false);
                 Log("Tick error: " + tie.InnerException);
             }
             catch (Exception ex)
@@ -102,10 +105,13 @@ public class Reloader : Script
     {
         if (e.KeyCode == Keys.F5)
         {
-            _reloadPending = true;
-            _reloadCooldown = 5;
+            lock (_reloadLock)
+            {
+                _reloadPending = true;
+                _reloadCooldown = 5;
+            }
             e.Handled = true;
-            GTA.UI.Notification.Show("~y~Reloading plugins...");
+            GTA.UI.Notification.PostTicker("~y~Reloading plugins...", false, false);
             return;
         }
 
@@ -137,75 +143,30 @@ public class Reloader : Script
         _plugins.Clear();
     }
 
-    // Добавляет ссылку по пути, пропуская дубликаты одной и той же сборки
-    // (например, Newtonsoft.Json.dll лежит и в scripts, и в ReloaderPlugins).
-    private static void AddReference(Dictionary<string, string> refs, string path)
-    {
-        try
-        {
-            string name = AssemblyName.GetAssemblyName(path).Name;
-            if (!refs.ContainsKey(name))
-                refs[name] = path;
-        }
-        catch { }
-    }
-
     private void LoadPlugins()
     {
-        var csFiles = Directory.GetFiles(_pluginsDir, "*.cs");
-        csFiles = csFiles.Where(f => !Path.GetFileName(f).StartsWith("_")).ToArray();
-
-        var interfaceFile = Path.Combine(_pluginsDir, "_PluginInterface.cs");
-        if (File.Exists(interfaceFile))
-            csFiles = new[] { interfaceFile }.Concat(csFiles).ToArray();
-
-        if (csFiles.Length == 0)
+        if (File.Exists(Path.Combine(_pluginsDir, ".deploy.lock")))
         {
-            Log("No .cs plugin files found in " + _pluginsDir);
+            lock (_reloadLock) _reloadPending = true;
             return;
         }
-
-        Log("Compiling " + csFiles.Length + " file(s)...");
-
-        var provider = new CSharpCodeProvider();
-        var options = new CompilerParameters
+        try
         {
-            GenerateInMemory = true,
-            GenerateExecutable = false,
-            TreatWarningsAsErrors = false,
-            TempFiles = new TempFileCollection(Path.GetTempPath(), keepFiles: false)
-        };
-
-        // BaseDirectory в SHVDN — это папка scripts, а не корень игры.
-        // Старый загрузчик жил в scripts\scripts, поэтому для надёжности
-        // перебираем оба варианта. Дубликаты одной сборки исключаем по имени.
-        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        var refs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var dir in new[] { baseDir, Path.Combine(baseDir, "scripts") })
-        {
-            if (!Directory.Exists(dir)) continue;
-            foreach (var dll in Directory.GetFiles(dir, "*.dll"))
-                AddReference(refs, dll);
+            LoadCompiledPlugins();
         }
+        catch (Exception ex)
+        {
+            Log("Reload failed: " + ex);
+        }
+    }
 
-        var pluginsRoot = Path.Combine(baseDir, "ReloaderPlugins");
-        if (Directory.Exists(pluginsRoot))
-            foreach (var dll in Directory.GetFiles(pluginsRoot, "*.dll", SearchOption.AllDirectories))
-                AddReference(refs, dll);
-
-        AddReference(refs, typeof(Script).Assembly.Location);
-        AddReference(refs, typeof(LemonUI.ObjectPool).Assembly.Location);
-
-        foreach (var systemRef in new[] {
-            "System.dll", "System.Core.dll", "System.Data.dll", "System.Drawing.dll",
-            "System.Windows.Forms.dll", "System.Xml.dll", "System.Web.Extensions.dll" })
-            refs[systemRef] = systemRef;
-
-        foreach (var r in refs.Values) options.ReferencedAssemblies.Add(r);
-        Log("References: " + refs.Count + " (" + refs.Values.Count(r => r.EndsWith(".dll")) + " dlls)");
-
-        var results = provider.CompileAssemblyFromFile(options, csFiles);
+    private void LoadCompiledPlugins()
+    {
+        string fingerprint;
+        var results = PluginCompiler.Compile(_pluginsDir,
+            AppDomain.CurrentDomain.BaseDirectory,
+            typeof(Script).Assembly.Location,
+            typeof(LemonUI.ObjectPool).Assembly.Location, out fingerprint);
 
         if (results.Errors.HasErrors || results.Errors.HasWarnings)
         {
@@ -222,66 +183,70 @@ public class Reloader : Script
             int errCount = allErrors.Count(e => !e.IsWarning);
             int warnCount = allErrors.Count(e => e.IsWarning);
             if (errCount > 0)
-                GTA.UI.Notification.Show("~r~" + errCount + " error(s)~s~, ~y~" + warnCount + " warning(s)~s~. See compile_errors.txt");
-            return;
+                GTA.UI.Notification.PostTicker("~r~" + errCount + " error(s)~s~, ~y~" + warnCount + " warning(s)~s~. Previous plugins retained.", false, false);
+            if (errCount > 0) return;
         }
 
-        try { if (File.Exists(_errorsPath)) File.Delete(_errorsPath); }
+        try { if (!results.Errors.HasWarnings && File.Exists(_errorsPath)) File.Delete(_errorsPath); }
         catch { }
 
         Log("Compilation OK, assembly: " + results.CompiledAssembly.GetName().Name);
 
         Assembly asm = results.CompiledAssembly;
+        Type[] types = asm.GetExportedTypes();
         Type interfaceType = asm.GetType("IGtaPlugin");
+        StopPlugins();
         int loadedCount = 0;
+        int failedCount = 0;
 
-        foreach (Type t in asm.GetExportedTypes())
+        foreach (Type t in types)
         {
             if (t.IsInterface || t.IsAbstract) continue;
 
             if (interfaceType != null && interfaceType.IsAssignableFrom(t))
             {
-                LoadPluginInstance(t);
-                loadedCount++;
+                if (LoadPluginInstance(t)) loadedCount++; else failedCount++;
             }
             else if (t.GetMethod("OnTick") != null || t.GetMethod("OnStart") != null)
             {
-                LoadPluginInstance(t);
-                loadedCount++;
+                if (LoadPluginInstance(t)) loadedCount++; else failedCount++;
             }
         }
 
         Log("Loaded " + loadedCount + " plugin(s)");
-        GTA.UI.Notification.Show("~g~Loaded~s~ " + loadedCount + " plugin(s)");
+        Log((failedCount == 0 ? "Reload OK: " : "Reload incomplete: ") + fingerprint);
+        GTA.UI.Notification.PostTicker("~g~Loaded~s~ " + loadedCount + " plugin(s)", false, false);
     }
 
-    private void LoadPluginInstance(Type t)
+    private bool LoadPluginInstance(Type t)
     {
+        object instance = null;
         try
         {
             var ctor = t.GetConstructor(Type.EmptyTypes);
             if (ctor == null)
             {
                 Log("  Skip " + t.Name + ": no parameterless constructor");
-                return;
+                return false;
             }
 
-            object instance = ctor.Invoke(null);
+            instance = ctor.Invoke(null);
+            t.GetMethod("OnStart")?.Invoke(instance, null);
             _plugins.Add(instance);
             Log("  + " + t.Name);
-
-            t.GetMethod("OnStart")?.Invoke(instance, null);
+            return true;
         }
         catch (Exception ex)
         {
-            Log("  Failed to load " + t.Name + ": " + ex.InnerException?.Message ?? ex.Message);
+            Log("  Failed to load " + t.Name + ": " + (ex.InnerException ?? ex));
+            try { if (instance != null) t.GetMethod("OnAbort")?.Invoke(instance, null); } catch { }
+            return false;
         }
     }
 
     private void ReloadPlugins()
     {
         Log("Reloading plugins...");
-        StopPlugins();
         LoadPlugins();
     }
 

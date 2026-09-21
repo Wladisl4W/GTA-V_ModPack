@@ -10,6 +10,7 @@ namespace ModdedCamera
 {
     public class SplineCamera
     {
+        internal Func<bool> HasControl { get; set; }
         private CameraInterpolator _interpolator;
         private FadeStateMachine _fadeMachine;
         private Camera _mainCamera;
@@ -171,6 +172,7 @@ namespace ModdedCamera
 
             _fadeMachine = new FadeStateMachine(
                 onActivate: () => {
+                    if (HasControl == null || !HasControl()) return;
                     this.MainCamera.IsActive = true;
                     ScriptCameraDirector.StartRendering();
                     Function.Call(Hash.RENDER_SCRIPT_CAMS, true, 0, 0, false, false);
@@ -183,6 +185,7 @@ namespace ModdedCamera
                     Function.Call(Hash.DO_SCREEN_FADE_IN, 800);
                 },
                 onDeactivate: () => {
+                    if (HasControl == null || !HasControl()) return;
                     if (this.UsePlayerView) this.UsePlayerView = false;
                     if (_interpolator != null)
                     {
@@ -198,6 +201,8 @@ namespace ModdedCamera
             );
         }
 
+        public FadeState FadeState { get { return _fadeMachine != null ? _fadeMachine.State : FadeState.None; } }
+
         public void AbortPendingFade()
         {
             try { _fadeMachine.Reset(); } catch (Exception ex) { Logger.Debug("AbortPendingFade warning: " + ex.Message); }
@@ -207,7 +212,7 @@ namespace ModdedCamera
         {
             try
             {
-                CameraRenderer.ClearFocus();
+                if (HasControl != null && HasControl()) CameraRenderer.ClearFocus();
                 if (_renderSceneTimer != null)
                 {
                     try { _renderSceneTimer.Stop(); } catch { }
@@ -560,6 +565,7 @@ namespace ModdedCamera
 
         public void Update()
         {
+            if (HasControl == null || !HasControl()) return;
             _fadeMachine.Update();
             bool isActive = _mainCamera.IsActive;
             if (isActive)

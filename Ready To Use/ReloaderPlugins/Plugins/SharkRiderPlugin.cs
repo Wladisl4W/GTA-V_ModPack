@@ -1,4 +1,5 @@
 using System;
+using ModPack;
 using System.IO;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -11,20 +12,20 @@ using LemonUI.Menus;
 namespace SharkRider
 {
     /// <summary>
-    /// Мод-акула: без меню и кнопок.
-    /// - Когда игрок в воде, рядом спавнится акула (a_c_shark_tiger по умолчанию) и подплывает к нему
-    /// - При близком контакте игрок автоматически садится на спину акулы
-    /// - WASD — плавание, Shift — всплытие, Ctrl — погружение
+    /// Мод-акула с режимами катания и атаки.
+    /// - Когда игрок в воде, рядом спавнится тигровая акула a_c_sharktiger и подплывает к нему
+    /// - В режиме катания игрок плавно и автоматически садится на спину акулы
+    /// - W/S — скорость, A/D — поворот, Shift/Ctrl — глубина, E — слезть
+    /// - В режиме атаки проигрывается безопасная визуальная сцена укуса без урона
     /// - Выход на сушу автоматически отпускает акулу и удаляет её
-    /// - Клавиша O — меню: выбор модели педа прицелом (сохраняется в файл) + вкл/выкл мода
+    /// - Клавиша O — меню режимов и включения мода
     /// </summary>
     public class SharkRiderPlugin : IGtaPlugin
     {
-        private enum State { Idle, Spawning, Approaching, Riding }
+        private enum State { Idle, Spawning, Approaching, Mounting, Riding, AttackAligning, BiteScene }
 
-        // ВАЖНО: если пользователь выбирает модель (акула — "a_c_shark_tiger",
-        // НЕ "tiger_shark"), перед спавном всегда проверяется IS_MODEL_VALID/IS_MODEL_A_PED
         private const int PedType = 26; // PED_TYPE_CREATURE
+        private const int SharkModelHash = 113504370; // a_c_sharktiger (0x06C3F072)
 
         private const long CheckIntervalMs = 400;   // как часто проверять "в воде ли игрок"
         private const long AbandonTimeoutMs = 2500; // через сколько без воды отпустить акулу
@@ -35,44 +36,70 @@ namespace SharkRider
         private const float RideSpeed = 7.5f;       // скорость катания
         private const float RideVerticalSpeed = 5f;  // скорость вверх/вниз (ед/сек)
         private const long SpawnSettleMs = 400;     // пауза после создания акулы (не трогать физику)
+        private const float AttackDistance = 2.4f;
+        private const float AttackApproachSpeed = 6.5f;
+        private const long MountDurationMs = 650;
+        private const long BiteSceneTimeoutMs = 1800;
+        private const float BiteStopPhase = 0.30f;
+        private const long BiteRetreatDurationMs = 1800;
+        private const float RideAcceleration = 6.0f;
+        private const float RideVerticalAcceleration = 5.0f;
+        private const float RideTurnSpeed = 75.0f;
 
-        private static readonly Vector3 AttachOffset = new Vector3(0.1f, -0.6f, 0.85f); // по центру спины, чуть сзади
-        private const string SitAnimDict = "amb@world_human_sit_on_bench@male@idle_a";
-        private const string SitAnimName = "idle_a";
+        private static readonly Vector3 AttachOffset = new Vector3(0f, -0.45f, 0.72f);
+        private static readonly Vector3 AttachRotation = new Vector3(0f, 0f, 0f);
+        private const string RideAnimDict = "veh@bike@sport@front@base";
+        private const string RideAnimName = "sit";
+        private const string BiteSceneAnimDict = "creatures@shark@move";
 
+        private readonly ControlSession _control = new ControlSession();
+        private bool _interactionBlocked;
         private State _state = State.Idle;
         private Ped _shark = null;
 
         private long _lastCheckMs = 0;
         private long _lastInWaterMs = 0;
-        private long _lastDiagMs = 0;
         private long _lastHintMs = 0;
         private long _spawnRequestMs = 0;
         private long _sharkSpawnMs = 0;
+        private long _mountStartedMs = 0;
+        private long _lastRideUpdateMs = 0;
+        private long _bitePhaseStartedMs = 0;
+        private long _attackRetreatUntilMs = 0;
+        private Vector3 _mountStartPosition = Vector3.Zero;
+        private float _rideForwardSpeed = 0f;
+        private float _rideVerticalSpeed = 0f;
+        private float _ridePitch = 0f;
+        private float _rideRoll = 0f;
+        private int _activeBiteScene = -1;
+        private int _activeLocalBiteScene = -1;
+        private bool _biteFallbackActive = false;
+        private bool _mountSuppressedUntilWaterExit = false;
+        private bool _dismountKeyWasDown = false;
+        private bool _modelRequested = false;
 
 
         // Настройки мода
         private bool _modEnabled = true;
-        private int _modelHash = 0; // 0 = модель не выбрана (обязательно выбрать в меню)
-
+        private bool _attackMode = false;
         // LemonUI
         private readonly ObjectPool _pool = new ObjectPool();
         private NativeMenu _menu;
         private NativeCheckboxItem _enableCheckbox;
-        private NativeItem _pickModelItem;
-        private NativeItem _modelDisplayItem;
-        private NativeItem _aimedDisplayItem;
+        private NativeCheckboxItem _attackCheckbox;
 
         // Сохранение настроек (как в RemoveDroppedPeds)
         private class ModSettings
         {
             public bool ModEnabled { get; set; }
+            public bool AttackMode { get; set; }
             public int ModelHash { get; set; }
 
             public ModSettings()
             {
                 ModEnabled = true;
-                ModelHash = 0;
+                AttackMode = false;
+                ModelHash = SharkModelHash;
             }
         }
 
@@ -87,23 +114,16 @@ namespace SharkRider
         private int _lastSaveGameTime = 0;
         private bool _settingsDirty = false;
         private int _lastKeyGameTime = 0;
-        private int _aimedModelHash = 0; // модель педа под прицелом (пока меню открыто)
-
         public void OnStart()
         {
             try
             {
-                _modelHash = 0;
-
                 // Загрузка настроек
                 _settings = LoadSettings();
                 _modEnabled = _settings.ModEnabled;
+                _attackMode = _settings.AttackMode;
 
-                // Валидную модель берём из файла, битую или пустую — мод ждёт выбора в меню
-                if (IsModelValidForSpawn(_settings.ModelHash))
-                    _modelHash = _settings.ModelHash;
-                else
-                    _modelHash = 0;
+                _settings.ModelHash = SharkModelHash;
 
                 _lastSaveGameTime = Game.GameTime;
                 _lastKeyGameTime = Game.GameTime;
@@ -111,7 +131,8 @@ namespace SharkRider
                 CreateMenu();
 
                 Log("Shark Rider загружен. Мод: " + (_modEnabled ? "вкл" : "выкл") +
-                    ", модель: " + (_modelHash == 0 ? "не выбрана" : "0x" + _modelHash.ToString("X8")));
+                    ", режим: " + (_attackMode ? "атака" : "катание") +
+                    ", модель: a_c_sharktiger (0x" + SharkModelHash.ToString("X8") + ")");
                 GTA.UI.Notification.PostTicker("~b~Shark Rider~w~ активен~n~Войдите в воду — акула подплывёт сама~n~~y~O~w~ — меню мода", false, false);
             }
             catch (Exception ex)
@@ -122,7 +143,7 @@ namespace SharkRider
 
         private void CreateMenu()
         {
-            _menu = new NativeMenu("Shark Rider", "Катание на акуле");
+            _menu = new NativeMenu("Shark Rider", "Акула");
 
             _enableCheckbox = new NativeCheckboxItem(
                 "Включить мод",
@@ -141,204 +162,24 @@ namespace SharkRider
             };
             _menu.Add(_enableCheckbox);
 
-            _pickModelItem = new NativeItem(
-                "Выбрать модель",
-                "Наведитесь на педа и нажмите Enter — модель запомнится навсегда");
-            _pickModelItem.Activated += (s, e) =>
+            _attackCheckbox = new NativeCheckboxItem(
+                "Акула кусает",
+                "Вкл — акула подплывает и атакует игрока. Выкл — на акуле можно кататься.",
+                _attackMode);
+            _attackCheckbox.CheckboxChanged += (s, e) =>
             {
-                // Меню открыто — прицел «живой»: выбираем педа под перекрестьем прямо сейчас.
-                if (PickAimedPedModel())
-                    _menu.Visible = false; // закрываем после успешного выбора
+                _attackMode = _attackCheckbox.Checked;
+                _settings.AttackMode = _attackMode;
+                MarkSettingsDirty();
+
+                if (_state != State.Idle || (_shark != null && _shark.Exists()))
+                    StopRiding(true);
+
+                Log("Режим изменён: " + (_attackMode ? "акула кусает" : "катание"));
             };
-            _menu.Add(_pickModelItem);
-
-            _modelDisplayItem = new NativeItem("Модель", "");
-            _menu.Add(_modelDisplayItem);
-
-            _aimedDisplayItem = new NativeItem("Под прицелом", "Наведите прицел на педа");
-            _menu.Add(_aimedDisplayItem);
-
-            UpdateModelDisplay();
+            _menu.Add(_attackCheckbox);
 
             _pool.Add(_menu);
-        }
-
-        private void UpdateModelDisplay()
-        {
-            if (_modelDisplayItem == null) return;
-
-            // Короткие Title + короткий AltTitle (хеш) — иначе в строке меню они
-            // накладываются друг на друга. Детали — в Description (нижняя панель меню).
-            if (_modelHash == 0)
-            {
-                _modelDisplayItem.Title = "Модель";
-                _modelDisplayItem.AltTitle = "не выбрана";
-                _modelDisplayItem.Description = "Наведитесь на педа и выберите — без модели мод не работает";
-            }
-            else
-            {
-                _modelDisplayItem.Title = "Модель";
-                _modelDisplayItem.AltTitle = "0x" + _modelHash.ToString("X8");
-                _modelDisplayItem.Description = "Выбрана прицелом, сохранится в файле";
-            }
-        }
-
-        /// <summary>
-        /// Выбор модели: пед под прицелом (ближайший к центру экрана) из свободной камеры.
-        /// Не зависит от рейкаста — тот в этой сборке SHVDN3 ловит нестабильно.
-        /// Возвращает true, если модель выбрана.
-        /// </summary>
-        private bool PickAimedPedModel()
-        {
-            try
-            {
-                // 1) Если игрок целится из оружия — игра сама говорит, на кого смотрит
-                Ped freeAim = GetFreeAimPed();
-                if (freeAim != null)
-                {
-                    SaveModel(freeAim.Model.Hash);
-                    return true;
-                }
-
-                // 2) Иначе: ближайший пед к центру экрана (прицелу) среди загруженных рядом
-                Ped best = GetPedNearestToScreenCenter(0.12f, 40f);
-                if (best != null)
-                {
-                    SaveModel(best.Model.Hash);
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log("PickAimedPedModel: " + ex.Message);
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Пока открыто меню, каждый тик считывает педа под перекрестьем и сохраняет его
-        /// хеш в _aimedModelHash (для живой подсказки и выбора по Enter). Рейкаст активен
-        /// только при открытом меню.
-        /// </summary>
-        private void TrackAimedModel()
-        {
-            try
-            {
-                int hash = 0;
-                Ped freeAim = GetFreeAimPed();
-                if (freeAim != null)
-                    hash = freeAim.Model.Hash;
-                else
-                {
-                    Ped best = GetPedNearestToScreenCenter(0.12f, 40f, false);
-                    if (best != null)
-                        hash = best.Model.Hash;
-                }
-                _aimedModelHash = hash;
-                if (_aimedDisplayItem != null)
-                    _aimedDisplayItem.AltTitle = hash == 0
-                        ? "—"
-                        : "0x" + hash.ToString("X8");
-            }
-            catch
-            {
-                _aimedModelHash = 0;
-            }
-        }
-
-        /// <summary>
-        /// Пед, на которого игрок целится из оружия (GET_ENTITY_PLAYER_IS_FREE_AIMING_AT).
-        /// </summary>
-        private Ped GetFreeAimPed()
-        {
-            try
-            {
-                Entity e = Function.Call<Entity>(Hash.GET_ENTITY_PLAYER_IS_FREE_AIMING_AT, Game.Player.Handle);
-                if (e != null && e.Exists())
-                {
-                    Ped p = e as Ped;
-                    if (p != null && p.Exists() && !p.IsPlayer && IsModelValidForSpawn(p.Model.Hash))
-                        return p;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log("GetFreeAimPed: " + ex.Message);
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Проецирует каждого педа рядом на экран и берёт ближайшего к центру (0.5, 0.5).
-        /// maxScreenDist — допустимое расстояние от центра в долях экрана (0.12 = 12%).
-        /// </summary>
-        private Ped GetPedNearestToScreenCenter(float maxScreenDist, float scanRadius, bool log = true)
-        {
-            try
-            {
-                Ped player = Game.Player.Character;
-                if (player == null || !player.Exists()) return null;
-
-                Ped[] peds = World.GetNearbyPeds(player.Position, scanRadius);
-                if (peds == null || peds.Length == 0) return null;
-
-                float bestSq = maxScreenDist * maxScreenDist;
-                Ped best = null;
-                int scanned = 0;
-
-                for (int i = 0; i < peds.Length; i++)
-                {
-                    Ped p = peds[i];
-                    if (p == null || !p.Exists() || p.IsPlayer || p.IsDead) continue;
-
-                    Vector3 pos = p.Position;
-                    var sx = new OutputArgument();
-                    var sy = new OutputArgument();
-
-                    bool onScreen;
-                    try
-                    {
-                        onScreen = Function.Call<bool>(Hash.GET_SCREEN_COORD_FROM_WORLD_COORD,
-                            pos.X, pos.Y, pos.Z, sx, sy);
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-                    if (!onScreen) continue;
-
-                    float px = sx.GetResult<float>() - 0.5f;
-                    float py = sy.GetResult<float>() - 0.5f;
-                    float distSq = px * px + py * py;
-                    scanned++;
-
-                    if (distSq < bestSq)
-                    {
-                        bestSq = distSq;
-                        best = p;
-                    }
-                }
-
-                if (log)
-                    Log("GetPedNearestToScreenCenter: просмотрено " + scanned +
-                        " педов из " + peds.Length + ", лучший дист. " + Math.Sqrt(bestSq).ToString("F3"));
-                return best;
-            }
-            catch (Exception ex)
-            {
-                Log("GetPedNearestToScreenCenter: " + ex.Message);
-                return null;
-            }
-        }
-
-        private void SaveModel(int hash)
-        {
-            _modelHash = hash;
-            _settings.ModelHash = hash;
-            MarkSettingsDirty();
-            UpdateModelDisplay();
-            Log("Выбрана модель педа: 0x" + hash.ToString("X8"));
-            GTA.UI.Screen.ShowSubtitle("~g~Модель 0x" + hash.ToString("X8") + " сохранена.~n~Теперь в воде будет спавниться этот пед.", 4000);
         }
 
         public void OnTick()
@@ -368,18 +209,20 @@ namespace SharkRider
                 }
             }
 
-            // Пока меню открыто — прицел активен: каждый тик считываем педа под
-            // перекрестьем (живой рейкаст) и обновляем подсказку. Выбор — по Enter.
-            if (_menu != null && _menu.Visible)
-            {
-                TrackAimedModel();
-                return;
-            }
-
             try
             {
                 Ped player = Game.Player.Character;
-                if (player == null || !player.Exists()) return;
+                DevelopmentDiagnostics.State("Shark", _state.ToString());
+                if (_control.Held && !_control.Valid)
+                {
+                    DevelopmentDiagnostics.Event("Shark", "Stopped: player died or changed");
+                    StopRiding(true);
+                    return;
+                }
+                if (player == null || !player.Exists() || player.IsDead) return;
+                if (_interactionBlocked && (!IsPlayerInWater(player) || _shark == null || !_shark.Exists() ||
+                    player.Position.DistanceTo(_shark.Position) > RideDistance + 3f))
+                    _interactionBlocked = false;
 
                 if (!_modEnabled)
                 {
@@ -392,35 +235,30 @@ namespace SharkRider
                 }
 
                 bool inWater = IsPlayerInWater(player);
+                if (!inWater)
+                    _mountSuppressedUntilWaterExit = false;
 
                 switch (_state)
                 {
                     case State.Idle:
                         long now = NowMs();
-                        if (now - _lastDiagMs >= 5000)
-                        {
-                            _lastDiagMs = now;
-                            Log("Idle: inWater=" + inWater + ", inVehicle=" + IsPedInVehicle(player) +
-                                ", playerZ=" + player.Position.Z.ToString("F1") +
-                                ", model=" + (_modelHash == 0 ? "не выбрана" : "0x" + _modelHash.ToString("X8")));
-                        }
                         if (inWater && now - _lastCheckMs >= CheckIntervalMs)
                         {
                             _lastCheckMs = now;
                             if (!IsPedInVehicle(player))
                             {
-                                if (!IsModelValidForSpawn(_modelHash))
+                                if (!IsModelValidForSpawn(SharkModelHash))
                                 {
                                     if (now - _lastHintMs >= 5000)
                                     {
                                         _lastHintMs = now;
-                                        GTA.UI.Screen.ShowSubtitle("~y~Shark Rider: модель не выбрана. Наведитесь на педа и нажмите ~b~O~w~.", 4000);
+                                        GTA.UI.Screen.ShowSubtitle("~r~Shark Rider: модель a_c_sharktiger недоступна.", 4000);
                                     }
                                     break;
                                 }
                                 Log("Игрок в воде — спавним акулу");
-                                SpawnShark(player);
                                 _state = State.Spawning;
+                                SpawnShark(player);
                             }
                         }
                         break;
@@ -436,11 +274,24 @@ namespace SharkRider
                     case State.Riding:
                         UpdateRiding(player, inWater);
                         break;
+
+                    case State.Mounting:
+                        UpdateMounting(player, inWater);
+                        break;
+
+                    case State.AttackAligning:
+                        UpdateAttackAligning(player, inWater);
+                        break;
+
+                    case State.BiteScene:
+                        UpdateBiteScene(player, inWater);
+                        break;
                 }
             }
             catch (Exception ex)
             {
                 Log("OnTick: " + ex.Message);
+                StopRiding(true);
             }
         }
 
@@ -456,9 +307,7 @@ namespace SharkRider
 
             if (_menu == null) return;
 
-            // O переключает меню. Пока меню открыто, прицел «живой» — каждый тик
-            // считывается пед под перекрестьем (см. TrackAimedModel в OnTick).
-            _aimedModelHash = 0;
+            // O переключает меню.
             _menu.Visible = !_menu.Visible;
         }
 
@@ -502,14 +351,15 @@ namespace SharkRider
         {
             try
             {
-                if (File.Exists(_settingsPath))
+                if (SafeFiles.Exists(_settingsPath))
                 {
-                    string json = File.ReadAllText(_settingsPath);
+                    string json = SafeFiles.Read(_settingsPath, ValidateSettings);
                     var settings = _serializer.Deserialize(json);
                     if (settings != null)
                     {
-                        Log("Настройки загружены: Enabled=" + settings.ModEnabled + ", ModelHash=" +
-                            (settings.ModelHash == 0 ? "не выбрана" : "0x" + settings.ModelHash.ToString("X8")));
+                        settings.ModelHash = SharkModelHash;
+                        Log("Настройки загружены: Enabled=" + settings.ModEnabled +
+                            ", AttackMode=" + settings.AttackMode + ", модель=a_c_sharktiger");
                         return settings;
                     }
                 }
@@ -518,8 +368,14 @@ namespace SharkRider
             {
                 Log("LoadSettings: " + ex.Message);
             }
-            Log("Используются настройки по умолчанию (модель не выбрана)");
+            Log("Используются настройки по умолчанию (модель a_c_sharktiger)");
             return new ModSettings();
+        }
+
+        private void ValidateSettings(string text)
+        {
+            if (new JavaScriptSerializer().Deserialize<ModSettings>(text) == null)
+                throw new InvalidDataException("Invalid settings");
         }
 
         private void SaveSettings()
@@ -530,7 +386,8 @@ namespace SharkRider
                 if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                     Directory.CreateDirectory(directory);
 
-                File.WriteAllText(_settingsPath, _serializer.Serialize(_settings));
+                _settings.ModelHash = SharkModelHash;
+                SafeFiles.Write(_settingsPath, _serializer.Serialize(_settings), ValidateSettings);
                 Log("Настройки сохранены в файл");
             }
             catch (Exception ex)
@@ -594,11 +451,13 @@ namespace SharkRider
                 }
 
                 _spawnRequestMs = NowMs();
-                Function.Call(Hash.REQUEST_MODEL, _modelHash);
+                Function.Call(Hash.REQUEST_MODEL, SharkModelHash);
+                _modelRequested = true;
             }
             catch (Exception ex)
             {
                 Log("SpawnShark: " + ex.Message);
+                ReleaseRequestedModel();
                 _state = State.Idle;
             }
         }
@@ -608,21 +467,22 @@ namespace SharkRider
             try
             {
                 // Страховка: модель обязана существовать и быть педом, иначе CREATE_PED крашит игру нативно
-                if (!IsModelValidForSpawn(_modelHash))
+                if (!IsModelValidForSpawn(SharkModelHash))
                 {
-                    Log("Модель 0x" + _modelHash.ToString("X8") + " не существует или не пед — спавн отменён");
+                    Log("Модель a_c_sharktiger не существует или не является педом — спавн отменён");
+                    ReleaseRequestedModel();
                     _state = State.Idle;
                     return;
                 }
 
-                if (!Function.Call<bool>(Hash.HAS_MODEL_LOADED, _modelHash))
+                if (!Function.Call<bool>(Hash.HAS_MODEL_LOADED, SharkModelHash))
                 {
                     // Модель не загрузилась — пробуем снова и пишем в лог
                     if (NowMs() - _spawnRequestMs > 5000)
                     {
-                        Log("Модель 0x" + _modelHash.ToString("X8") + " не загрузилась за 5с, повторный запрос");
+                        Log("Модель a_c_sharktiger не загрузилась за 5с, повторный запрос");
                         _spawnRequestMs = NowMs();
-                        Function.Call(Hash.REQUEST_MODEL, _modelHash);
+                        Function.Call(Hash.REQUEST_MODEL, SharkModelHash);
                     }
                     return;
                 }
@@ -630,6 +490,7 @@ namespace SharkRider
                 if (!IsPlayerInWater(player))
                 {
                     Log("UpdateSpawning: игрок вышел из воды, отмена спавна");
+                    ReleaseRequestedModel();
                     _state = State.Idle;
                     return;
                 }
@@ -638,6 +499,7 @@ namespace SharkRider
                 if (IsInvalid(spawnPos))
                 {
                     Log("UpdateSpawning: невалидная позиция спавна");
+                    ReleaseRequestedModel();
                     _state = State.Idle;
                     return;
                 }
@@ -654,8 +516,9 @@ namespace SharkRider
                     spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
                 }
 
-                _shark = (Ped)Function.Call<Entity>(Hash.CREATE_PED, PedType, _modelHash,
-                    spawnPos.X, spawnPos.Y, spawnPos.Z, playerPos.ToHeading(), true, false);
+                _shark = (Ped)Function.Call<Entity>(Hash.CREATE_PED, PedType, SharkModelHash,
+                    spawnPos.X, spawnPos.Y, spawnPos.Z, playerPos.ToHeading(), false, false);
+                ReleaseRequestedModel();
 
                 if (_shark == null || !_shark.Exists() || IsInvalid(_shark.Position))
                 {
@@ -674,12 +537,14 @@ namespace SharkRider
 
                 _sharkSpawnMs = NowMs();
                 _lastInWaterMs = NowMs();
+                ResetInteractionState();
                 Log("Акула создана на " + spawnPos.ToString());
                 _state = State.Approaching;
             }
             catch (Exception ex)
             {
                 Log("UpdateSpawning: " + ex.Message);
+                ReleaseRequestedModel();
                 DeleteShark();
                 _state = State.Idle;
             }
@@ -695,11 +560,9 @@ namespace SharkRider
             Vector3 dir = GetPlayerLookDirection(player);
             Vector3 spawnPos = playerPos + dir * SpawnDistance;
 
-            // Глубину берём от игрока (он уже в воде). GET_WATER_HEIGHT не используем
-            // — в этой сборке SHVDN3 он крашит игру нативно.
+            // Глубину берём от игрока (он уже в воде). Координаты X/Y не ограничиваем:
+            // дополнительные карты и острова GTA могут находиться далеко за +/-4000.
             spawnPos.Z = Clamp(playerPos.Z - 1.5f, playerPos.Z - 6f, playerPos.Z + 1f);
-            spawnPos.X = Clamp(spawnPos.X, -4000f, 4000f);
-            spawnPos.Y = Clamp(spawnPos.Y, -4000f, 4000f);
             return spawnPos;
         }
 
@@ -743,7 +606,10 @@ namespace SharkRider
                 float dist = playerPos.DistanceTo(sharkPos);
                 if (dist < RideDistance && inWater)
                 {
-                    StartRiding(player);
+                    if (_attackMode)
+                        StartAttackAligning();
+                    else if (!_mountSuppressedUntilWaterExit)
+                        StartMounting(player);
                     return;
                 }
 
@@ -753,6 +619,7 @@ namespace SharkRider
                     Log("UpdateApproaching: акула слишком далеко (" + dist.ToString("F0") + "м), пересоздаём");
                     StopRiding(true);
                     _state = State.Spawning;
+                    SpawnShark(player);
                     return;
                 }
 
@@ -777,42 +644,322 @@ namespace SharkRider
             }
         }
 
+        // === АТАКА ===
+
+        private void StartAttackAligning()
+        {
+            if (_shark == null || !_shark.Exists()) return;
+
+            Function.Call(Hash.CLEAR_PED_TASKS, _shark.Handle);
+            RequestBiteAnimations();
+            _state = State.AttackAligning;
+            Log("Акула готовится к визуальному укусу");
+        }
+
+        private void UpdateAttackAligning(Ped player, bool inWater)
+        {
+            try
+            {
+                long now = NowMs();
+                bool attackInWater = inWater || IsEntityInWater(_shark);
+                if (attackInWater) _lastInWaterMs = now;
+                if ((!attackInWater && now - _lastInWaterMs > AbandonTimeoutMs) ||
+                    player.IsDead || _shark == null || !_shark.Exists() || _shark.IsDead)
+                {
+                    StopRiding(true);
+                    return;
+                }
+
+                RequestBiteAnimations();
+
+                Vector3 sharkPos = _shark.Position;
+                Vector3 playerPos = player.Position;
+                if (IsInvalid(sharkPos) || IsInvalid(playerPos))
+                {
+                    StopRiding(true);
+                    return;
+                }
+
+                if (now < _attackRetreatUntilMs)
+                {
+                    Vector3 away = sharkPos - playerPos;
+                    away.Z = 0f;
+                    if (away.LengthSquared() < 0.01f) away = new Vector3(1f, 0f, 0f);
+                    away.Normalize();
+                    MoveSharkToward(sharkPos + away * 6f, sharkPos, 5f);
+                    return;
+                }
+
+                Vector3 playerForward = GetPlayerLookDirection(player);
+                Vector3 stagingPoint = playerPos + playerForward * AttackDistance;
+                stagingPoint.Z = playerPos.Z - 0.25f;
+                float stagingDistance = sharkPos.DistanceTo(stagingPoint);
+
+                if (stagingDistance > 0.65f)
+                {
+                    MoveSharkToward(stagingPoint, sharkPos, AttackApproachSpeed);
+                    return;
+                }
+
+                Vector3 facePlayer = playerPos - sharkPos;
+                facePlayer.Z = 0f;
+                if (facePlayer.LengthSquared() > 0.01f)
+                    _shark.Heading = facePlayer.Normalized.ToHeading();
+                _shark.Velocity = Vector3.Zero;
+
+                if (AreBiteAnimationsLoaded())
+                    StartBiteScene(player);
+            }
+            catch (Exception ex)
+            {
+                Log("UpdateAttackAligning: " + ex.Message);
+                StopRiding(true);
+            }
+        }
+
+        private void MoveSharkToward(Vector3 targetPos, Vector3 sharkPos, float speed)
+        {
+            Vector3 toTarget = targetPos - sharkPos;
+            Vector3 flat = new Vector3(toTarget.X, toTarget.Y, 0f);
+            if (flat.LengthSquared() <= 0.01f) return;
+
+            Vector3 dir = flat.Normalized;
+            _shark.Heading = dir.ToHeading();
+            float targetZ = Clamp(targetPos.Z + 0.25f, targetPos.Z - 3f, targetPos.Z + 2f);
+            Vector3 velocity = new Vector3(
+                dir.X * speed,
+                dir.Y * speed,
+                Clamp((targetZ - sharkPos.Z) * 1.5f, -speed, speed));
+            _shark.Velocity = ClampSpeed(velocity, 12f);
+        }
+
+        private void StartBiteScene(Ped player)
+        {
+            if (!AcquireInteraction("Укус акулы")) return;
+            _biteFallbackActive = false;
+            player.IsPositionFrozen = true;
+            player.Velocity = Vector3.Zero;
+            _shark.Velocity = Vector3.Zero;
+
+            if (!StartNetworkBiteScene(player))
+                StartFallbackBite(player);
+
+            _bitePhaseStartedMs = NowMs();
+            _state = State.BiteScene;
+            Log("Запущена визуальная сцена укуса");
+        }
+
+        private void UpdateBiteScene(Ped player, bool inWater)
+        {
+            try
+            {
+                long now = NowMs();
+                bool biteInWater = inWater || IsEntityInWater(_shark);
+                if (biteInWater) _lastInWaterMs = now;
+                if ((!biteInWater && now - _lastInWaterMs > AbandonTimeoutMs) ||
+                    player.IsDead || _shark == null || !_shark.Exists())
+                {
+                    StopRiding(true);
+                    return;
+                }
+
+                long elapsed = now - _bitePhaseStartedMs;
+                if (_biteFallbackActive)
+                {
+                    if (elapsed >= BiteSceneTimeoutMs)
+                        FinishBiteScene(player);
+                    return;
+                }
+
+                float phase = GetActiveBiteScenePhase();
+                if (phase >= BiteStopPhase || elapsed >= BiteSceneTimeoutMs)
+                {
+                    FinishBiteScene(player);
+                    return;
+                }
+
+                if (elapsed > 500 && phase <= 0f && !IsBiteAnimationPlaying(player))
+                {
+                    StopActiveBiteScene();
+                    StartFallbackBite(player);
+                    _bitePhaseStartedMs = NowMs();
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("UpdateBiteScene: " + ex.Message);
+                FinishBiteScene(player);
+            }
+        }
+
+        private bool StartNetworkBiteScene(Ped player)
+        {
+            try
+            {
+                Vector3 origin = _shark.Position;
+                Vector3 rotation = player.Rotation;
+
+                int scene = Function.Call<int>(Hash.NETWORK_CREATE_SYNCHRONISED_SCENE,
+                    origin.X, origin.Y, origin.Z,
+                    rotation.X, rotation.Y, rotation.Z,
+                    2, true, false, 1f, 0f, 1f);
+                if (scene < 0) return false;
+
+                Function.Call(Hash.NETWORK_ADD_PED_TO_SYNCHRONISED_SCENE,
+                    _shark.Handle, scene, BiteSceneAnimDict, "attack",
+                    8f, 8f, -1, 0, 1f, 0);
+                Function.Call(Hash.NETWORK_ADD_PED_TO_SYNCHRONISED_SCENE,
+                    player.Handle, scene, BiteSceneAnimDict, "attack_player",
+                    8f, 8f, -1, 0, 1f, 0);
+                Function.Call(Hash.NETWORK_START_SYNCHRONISED_SCENE, scene);
+                _activeBiteScene = scene;
+                _activeLocalBiteScene = Function.Call<int>(Hash.NETWORK_GET_LOCAL_SCENE_FROM_NETWORK_ID, scene);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log("StartNetworkBiteScene: " + ex.Message);
+                _activeBiteScene = -1;
+                _activeLocalBiteScene = -1;
+                return false;
+            }
+        }
+
+        private void StartFallbackBite(Ped player)
+        {
+            _biteFallbackActive = true;
+            Function.Call(Hash.TASK_PLAY_ANIM, _shark.Handle, BiteSceneAnimDict, "attack",
+                8f, -8f, (int)BiteSceneTimeoutMs, 0, 0f, false, false, false);
+            Function.Call(Hash.TASK_PLAY_ANIM, player.Handle, BiteSceneAnimDict, "attack_player",
+                8f, -8f, (int)BiteSceneTimeoutMs, 0, 0f, false, false, false);
+        }
+
+        private bool IsBiteAnimationPlaying(Ped player)
+        {
+            return Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, player.Handle, BiteSceneAnimDict, "attack_player", 3) ||
+                   Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, _shark.Handle, BiteSceneAnimDict, "attack", 3);
+        }
+
+        private float GetActiveBiteScenePhase()
+        {
+            if (_activeLocalBiteScene < 0) return 0f;
+            try
+            {
+                return Function.Call<float>(Hash.GET_SYNCHRONIZED_SCENE_PHASE, _activeLocalBiteScene);
+            }
+            catch
+            {
+                return 0f;
+            }
+        }
+
+        private void FinishBiteScene(Ped player)
+        {
+            StopActiveBiteScene();
+            if (!_control.Held) return;
+            try { Function.Call(Hash.CLEAR_PED_TASKS, player.Handle); } catch { }
+            try { Function.Call(Hash.CLEAR_PED_TASKS, _shark.Handle); } catch { }
+            _control.Dispose();
+            DevelopmentDiagnostics.Event("Shark", "Bite finished");
+            _biteFallbackActive = false;
+            _attackRetreatUntilMs = NowMs() + BiteRetreatDurationMs;
+            _state = State.AttackAligning;
+        }
+
+        private void StopActiveBiteScene()
+        {
+            if (_activeBiteScene < 0) return;
+            try { Function.Call(Hash.NETWORK_STOP_SYNCHRONISED_SCENE, _activeBiteScene); } catch { }
+            _activeBiteScene = -1;
+            _activeLocalBiteScene = -1;
+        }
+
+        private static void RequestBiteAnimations()
+        {
+            Function.Call(Hash.REQUEST_ANIM_DICT, BiteSceneAnimDict);
+        }
+
+        private static bool AreBiteAnimationsLoaded()
+        {
+            return Function.Call<bool>(Hash.HAS_ANIM_DICT_LOADED, BiteSceneAnimDict);
+        }
+
         // === КАТАНИЕ ===
 
-        private void StartRiding(Ped player)
+        private bool AcquireInteraction(string name)
+        {
+            if (_interactionBlocked) return false;
+            if (_control.Acquire(name, false)) return true;
+            _interactionBlocked = true;
+            if (_shark != null && _shark.Exists()) _shark.Velocity = Vector3.Zero;
+            return false;
+        }
+
+        private void StartMounting(Ped player)
         {
             try
             {
                 if (_shark == null || !_shark.Exists()) return;
+                if (!AcquireInteraction("Катание на акуле")) return;
 
                 Function.Call(Hash.CLEAR_PED_TASKS, _shark.Handle);
-                _shark.Heading = player.Heading;
-
+                Function.Call(Hash.REQUEST_ANIM_DICT, RideAnimDict);
+                _shark.Velocity = Vector3.Zero;
+                _mountStartPosition = player.Position;
+                _mountStartedMs = NowMs();
                 player.IsPositionFrozen = true;
-                player.AttachTo(_shark, AttachOffset, new Vector3(0f, 0f, 0f));
-
-                // Убираем анимацию плавания: проигрываем сидячую анимацию
-                // (отдельный try — если анимация не проигрывается, катание не должно падать)
-                try
-                {
-                    Function.Call(Hash.REQUEST_ANIM_DICT, SitAnimDict);
-                    // flags = 1 (loop). Перекрывает анимацию плавания.
-                    Function.Call(Hash.TASK_PLAY_ANIM, player.Handle, SitAnimDict, SitAnimName,
-                        8f, -8f, -1, 1, 0f, false, false, false);
-                }
-                catch (Exception ex2)
-                {
-                    Log("StartRiding (сидячая анимация): " + ex2.Message);
-                }
-
-                Log("Игрок сел на акулу");
-                _state = State.Riding;
+                _state = State.Mounting;
+                Log("Началась плавная посадка на акулу");
             }
             catch (Exception ex)
             {
-                Log("StartRiding: " + ex.Message);
-                StopRiding(false);
-                _state = State.Idle;
+                Log("StartMounting: " + ex.Message);
+                StopRiding(true);
+            }
+        }
+
+        private void UpdateMounting(Ped player, bool inWater)
+        {
+            try
+            {
+                long now = NowMs();
+                bool rideInWater = inWater || IsEntityInWater(_shark);
+                if (rideInWater) _lastInWaterMs = now;
+                if ((!rideInWater && now - _lastInWaterMs > AbandonTimeoutMs) ||
+                    _shark == null || !_shark.Exists() || _shark.IsDead)
+                {
+                    StopRiding(true);
+                    return;
+                }
+
+                Function.Call(Hash.REQUEST_ANIM_DICT, RideAnimDict);
+                float t = Clamp((now - _mountStartedMs) / (float)MountDurationMs, 0f, 1f);
+                float smooth = t * t * (3f - 2f * t);
+                Vector3 target = Function.Call<Vector3>(Hash.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS,
+                    _shark.Handle, AttachOffset.X, AttachOffset.Y, AttachOffset.Z);
+                Vector3 position = Lerp(_mountStartPosition, target, smooth);
+                Function.Call(Hash.SET_ENTITY_COORDS_NO_OFFSET, player.Handle,
+                    position.X, position.Y, position.Z, false, false, false);
+                player.Heading = LerpAngle(player.Heading, _shark.Heading, 0.18f);
+
+                if (t < 1f) return;
+
+                player.AttachTo(_shark, AttachOffset, AttachRotation);
+                PlayRideAnimation(player);
+                _rideForwardSpeed = 0f;
+                _rideVerticalSpeed = 0f;
+                _ridePitch = 0f;
+                _rideRoll = 0f;
+                _lastRideUpdateMs = NowMs();
+                _dismountKeyWasDown = false;
+                _state = State.Riding;
+                Log("Игрок сел верхом на акулу");
+            }
+            catch (Exception ex)
+            {
+                Log("UpdateMounting: " + ex.Message);
+                StopRiding(true);
             }
         }
 
@@ -823,27 +970,25 @@ namespace SharkRider
                 long now = NowMs();
 
                 bool sharkOk = _shark != null && _shark.Exists() && !_shark.IsDead;
-                if (!inWater || !sharkOk)
+                bool rideInWater = inWater || IsEntityInWater(_shark);
+                if (rideInWater) _lastInWaterMs = now;
+                if ((!rideInWater && now - _lastInWaterMs > AbandonTimeoutMs) || !sharkOk)
                 {
                     StopRiding(true);
                     _state = State.Idle;
                     return;
                 }
-                if (inWater) _lastInWaterMs = now;
 
-                // Держим сидячую анимацию — иначе в воде игра постоянно включает плавание
-                try
+                bool dismountDown = Game.IsKeyPressed(Keys.E);
+                if (dismountDown && !_dismountKeyWasDown)
                 {
-                    Function.Call(Hash.REQUEST_ANIM_DICT, SitAnimDict);
-                    if (!Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, player.Handle, SitAnimDict, SitAnimName, 3))
-                    {
-                        Function.Call(Hash.TASK_PLAY_ANIM, player.Handle, SitAnimDict, SitAnimName,
-                            8f, -8f, -1, 1, 0f, false, false, false);
-                    }
+                    _mountSuppressedUntilWaterExit = true;
+                    StopRiding(true);
+                    return;
                 }
-                catch
-                {
-                }
+                _dismountKeyWasDown = dismountDown;
+
+                PlayRideAnimation(player);
 
                 Vector3 sharkPos = _shark.Position;
                 if (IsInvalid(sharkPos))
@@ -854,67 +999,65 @@ namespace SharkRider
                     return;
                 }
 
-                // Направление берём от обычной игровой камеры — у неё работает мышь,
-                // поэтому игрок может смотреть вокруг и рулить акулой.
-                Vector3 fwd = GTA.GameplayCamera.ForwardVector;
-                Vector3 right = GTA.GameplayCamera.RightVector;
-                fwd.Z = 0f; right.Z = 0f;
-                if (fwd.LengthSquared() < 0.01f) fwd = new Vector3(1f, 0f, 0f);
-                if (right.LengthSquared() < 0.01f) right = new Vector3(0f, 1f, 0f);
-                fwd = fwd.Normalized;
-                right = right.Normalized;
+                float dt = Clamp((now - _lastRideUpdateMs) / 1000f, 0.001f, 0.05f);
+                _lastRideUpdateMs = now;
 
-                if (IsInvalid(fwd)) fwd = new Vector3(1f, 0f, 0f);
-                if (IsInvalid(right)) right = new Vector3(0f, 1f, 0f);
+                float forwardInput = (Game.IsKeyPressed(Keys.W) ? 1f : 0f) - (Game.IsKeyPressed(Keys.S) ? 1f : 0f);
+                float turnInput = (Game.IsKeyPressed(Keys.D) ? 1f : 0f) - (Game.IsKeyPressed(Keys.A) ? 1f : 0f);
+                float verticalInput = (Game.IsKeyPressed(Keys.ShiftKey) ? 1f : 0f) -
+                    (Game.IsKeyPressed(Keys.ControlKey) ? 1f : 0f);
 
-                float fwdIn = (Game.IsKeyPressed(Keys.W) ? 1f : 0f) - (Game.IsKeyPressed(Keys.S) ? 1f : 0f);
-                float strafe = (Game.IsKeyPressed(Keys.D) ? 1f : 0f) - (Game.IsKeyPressed(Keys.A) ? 1f : 0f);
+                float targetForward = forwardInput >= 0f ? forwardInput * RideSpeed : forwardInput * RideSpeed * 0.4f;
+                _rideForwardSpeed = MoveTowards(_rideForwardSpeed, targetForward, RideAcceleration * dt);
+                _rideVerticalSpeed = MoveTowards(_rideVerticalSpeed, verticalInput * RideVerticalSpeed,
+                    RideVerticalAcceleration * dt);
 
-                Vector3 move = fwd * fwdIn + right * strafe;
-                move.Z = 0f;
+                float heading = _shark.Heading + turnInput * RideTurnSpeed * dt;
+                float targetPitch = -verticalInput * 10f;
+                float targetRoll = -turnInput * 8f;
+                _ridePitch = MoveTowards(_ridePitch, targetPitch, 30f * dt);
+                _rideRoll = MoveTowards(_rideRoll, targetRoll, 35f * dt);
+                _shark.Rotation = new Vector3(_ridePitch, _rideRoll, heading);
 
-                Vector3 vel = new Vector3(0f, 0f, 0f);
-                if (move.LengthSquared() > 0.01f)
-                {
-                    Vector3 dir = move.Normalized;
-                    vel = new Vector3(dir.X * RideSpeed, dir.Y * RideSpeed, 0f);
-
-                    // Плавный поворот акулы в сторону движения (без резких рывков)
-                    float target = dir.ToHeading();
-                    float cur = _shark.Heading;
-                    float diff = target - cur;
-                    while (diff > 180f) diff -= 360f;
-                    while (diff < -180f) diff += 360f;
-                    _shark.Heading = cur + diff * 0.12f;
-                }
-
-                // Shift — вверх, Ctrl — вниз. Движение ТОЛЬКО пока кнопка удерживается;
-                // отпустили — сразу держим глубину (vel.Z = 0, без инерции/догона).
-                if (Game.IsKeyPressed(Keys.ShiftKey))
-                    vel.Z = RideVerticalSpeed;
-                else if (Game.IsKeyPressed(Keys.ControlKey))
-                    vel.Z = -RideVerticalSpeed;
-                else
-                    vel.Z = 0f;
-
-                _shark.Velocity = ClampSpeed(vel, 12f);
+                Vector3 direction = RotationToDirection(heading);
+                Vector3 velocity = new Vector3(
+                    direction.X * _rideForwardSpeed,
+                    direction.Y * _rideForwardSpeed,
+                    _rideVerticalSpeed);
+                _shark.Velocity = ClampSpeed(velocity, 12f);
             }
             catch (Exception ex)
             {
                 Log("UpdateRiding: " + ex.Message);
+                StopRiding(true);
             }
+        }
+
+        private static void PlayRideAnimation(Ped player)
+        {
+            Function.Call(Hash.REQUEST_ANIM_DICT, RideAnimDict);
+            if (!Function.Call<bool>(Hash.HAS_ANIM_DICT_LOADED, RideAnimDict)) return;
+            if (Function.Call<bool>(Hash.IS_ENTITY_PLAYING_ANIM, player.Handle, RideAnimDict, RideAnimName, 3)) return;
+
+            Function.Call(Hash.TASK_PLAY_ANIM, player.Handle, RideAnimDict, RideAnimName,
+                8f, -8f, -1, 1, 0f, false, false, false);
         }
 
         private void StopRiding(bool deleteShark)
         {
+            DevelopmentDiagnostics.Event("Shark", "Stop " + _state + ": " +
+                (!_modEnabled ? "disabled" :
+                _control.Held && !_control.Valid ? "player unavailable" :
+                _shark == null || !_shark.Exists() ? "shark missing" : "exit/mode change/cleanup"));
             try
             {
-                Ped player = Game.Player.Character;
-                if (player != null && player.Exists())
+                StopActiveBiteScene();
+                Ped player = _control.Player;
+                if (_control.Held && player != null && player.Exists())
                 {
                     if (player.IsAttached())
                         player.Detach();
-                    player.IsPositionFrozen = false;
+                    try { Function.Call(Hash.CLEAR_PED_TASKS, player.Handle); } catch { }
                 }
 
                 if (deleteShark)
@@ -930,6 +1073,12 @@ namespace SharkRider
             {
                 Log("StopRiding: " + ex.Message);
             }
+            finally
+            {
+                _control.Dispose();
+                _state = State.Idle;
+                DevelopmentDiagnostics.State("Shark", "Idle");
+            }
         }
 
         // === УТИЛИТЫ ===
@@ -940,12 +1089,11 @@ namespace SharkRider
             // нельзя (игра падает с AccessViolation). Открепляем и снимаем заморозку.
             try
             {
-                Ped player = Game.Player.Character;
-                if (player != null && player.Exists())
+                Ped player = _control.Player;
+                if (_control.Held && player != null && player.Exists())
                 {
                     if (player.IsAttached())
                         player.Detach();
-                    player.IsPositionFrozen = false;
                 }
             }
             catch (Exception ex)
@@ -969,6 +1117,44 @@ namespace SharkRider
                 Log("DeleteShark: " + ex.Message);
             }
             _shark = null;
+            _control.Dispose();
+            ResetInteractionState();
+            ReleaseRequestedModel();
+        }
+
+        private void ResetInteractionState()
+        {
+            StopActiveBiteScene();
+            _mountStartedMs = 0;
+            _lastRideUpdateMs = 0;
+            _bitePhaseStartedMs = 0;
+            _attackRetreatUntilMs = 0;
+            _rideForwardSpeed = 0f;
+            _rideVerticalSpeed = 0f;
+            _ridePitch = 0f;
+            _rideRoll = 0f;
+            _biteFallbackActive = false;
+            _dismountKeyWasDown = false;
+        }
+
+        private bool IsSpawnedShark(Ped ped)
+        {
+            return ped != null && _shark != null && ped.Exists() && _shark.Exists() && ped.Handle == _shark.Handle;
+        }
+
+        private void ReleaseRequestedModel()
+        {
+            if (!_modelRequested) return;
+
+            try
+            {
+                Function.Call(Hash.SET_MODEL_AS_NO_LONGER_NEEDED, SharkModelHash);
+            }
+            catch (Exception ex)
+            {
+                Log("ReleaseRequestedModel: " + ex.Message);
+            }
+            _modelRequested = false;
         }
 
         /// <summary>
@@ -988,6 +1174,19 @@ namespace SharkRider
             {
             }
             return false;
+        }
+
+        private static bool IsEntityInWater(Entity entity)
+        {
+            try
+            {
+                return entity != null && entity.Exists() &&
+                    Function.Call<bool>(Hash.IS_ENTITY_IN_WATER, entity.Handle);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private bool IsPedInVehicle(Ped ped)
@@ -1039,6 +1238,35 @@ namespace SharkRider
             return value;
         }
 
+        private static float MoveTowards(float current, float target, float maxDelta)
+        {
+            float delta = target - current;
+            if (Math.Abs(delta) <= maxDelta) return target;
+            return current + Math.Sign(delta) * maxDelta;
+        }
+
+        private static Vector3 Lerp(Vector3 from, Vector3 to, float amount)
+        {
+            return new Vector3(
+                from.X + (to.X - from.X) * amount,
+                from.Y + (to.Y - from.Y) * amount,
+                from.Z + (to.Z - from.Z) * amount);
+        }
+
+        private static float LerpAngle(float from, float to, float amount)
+        {
+            float delta = to - from;
+            while (delta > 180f) delta -= 360f;
+            while (delta < -180f) delta += 360f;
+            return from + delta * amount;
+        }
+
+        private static Vector3 RotationToDirection(float heading)
+        {
+            double radians = heading * Math.PI / 180.0;
+            return new Vector3((float)(-Math.Sin(radians)), (float)Math.Cos(radians), 0f);
+        }
+
         private static bool IsInvalid(Vector3 v)
         {
             return float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) ||
@@ -1058,6 +1286,7 @@ namespace SharkRider
 
         private void Log(string message)
         {
+            DevelopmentDiagnostics.Event("Shark", message);
             try
             {
                 string line = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + message;
