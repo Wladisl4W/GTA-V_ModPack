@@ -1,0 +1,41 @@
+name: Publish ModPack release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    paths:
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: startsWith(github.ref, 'refs/tags/') || github.event.head_commit.message == 'Publish ModPack 1.5 release'
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.5' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Package and publish
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_TAG.TrimStart('v')
+          $project = [xml](Get-Content 'Source Code/Reloader/Reloader.csproj' -Raw)
+          $loaderVersion = ($project.Project.PropertyGroup.FileVersion -split '\.')[0..1] -join '.'
+          $plugins = Join-Path $env:RUNNER_TEMP "ModPack-Plugins-$version.zip"
+          $loader = Join-Path $env:RUNNER_TEMP "Reloader-$loaderVersion.zip"
+          $files = @(Get-ChildItem 'Ready To Use/ReloaderPlugins/Plugins' -File | Select-Object -ExpandProperty FullName)
+          Compress-Archive -LiteralPath $files -DestinationPath $plugins
+          Compress-Archive -LiteralPath 'Ready To Use/Reloader.dll' -DestinationPath $loader
+          $notes = "Crash reports for GTA V are saved under scripts/ReloaderPlugins/CrashLogger. Download the plugin archive and extract its contents directly into scripts/ReloaderPlugins/Plugins. Reloader $loaderVersion is optional for existing 2.0 users and adds detailed plugin exception logging."
+          gh release create $env:RELEASE_TAG $plugins $loader --verify-tag --title "ModPack $version" --notes $notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
