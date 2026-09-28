@@ -8,13 +8,14 @@ on:
       - main
     paths:
       - '.github/workflows/release.yml'
+      - 'release-notes/v1.5.md'
 
 permissions:
   contents: write
 
 jobs:
   publish:
-    if: startsWith(github.ref, 'refs/tags/') || github.event.head_commit.message == 'Publish ModPack 1.5 release'
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: windows-latest
     env:
       RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.5' }}
@@ -39,3 +40,13 @@ jobs:
           $notes = "Crash reports for GTA V are saved under scripts/ReloaderPlugins/CrashLogger. Download the plugin archive and extract its contents directly into scripts/ReloaderPlugins/Plugins. Reloader $loaderVersion is optional for existing 2.0 users and adds detailed plugin exception logging."
           gh release create $env:RELEASE_TAG $plugins $loader --verify-tag --title "ModPack $version" --notes $notes
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  update_v1_5_notes:
+    if: github.ref == 'refs/heads/main' && github.event.head_commit.message == 'Update ModPack 1.5 release notes'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update release description
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit v1.5 --notes-file release-notes/v1.5.md
