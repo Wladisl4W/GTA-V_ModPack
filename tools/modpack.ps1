@@ -1,7 +1,8 @@
 # Run with Windows PowerShell 5.1 (the same .NET Framework as GTA).
 [CmdletBinding()]
 param(
-    [ValidateSet('Check','Update')][string]$Mode = 'Check',
+    [ValidateSet('Check','Update','CrashDumps')][string]$Mode = 'Check',
+    [ValidateSet('','On','Off')][string]$State = '',
     [string]$Config = '',
     [int]$TimeoutSeconds = 30
 )
@@ -24,11 +25,36 @@ $scripts = Join-Path $settings.GameDirectory 'scripts'
 $live = Join-Path $scripts 'ReloaderPlugins\Plugins'
 $ready = Join-Path $repo 'Ready To Use\ReloaderPlugins\Plugins'
 $source = Join-Path $repo 'Source Code\Plugins'
+$watcherProject = Join-Path $repo 'Source Code\CrashWatcher\CrashWatcher.csproj'
+$watcherOutput = Join-Path $repo 'Source Code\CrashWatcher\bin\Release\net48\CrashWatcher.exe'
+$watcherConfig = $watcherOutput + '.config'
 $shvdn = Join-Path $settings.GameDirectory 'ScriptHookVDotNet3.dll'
 $lemon = Join-Path $scripts 'LemonUI.SHVDN3.dll'
-foreach ($path in @($source,$live,$ready,$shvdn,$lemon)) {
+if ($Mode -eq 'CrashDumps') {
+    if (!$State) { throw 'Use: modpack.cmd CrashDumps On|Off' }
+    $key = 'HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps\GTA5.exe'
+    if ($State -eq 'On') {
+        $dumpFolder = Join-Path $scripts 'ReloaderPlugins\CrashLogger\CrashDumps'
+        [void](New-Item -ItemType Directory -Path $dumpFolder -Force)
+        [void](New-Item -Path $key -Force)
+        New-ItemProperty -Path $key -Name DumpFolder -Value $dumpFolder -PropertyType ExpandString -Force | Out-Null
+        New-ItemProperty -Path $key -Name DumpType -Value 1 -PropertyType DWord -Force | Out-Null
+        New-ItemProperty -Path $key -Name DumpCount -Value 3 -PropertyType DWord -Force | Out-Null
+        Write-Host "GTA5 minidumps enabled: $dumpFolder"
+    } else {
+        if (Test-Path -LiteralPath $key) { Remove-Item -LiteralPath $key -Recurse -Force }
+        Write-Host 'GTA5 minidumps disabled. Existing dump files were retained.'
+    }
+    return
+}
+foreach ($path in @($source,$live,$ready,$shvdn,$lemon,$watcherProject)) {
     if (!(Test-Path -LiteralPath $path)) { throw "Required path missing: $path" }
 }
+dotnet build $watcherProject -c Release --nologo
+if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $watcherOutput) -or !(Test-Path -LiteralPath $watcherConfig)) {
+    throw 'CrashWatcher build failed. No files copied.'
+}
+Write-Host "CrashWatcher built: $watcherOutput"
 Add-Type -Path (Join-Path $repo 'Source Code\Reloader\PluginCompiler.cs') -ReferencedAssemblies System.Core,Microsoft.CSharp
 $fingerprint = ''
 $result = [PluginCompiler]::Compile($source,$scripts,$shvdn,$lemon,[ref]$fingerprint)
@@ -57,7 +83,20 @@ foreach ($file in $sources) {
         $target = Join-Path $destination $file.Name
         if (!(Test-Path -LiteralPath $target) -or
             (Get-Sha256 $target) -ne $hash) {
-            $changes += [pscustomobject]@{Source=$file.FullName;Target=$target;Hash=$hash;Live=($destination -eq $live)}
+            $changes += [pscustomobject]@{Source=$file.FullName;Target=$target;Hash=$hash;Live=($destination -eq $live);Reload=$true}
+        }
+    }
+}
+$watcherArtifacts = @(
+    [pscustomobject]@{Source=$watcherOutput;Name='CrashWatcher.exe'},
+    [pscustomobject]@{Source=$watcherConfig;Name='CrashWatcher.exe.config'}
+)
+foreach ($artifact in $watcherArtifacts) {
+    $artifactHash = Get-Sha256 $artifact.Source
+    foreach ($destination in @($ready,$live)) {
+        $target = Join-Path $destination $artifact.Name
+        if (!(Test-Path -LiteralPath $target) -or (Get-Sha256 $target) -ne $artifactHash) {
+            $changes += [pscustomobject]@{Source=$artifact.Source;Target=$target;Hash=$artifactHash;Live=($destination -eq $live);Reload=$false}
         }
     }
 }
@@ -93,7 +132,10 @@ catch {
 finally {
     if ($null -ne $deploymentLock) { $deploymentLock.Dispose(); Remove-Item -LiteralPath $lockPath }
 }
-if (!@($changes | Where-Object Live).Count) { Write-Host 'Package updated; live files were already current.'; return }
+if (!@($changes | Where-Object { $_.Live -and $_.Reload }).Count) {
+    Write-Host 'Artifacts updated. CrashWatcher update takes effect on the next GTA start.'
+    return
+}
 $timer = [Diagnostics.Stopwatch]::StartNew()
 while ($timer.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
     if (Test-Path -LiteralPath $logPath) {

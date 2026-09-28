@@ -9,8 +9,8 @@ ModPack - набор скриптовых модов для GTA V на базе 
 Reloader. Загрузчик один (`Reloader.dll`), а сами моды лежат отдельными
 файлами в папке `ReloaderPlugins\Plugins` и компилируются при запуске игры.
 
-GitHub release 1.4:
-  https://github.com/Wladisl4W/GTA-V_ModPack/releases/tag/v1.4
+GitHub release 1.5:
+  https://github.com/Wladisl4W/GTA-V_ModPack/releases/tag/v1.5
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   БЫСТРОЕ ОБНОВЛЕНИЕ ИЗ РЕЛИЗА
@@ -18,7 +18,7 @@ GitHub release 1.4:
 
 Для обновления уже установленного ModPack скачайте файл:
 
-  ModPack-Plugins-1.4.zip
+  ModPack-Plugins-1.5.zip
 
 Из архива нужно взять все файлы и скопировать их с заменой в папку:
 
@@ -30,9 +30,10 @@ GitHub release 1.4:
   • `Reloader.dll` в этот архив не входит, потому что он нужен только для
     полной установки или отдельного обновления загрузчика.
 
-Для версии 1.4 один раз обновите загрузчик: скачайте `Reloader-2.0.zip`,
-закройте GTA V и замените `GTA V\scripts\Reloader.dll`. После этого обычные
-обновления снова требуют только содержимое архива плагинов.
+Если у вас загрузчик старше версии 2.0, установите его один раз из
+`Reloader-2.1.zip`: закройте GTA V и замените `GTA V\scripts\Reloader.dll`.
+Загрузчик 2.1 дополнительно записывает подробные ошибки плагинов, но для
+самого CrashLogger достаточно уже установленной версии 2.0.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ПОЛНАЯ УСТАНОВКА
@@ -121,6 +122,13 @@ GitHub release 1.4:
   • scripts\ReloaderPlugins\compile_errors.txt
     Ошибки компиляции плагинов.
 
+  • scripts\ReloaderPlugins\CrashLogger\CrashReports\<дата-время>\CrashReport.txt
+    Общий отчёт о краше или длительном зависании GTA: события Windows,
+    код завершения, установленные моды и последние строки полезных логов.
+
+  • scripts\ReloaderPlugins\CrashLogger\CrashMonitor.log
+    История работы фонового регистратора. Данные никуда не отправляются.
+
   • scripts\ReloaderPlugins\Paths\
     Сохранённые пролёты Modded Camera.
 
@@ -141,6 +149,7 @@ GitHub release 1.4:
 Структура:
   • Source Code\Reloader\ — проект загрузчика (.NET Framework 4.8)
   • Source Code\Plugins\  — исходники плагинов (*.cs)
+  • Source Code\CrashWatcher\ — внешний регистратор завершения GTA
   • Source Code\build.bat — сборка Reloader.dll
 
 Сборка:

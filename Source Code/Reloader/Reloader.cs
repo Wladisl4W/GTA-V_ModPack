@@ -77,7 +77,7 @@ public class Reloader : Script
         }
         if (reload) ReloadPlugins();
 
-        foreach (var plugin in _plugins)
+        foreach (var plugin in _plugins.ToArray())
         {
             try
             {
@@ -92,11 +92,11 @@ public class Reloader : Script
             catch (TargetInvocationException tie)
             {
                 GTA.UI.Notification.PostTicker("~r~Plugin error: " + tie.InnerException?.Message, false, false);
-                Log("Tick error: " + tie.InnerException);
+                Log("Tick error in " + plugin.GetType().FullName + ": " + (tie.InnerException ?? tie));
             }
             catch (Exception ex)
             {
-                Log("Tick unexpected: " + ex);
+                Log("Tick unexpected in " + plugin.GetType().FullName + ": " + ex);
             }
         }
     }
@@ -122,7 +122,14 @@ public class Reloader : Script
                 var method = plugin.GetType().GetMethod("OnKeyDown");
                 method?.Invoke(plugin, new object[] { e.KeyCode });
             }
-            catch { }
+            catch (TargetInvocationException tie)
+            {
+                Log("Key error in " + plugin.GetType().FullName + " for " + e.KeyCode + ": " + (tie.InnerException ?? tie));
+            }
+            catch (Exception ex)
+            {
+                Log("Key unexpected in " + plugin.GetType().FullName + " for " + e.KeyCode + ": " + ex);
+            }
         }
     }
 
@@ -138,7 +145,14 @@ public class Reloader : Script
         foreach (var plugin in _plugins)
         {
             try { plugin.GetType().GetMethod("OnAbort")?.Invoke(plugin, null); }
-            catch { }
+            catch (TargetInvocationException tie)
+            {
+                Log("Abort error in " + plugin.GetType().FullName + ": " + (tie.InnerException ?? tie));
+            }
+            catch (Exception ex)
+            {
+                Log("Abort unexpected in " + plugin.GetType().FullName + ": " + ex);
+            }
         }
         _plugins.Clear();
     }
@@ -239,7 +253,8 @@ public class Reloader : Script
         catch (Exception ex)
         {
             Log("  Failed to load " + t.Name + ": " + (ex.InnerException ?? ex));
-            try { if (instance != null) t.GetMethod("OnAbort")?.Invoke(instance, null); } catch { }
+            try { if (instance != null) t.GetMethod("OnAbort")?.Invoke(instance, null); }
+            catch (Exception cleanup) { Log("  Cleanup failed for " + t.FullName + ": " + (cleanup.InnerException ?? cleanup)); }
             return false;
         }
     }

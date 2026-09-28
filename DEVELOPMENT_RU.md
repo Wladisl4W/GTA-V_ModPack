@@ -125,6 +125,44 @@ OnTick и игровые native-вызовы остаются в игровом 
 
 ## Диагностика и релизы
 
+### Общий регистратор сбоев GTA V
+
+`CrashLoggerPlugin.cs` автоматически запускает тихий `CrashWatcher.exe`. Наблюдатель
+работает отдельно от процесса игры, поэтому после падения GTA может прочитать журнал
+Windows, логи ScriptHookV/ScriptHookVDotNet, ASI-модов и Reloader. Никакие данные не
+отправляются в интернет.
+
+При обнаруженной проблеме создаётся файл:
+
+```text
+scripts\ReloaderPlugins\CrashLogger\CrashReports\<дата-время>\CrashReport.txt
+```
+
+В начале отчёта указаны категория, код завершения и подтверждённые события Windows.
+`Application Error`, сбойный модуль и код исключения являются фактами из Windows;
+последние строки модовых логов показывают контекст и сами по себе не доказывают,
+какой мод виноват. Если Windows не оставила свидетельств, причина честно отмечается
+как неизвестная. Обычное закрытие с кодом 0 отчёт не создаёт. Зависание фиксируется,
+если окно не отвечает не менее 60 секунд. Хранятся последние 20 отчётов.
+
+Текущая история watcher находится в `scripts\ReloaderPlugins\CrashLogger\CrashMonitor.log`.
+В этой же папке хранятся временные файлы сессии и рабочая копия watcher.
+Для передачи ошибки достаточно всей папки конкретного отчёта. Минидампы необязательны
+и по умолчанию выключены:
+
+```powershell
+.\modpack.cmd CrashDumps On
+.\modpack.cmd CrashDumps Off
+```
+
+Первый вариант включает Windows Error Reporting только для `GTA5.exe`, сохраняет
+до трёх mini dump в `scripts\ReloaderPlugins\CrashLogger\CrashDumps`; второй отключает будущие
+дампы, не удаляя уже созданные. Изолированная проверка watcher:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\test-crash-watcher.ps1
+```
+
 ### Режим разработчика
 
 `Ctrl+F10` открывает меню разработчика. «Режим разработчика» включает подробный
@@ -190,10 +228,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\test-modpack.ps1
 - `Reloader.log`: компиляция, запуск, ошибки жизненного цикла и отпечаток.
 - `compile_errors.txt`: ошибки и предупреждения компилятора с файлами и строками.
 - `PluginErrors.log`: общий ограниченный по частоте лог некоторых плагинов.
+- `CrashMonitor.log`: запуск watcher, зависания и создание crash-report.
+- `CrashReports`: последние 20 текстовых отчётов о проблемных завершениях GTA.
 - Остальные плагины могут вести собственные логи в ReloaderPlugins.
 
 Обычный `dotnet build Source Code/Reloader/Reloader.csproj` проверяет только
-загрузчик. Для модов обязательно выполняйте Check. `Source Code/build.bat`
+загрузчик. `modpack.cmd Check` также собирает CrashWatcher и проверяет плагины
+живым CodeDOM-компилятором. `Source Code/build.bat`
 сначала запускает Check, затем собирает загрузчик.
 
 Перед релизом проверьте синхронность исходников и Ready To Use, игровые сценарии

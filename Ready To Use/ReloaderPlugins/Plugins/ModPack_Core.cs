@@ -6,6 +6,29 @@ using System.Text;
 
 namespace ModPack
 {
+    internal static class CrashDiagnostics
+    {
+        private static readonly object Sync = new object();
+        private static string _path;
+        public static void Configure(string path) { lock (Sync) _path = path; }
+        public static void Event(string source, string message)
+        {
+            string path;
+            lock (Sync) path = _path;
+            if (string.IsNullOrEmpty(path)) return;
+            try
+            {
+                string line = DateTime.UtcNow.ToString("O") + " EVENT " + source + ": " + message;
+                lock (Sync) File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
+            }
+            catch { }
+        }
+        public static void Exception(string source, string message, Exception ex)
+        {
+            Event(source, "MANAGED_EXCEPTION " + message + Environment.NewLine + (ex == null ? "No exception object." : ex.ToString()));
+        }
+    }
+
     internal sealed class ControlGate
     {
         private object _owner;
@@ -152,6 +175,10 @@ namespace ModPack
         private static readonly Dictionary<string, string> States = new Dictionary<string, string>();
         public static bool Enabled { get; set; }
         public static bool PanelVisible { get; set; }
+        public static string Snapshot
+        {
+            get { return string.Join("; ", States.Select(p => p.Key + "=" + p.Value).ToArray()); }
+        }
         public static void BeginSession()
         {
             Enabled = false;
@@ -170,6 +197,7 @@ namespace ModPack
         }
         public static void Event(string source, string message)
         {
+            CrashDiagnostics.Event(source, message);
             if (!Enabled) return;
             string line = source + ": " + message;
             if (!Buffer.Add(line, Now, line)) return;

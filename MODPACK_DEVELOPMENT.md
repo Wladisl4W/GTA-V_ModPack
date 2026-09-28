@@ -8,6 +8,7 @@ Russian development guide and command reference: [DEVELOPMENT_RU.md](DEVELOPMENT
 ## Project layout
 
 - `Source Code/Reloader` contains the .NET Framework 4.8 loader project.
+- `Source Code/CrashWatcher` contains the out-of-process GTA crash monitor.
 - `Source Code/Plugins` contains plugin source files.
 - `Ready To Use/Reloader.dll` is the packaged loader for a full install.
 - `Ready To Use/ReloaderPlugins/Plugins` is the packaged plugin folder.
@@ -24,6 +25,7 @@ When changing a plugin:
 
 1. Edit the file in `Source Code/Plugins`.
 2. Run `.\modpack.cmd Check` to validate all plugin sources with the live CodeDOM compiler.
+   This command also builds `CrashWatcher.exe` for .NET Framework 4.8.
 3. Run `.\modpack.cmd` to validate, copy changed sources, verify hashes and confirm
    the exact source fingerprint in the fresh game log. Configure the game path
    in git-ignored `modpack.local.json`; see `modpack.example.json`.
@@ -72,13 +74,13 @@ GTA V\scripts\ReloaderPlugins\Plugins
 
 ## Current release state
 
-- Latest release target: `v1.4`
-- Release title: `ModPack 1.4`
-- Assets: `ModPack-Plugins-1.4.zip` and `Reloader-2.0.zip`
-- `v1.4` adds safe hot reload, one-command validation/deployment, developer
-  diagnostics, shared player-control ownership and atomic settings/path saves.
-- The loader archive is required once for v1.4. Routine plugin updates remain
-  source-only and must not replace `Reloader.dll`.
+- Latest release target: `v1.5`
+- Release title: `ModPack 1.5`
+- Assets: `ModPack-Plugins-1.5.zip` and `Reloader-2.1.zip`
+- `v1.5` adds GTA crash reports with a separate watcher process. Generated
+  crash data is stored under `scripts/ReloaderPlugins/CrashLogger`.
+- The loader 2.1 archive improves plugin exception logging. Existing loader
+  2.0 users can install the plugin update without replacing `Reloader.dll`.
 
 ## Modded Camera notes
 
