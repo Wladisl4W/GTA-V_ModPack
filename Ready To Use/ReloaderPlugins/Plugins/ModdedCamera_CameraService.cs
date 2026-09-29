@@ -16,6 +16,7 @@ namespace ModdedCamera.Services
         private readonly ControlSession _control = new ControlSession();
         private bool _splineExitPending;
         public bool HasControl { get { return _control.Held; } }
+        public bool IsPlaybackRunning { get { return _splineCamWasUsed; } }
 
         public SplineCamera SplineCamera { get; private set; }
         public PositionSelector PositionSelector { get; private set; }
@@ -363,6 +364,7 @@ namespace ModdedCamera.Services
 
         public void StopPlayback()
         {
+            if (SplineCamera != null) SplineCamera.CancelFovPreview();
             if (!_control.Held) return;
             try
             {
@@ -433,6 +435,14 @@ namespace ModdedCamera.Services
             {
                 Logger.Error(ex, "CameraService: Error in RestartPlaybackIfActive");
             }
+        }
+
+        public void PreviewNodeFov(int index)
+        {
+            if (SplineCamera == null || index < 0 || index >= SplineCamera.Nodes.Count) return;
+            if (IsSelectorActive) return;
+            if (!IsSplineCamActive && !StartPlayback()) return;
+            SplineCamera.PreviewNodeFov(index);
         }
 
         private void SetupPlayerForFollow()
@@ -647,6 +657,7 @@ namespace ModdedCamera.Services
             {
                 if (SplineCamera != null)
                 {
+                    SplineCamera.CancelFovPreview();
                     SplineCamera.AbortPendingFade();
                     if (SplineCamera.MainCamera != null && SplineCamera.MainCamera.Exists())
                         SplineCamera.MainCamera.IsActive = false;

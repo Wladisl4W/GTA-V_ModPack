@@ -28,28 +28,22 @@ $source = Join-Path $repo 'Source Code\Plugins'
 $watcherProject = Join-Path $repo 'Source Code\CrashWatcher\CrashWatcher.csproj'
 $watcherOutput = Join-Path $repo 'Source Code\CrashWatcher\bin\Release\net48\CrashWatcher.exe'
 $watcherConfig = $watcherOutput + '.config'
+$dumpInstaller = Join-Path $repo 'Source Code\CrashWatcher\ConfigureCrashDumps.ps1'
+$dumpInstallerCommand = Join-Path $repo 'Source Code\CrashWatcher\InstallCrashDumps.cmd'
 $shvdn = Join-Path $settings.GameDirectory 'ScriptHookVDotNet3.dll'
 $lemon = Join-Path $scripts 'LemonUI.SHVDN3.dll'
 if ($Mode -eq 'CrashDumps') {
     if (!$State) { throw 'Use: modpack.cmd CrashDumps On|Off' }
-    $key = 'HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps\GTA5.exe'
-    if ($State -eq 'On') {
-        $dumpFolder = Join-Path $scripts 'ReloaderPlugins\CrashLogger\CrashDumps'
-        [void](New-Item -ItemType Directory -Path $dumpFolder -Force)
-        [void](New-Item -Path $key -Force)
-        New-ItemProperty -Path $key -Name DumpFolder -Value $dumpFolder -PropertyType ExpandString -Force | Out-Null
-        New-ItemProperty -Path $key -Name DumpType -Value 1 -PropertyType DWord -Force | Out-Null
-        New-ItemProperty -Path $key -Name DumpCount -Value 3 -PropertyType DWord -Force | Out-Null
-        Write-Host "GTA5 minidumps enabled: $dumpFolder"
-    } else {
-        if (Test-Path -LiteralPath $key) { Remove-Item -LiteralPath $key -Recurse -Force }
-        Write-Host 'GTA5 minidumps disabled. Existing dump files were retained.'
-    }
+    & $dumpInstaller -State $State -ScriptsDirectory $scripts
+    if (!$?) { throw 'Crash dump setup failed.' }
     return
 }
-foreach ($path in @($source,$live,$ready,$shvdn,$lemon,$watcherProject)) {
+foreach ($path in @($source,$live,$ready,$shvdn,$lemon,$watcherProject,$dumpInstaller,$dumpInstallerCommand)) {
     if (!(Test-Path -LiteralPath $path)) { throw "Required path missing: $path" }
 }
+$parseErrors = $null
+[void][Management.Automation.Language.Parser]::ParseFile($dumpInstaller, [ref]$null, [ref]$parseErrors)
+if ($parseErrors.Count) { throw "Crash dump installer syntax error: $($parseErrors[0])" }
 dotnet build $watcherProject -c Release --nologo
 if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $watcherOutput) -or !(Test-Path -LiteralPath $watcherConfig)) {
     throw 'CrashWatcher build failed. No files copied.'
@@ -89,7 +83,9 @@ foreach ($file in $sources) {
 }
 $watcherArtifacts = @(
     [pscustomobject]@{Source=$watcherOutput;Name='CrashWatcher.exe'},
-    [pscustomobject]@{Source=$watcherConfig;Name='CrashWatcher.exe.config'}
+    [pscustomobject]@{Source=$watcherConfig;Name='CrashWatcher.exe.config'},
+    [pscustomobject]@{Source=$dumpInstaller;Name='ConfigureCrashDumps.ps1'},
+    [pscustomobject]@{Source=$dumpInstallerCommand;Name='InstallCrashDumps.cmd'}
 )
 foreach ($artifact in $watcherArtifacts) {
     $artifactHash = Get-Sha256 $artifact.Source

@@ -17,6 +17,7 @@ namespace ModdedCamera.Services
 
         private readonly CameraService _cameraService;
         private string _pendingPathName = "";
+        private string _currentPathName = "";
         private long _nameInputTimer = 0;
         private const int NAME_INPUT_TIMEOUT = 60000;
 
@@ -24,6 +25,7 @@ namespace ModdedCamera.Services
         public event Action<string> OnPathLoaded;
         public event Action<string> OnPathDeleted;
         public event Action<string> OnError;
+        public event Action<string> OnOverwriteRequested;
 
         public SaveService(CameraService cameraService)
         {
@@ -49,7 +51,7 @@ namespace ModdedCamera.Services
 
             State = SaveState.Typing;
             _nameInputTimer = Utils.NowMs();
-            Function.Call(Hash.DISPLAY_ONSCREEN_KEYBOARD, 1, "FMMC_MPM_NA", "", "", "", "", "", 64);
+            Function.Call(Hash.DISPLAY_ONSCREEN_KEYBOARD, 1, "FMMC_MPM_NA", "", _currentPathName, "", "", "", 64);
             Logger.Info("SaveService: Save initiated");
             return true;
         }
@@ -61,8 +63,6 @@ namespace ModdedCamera.Services
             {
                 if (State == SaveState.Typing)
                     UpdateTypingState();
-                else if (State == SaveState.ConfirmOverwrite)
-                    UpdateConfirmOverwriteState();
             }
             catch (Exception ex)
             {
@@ -93,6 +93,7 @@ namespace ModdedCamera.Services
             }
 
             string text = Function.Call<string>(Hash.GET_ONSCREEN_KEYBOARD_RESULT);
+            if (text != null) text = text.Trim();
             if (string.IsNullOrEmpty(text))
             {
                 State = SaveState.None;
@@ -103,7 +104,7 @@ namespace ModdedCamera.Services
             {
                 _pendingPathName = text;
                 State = SaveState.ConfirmOverwrite;
-                GTA.UI.Notification.PostTicker("~r~Имя уже существует! ~y~Пробел~w~=перезаписать, ~b~B~w~=переименовать", false, false);
+                if (OnOverwriteRequested != null) OnOverwriteRequested(text);
                 return;
             }
 
@@ -111,26 +112,20 @@ namespace ModdedCamera.Services
             State = SaveState.None;
         }
 
-        private void UpdateConfirmOverwriteState()
+        public void ConfirmOverwrite()
         {
-            GTA.UI.Notification.PostTicker("~r~'" + _pendingPathName + "' уже существует! ~y~Пробел~w~=перезаписать, ~r~B~w~=переименовать", false, false);
-            if (Game.IsControlJustPressed((GTA.Control)223))
-            {
-                DoSave(_pendingPathName);
-                State = SaveState.None;
-            }
-            else if (Game.IsControlJustPressed(GTA.Control.FrontendAccept))
-            {
-                State = SaveState.Typing;
-                _nameInputTimer = Utils.NowMs();
-                Function.Call(Hash.DISPLAY_ONSCREEN_KEYBOARD, 1, "FMMC_MPM_NA", "", _pendingPathName, "", "", "", 64);
-            }
-            else if (Game.IsControlJustPressed(GTA.Control.FrontendCancel) || Game.IsControlJustPressed(GTA.Control.FrontendPause))
-            {
-                Logger.Info("SaveService: Overwrite cancelled");
-                State = SaveState.None;
-                _pendingPathName = "";
-            }
+            if (State != SaveState.ConfirmOverwrite) return;
+            string name = _pendingPathName;
+            State = SaveState.None;
+            DoSave(name);
+        }
+
+        public void ChooseDifferentName()
+        {
+            if (State != SaveState.ConfirmOverwrite) return;
+            State = SaveState.Typing;
+            _nameInputTimer = Utils.NowMs();
+            Function.Call(Hash.DISPLAY_ONSCREEN_KEYBOARD, 1, "FMMC_MPM_NA", "", _pendingPathName, "", "", "", 64);
         }
 
         private void DoSave(string name)
@@ -172,6 +167,7 @@ namespace ModdedCamera.Services
                 {
                     GTA.UI.Notification.PostTicker("~g~Сохранено: " + name, false, false);
                     _pendingPathName = "";
+                    _currentPathName = name;
                     Logger.Info("SaveService: Path saved: " + result);
                     if (OnPathSaved != null) OnPathSaved(name);
                 }
@@ -207,6 +203,7 @@ namespace ModdedCamera.Services
                 {
                     GTA.UI.Notification.PostTicker("~g~Загружено: " + pathName, false, false);
                     if (OnPathLoaded != null) OnPathLoaded(pathName);
+                    _currentPathName = pathName;
                     Logger.Info("SaveService: Path loaded: " + pathName);
                 }
                 else
@@ -287,6 +284,11 @@ namespace ModdedCamera.Services
         {
             State = SaveState.None;
             _pendingPathName = "";
+        }
+
+        public void ForgetCurrentPath()
+        {
+            _currentPathName = "";
         }
     }
 

@@ -76,9 +76,10 @@ namespace RainbowPaintMod
         private NativeCheckboxItem _smokeMatchesPrimaryCheckbox;
         private NativeItem _customPlateItem;
         private NativeMenu _randomColorsMenu;
+        private NativeMenu _primaryRandomColorsMenu;
+        private NativeMenu _secondaryRandomColorsMenu;
         private NativeMenu _exceptionsMenu;
         private NativeItem _exceptionsDisplayItem;
-        private readonly List<NativeCheckboxItem> _randomColorItems = new List<NativeCheckboxItem>();
         private readonly List<ModelExclusion> _excludedModels = new List<ModelExclusion>();
         private readonly string _exclusionsPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
@@ -96,13 +97,16 @@ namespace RainbowPaintMod
         private bool _menuEnabled;
         private readonly Random _rng = new Random();
         private bool _keyboardPlateActive;
+        private bool _closingMenus;
         private string _customPlateText = "";
 
-        // Типы краски: название + стоковый индекс нужного типа (0-159)
+        // Штатные типы покрытия GTA V.
         private static readonly string[] PaintTypeNames =
-            { "Металлик", "Мат", "Метал", "Хром" };
+            { "Металлик", "Мат", "Метал", "Хром", "Классика" };
+        private static readonly int[] PaintTypeIds =
+            { 0, 3, 4, 5, 1 };
         private static readonly int[] PaintTypeStockColors =
-            { 0, 12, 117, 120 };
+            { 0, 12, 117, 120, 0 };
 
         private Vehicle _currentVehicle;
         private Blip _highlightBlip;
@@ -223,7 +227,7 @@ namespace RainbowPaintMod
 
             _paintTypeList = new NativeListItem<string>(
                 "Тип краски",
-                "Стандарт / Металлик / Мат / Метал / Хром",
+                "Покрытие для следующей покраски",
                 PaintTypeNames);
             _paintTypeList.SelectedIndex = 0;
             _menu.Add(_paintTypeList);
@@ -265,24 +269,36 @@ namespace RainbowPaintMod
             _customPlateItem.Activated += (s, e) => StartPlateInput();
             _menu.Add(_customPlateItem);
 
-            _randomColorsMenu = new NativeMenu("Цвета рандомайзера", "Галочка = цвет участвует в рандоме");
+            _randomColorsMenu = new NativeMenu("Цвета рандомайзера", "Палитры");
             _pool.Add(_randomColorsMenu);
-            BuildRandomColorsMenu();
+            _primaryRandomColorsMenu = new NativeMenu("Основной цвет", "Рандомайзер");
+            _secondaryRandomColorsMenu = new NativeMenu("Вторичный цвет", "Рандомайзер");
+            _pool.Add(_primaryRandomColorsMenu);
+            _pool.Add(_secondaryRandomColorsMenu);
+            BuildRandomColorsMenu(_primaryRandomColorsMenu, true);
+            BuildRandomColorsMenu(_secondaryRandomColorsMenu, false);
+            NativeItem primaryPalette = new NativeItem("Основной цвет", "Цвета для основной части автомобиля");
+            primaryPalette.Activated += (s, e) => ShowMenu(_randomColorsMenu, _primaryRandomColorsMenu);
+            _randomColorsMenu.Add(primaryPalette);
+            NativeItem secondaryPalette = new NativeItem("Вторичный цвет", "Цвета для вторичной части автомобиля");
+            secondaryPalette.Activated += (s, e) => ShowMenu(_randomColorsMenu, _secondaryRandomColorsMenu);
+            _randomColorsMenu.Add(secondaryPalette);
+            _primaryRandomColorsMenu.Closed += (s, e) => { if (!_closingMenus) _randomColorsMenu.Visible = true; };
+            _secondaryRandomColorsMenu.Closed += (s, e) => { if (!_closingMenus) _randomColorsMenu.Visible = true; };
             _randomColorsMenu.Closed += (s, e) =>
             {
-                _menu.Visible = true;
+                if (!_closingMenus) _menu.Visible = true;
             };
 
             var randomColorsItem = new NativeItem("Цвета рандомайзера", "Выбрать, какие цвета участвуют в рандоме");
             randomColorsItem.Activated += (s, e) =>
             {
-                _menu.Visible = false;
-                _randomColorsMenu.Visible = true;
+                ShowMenu(_menu, _randomColorsMenu);
             };
             _menu.Add(randomColorsItem);
 
             // Подменю исключений: модели, которые рандомайзер не красит
-            _exceptionsMenu = new NativeMenu("Исключения", "Эти модели рандомайзер не красит");
+            _exceptionsMenu = new NativeMenu("Исключения", "Модели машин");
             _pool.Add(_exceptionsMenu);
 
             var addModelItem = new NativeItem(
@@ -308,14 +324,13 @@ namespace RainbowPaintMod
             // Возврат в главное меню по Back
             _exceptionsMenu.Closed += (s, e) =>
             {
-                _menu.Visible = true;
+                if (!_closingMenus) _menu.Visible = true;
             };
 
             var exceptionsItem = new NativeItem("Настроить исключения рандомайзера");
             exceptionsItem.Activated += (s, e) =>
             {
-                _menu.Visible = false;
-                _exceptionsMenu.Visible = true;
+                ShowMenu(_menu, _exceptionsMenu);
             };
             _menu.Add(exceptionsItem);
 
@@ -398,23 +413,19 @@ namespace RainbowPaintMod
             // Меню открыто: навёлся на машину — переключаемся на неё, иначе — закрываем
             bool menuOpen = _menu.Visible ||
                 (_exceptionsMenu != null && _exceptionsMenu.Visible) ||
-                (_randomColorsMenu != null && _randomColorsMenu.Visible);
+                (_randomColorsMenu != null && _randomColorsMenu.Visible) ||
+                (_primaryRandomColorsMenu != null && _primaryRandomColorsMenu.Visible) ||
+                (_secondaryRandomColorsMenu != null && _secondaryRandomColorsMenu.Visible);
             if (menuOpen)
             {
                 if (v == null || !v.Exists())
                 {
-                    _menu.Visible = false;
-                    if (_exceptionsMenu != null)
-                        _exceptionsMenu.Visible = false;
-                    if (_randomColorsMenu != null)
-                        _randomColorsMenu.Visible = false;
+                    CloseMenus();
                     return;
                 }
+                CloseMenus();
                 SelectVehicle(v);
-                if (_exceptionsMenu != null)
-                    _exceptionsMenu.Visible = false;
-                if (_randomColorsMenu != null)
-                    _randomColorsMenu.Visible = false;
+                _menu.Visible = true;
                 GTA.UI.Screen.ShowSubtitle("~g~Машина выделена! Выбирай цвет в меню.", 4000);
                 return;
             }
@@ -440,6 +451,37 @@ namespace RainbowPaintMod
             SelectVehicle(v);
             _menu.Visible = true;
             GTA.UI.Screen.ShowSubtitle("~g~Машина выделена! Выбирай цвет в меню.", 4000);
+        }
+
+        private void CloseMenus()
+        {
+            _closingMenus = true;
+            try
+            {
+                if (_primaryRandomColorsMenu != null) _primaryRandomColorsMenu.Visible = false;
+                if (_secondaryRandomColorsMenu != null) _secondaryRandomColorsMenu.Visible = false;
+                if (_randomColorsMenu != null) _randomColorsMenu.Visible = false;
+                if (_exceptionsMenu != null) _exceptionsMenu.Visible = false;
+                if (_menu != null) _menu.Visible = false;
+            }
+            finally
+            {
+                _closingMenus = false;
+            }
+        }
+
+        private void ShowMenu(NativeMenu current, NativeMenu next)
+        {
+            _closingMenus = true;
+            try
+            {
+                current.Visible = false;
+            }
+            finally
+            {
+                _closingMenus = false;
+            }
+            next.Visible = true;
         }
 
         private void SelectVehicle(Vehicle v)
@@ -468,55 +510,58 @@ namespace RainbowPaintMod
             _resetItem.Enabled = enabled;
         }
 
-        private void BuildRandomColorsMenu()
+        private void BuildRandomColorsMenu(NativeMenu menu, bool primary)
         {
-            _randomColorItems.Clear();
-
             for (int i = 0; i < _rainbowColors.Count; i++)
             {
                 int colorIndex = i;
                 RainbowColor color = _rainbowColors[i];
-                bool enabled = IsRandomColorEnabled(color.Name);
+                bool enabled = IsRandomColorEnabled(color.Name, primary);
                 var item = new NativeCheckboxItem(color.Name, "Участвует в рандомной покраске", enabled);
                 item.CheckboxChanged += (s, e) =>
                 {
-                    SetRandomColorEnabled(_rainbowColors[colorIndex].Name, item.Checked);
+                    SetRandomColorEnabled(_rainbowColors[colorIndex].Name, item.Checked, primary);
                     SaveSettings();
                 };
-                _randomColorItems.Add(item);
-                _randomColorsMenu.Add(item);
+                menu.Add(item);
             }
         }
 
-        private bool IsRandomColorEnabled(string name)
+        private bool IsRandomColorEnabled(string name, bool primary)
         {
-            if (_settings.EnabledRandomColors == null)
+            List<string> colors = primary ? _settings.EnabledRandomColors : _settings.EnabledSecondaryRandomColors;
+            if (colors == null)
                 return true;
 
-            for (int i = 0; i < _settings.EnabledRandomColors.Count; i++)
+            for (int i = 0; i < colors.Count; i++)
             {
-                if (string.Equals(_settings.EnabledRandomColors[i], name, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(colors[i], name, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
             return false;
         }
 
-        private void SetRandomColorEnabled(string name, bool enabled)
+        private void SetRandomColorEnabled(string name, bool enabled, bool primary)
         {
-            if (_settings.EnabledRandomColors == null)
-                _settings.EnabledRandomColors = new List<string>();
-
-            for (int i = _settings.EnabledRandomColors.Count - 1; i >= 0; i--)
+            List<string> colors = primary ? _settings.EnabledRandomColors : _settings.EnabledSecondaryRandomColors;
+            if (colors == null)
             {
-                if (string.Equals(_settings.EnabledRandomColors[i], name, StringComparison.OrdinalIgnoreCase))
-                    _settings.EnabledRandomColors.RemoveAt(i);
+                colors = new List<string>();
+                if (primary) _settings.EnabledRandomColors = colors;
+                else _settings.EnabledSecondaryRandomColors = colors;
+            }
+
+            for (int i = colors.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(colors[i], name, StringComparison.OrdinalIgnoreCase))
+                    colors.RemoveAt(i);
             }
 
             if (enabled)
-                _settings.EnabledRandomColors.Add(name);
+                colors.Add(name);
         }
 
-        private List<int> GetEnabledRandomColorIndices(bool includeRainbow)
+        private List<int> GetEnabledRandomColorIndices(bool includeRainbow, bool primary)
         {
             List<int> result = new List<int>();
             for (int i = 0; i < _rainbowColors.Count; i++)
@@ -524,7 +569,7 @@ namespace RainbowPaintMod
                 if (!includeRainbow && IsRainbowIndex(i))
                     continue;
 
-                if (IsRandomColorEnabled(_rainbowColors[i].Name))
+                if (IsRandomColorEnabled(_rainbowColors[i].Name, primary))
                     result.Add(i);
             }
             return result;
@@ -654,30 +699,25 @@ namespace RainbowPaintMod
                 return 0;
             });
 
-            List<int> enabledSolidColors = GetEnabledRandomColorIndices(false);
-            bool rainbowAllowed = IsRandomColorEnabled(_rainbowColors[RainbowIndex].Name);
-            if (enabledSolidColors.Count == 0 && !rainbowAllowed)
+            bool bothSame = _bothSameCheckbox.Checked;
+            List<int> primaryColors = GetEnabledRandomColorIndices(false, true);
+            List<int> secondaryColors = bothSame ? primaryColors : GetEnabledRandomColorIndices(false, false);
+            bool primaryRainbow = IsRandomColorEnabled(_rainbowColors[RainbowIndex].Name, true);
+            bool secondaryRainbow = bothSame ? primaryRainbow : IsRandomColorEnabled(_rainbowColors[RainbowIndex].Name, false);
+            if (primaryColors.Count == 0 && !primaryRainbow)
             {
-                GTA.UI.Screen.ShowSubtitle("~y~Включи хотя бы один цвет в меню цветов рандомайзера.", 4000);
+                GTA.UI.Screen.ShowSubtitle("~y~Выбери основной цвет для рандома.", 4000);
+                return;
+            }
+            if (secondaryColors.Count == 0 && !secondaryRainbow)
+            {
+                GTA.UI.Screen.ShowSubtitle("~y~Выбери вторичный цвет для рандома.", 4000);
                 return;
             }
 
-            // Радужные машины: один бросок — 80% на первую (случайную),
-            // и если она выпала — 20% на вторую (другую случайную). Максимум 2.
-            int rainbowFirst = -1;
-            int rainbowSecond = -1;
-            if (rainbowAllowed && _rng.NextDouble() < 0.8)
-            {
-                rainbowFirst = _rng.Next(0, targets.Count);
-                if (targets.Count > 1 && _rng.NextDouble() < 0.2)
-                {
-                    rainbowSecond = _rng.Next(0, targets.Count - 1);
-                    if (rainbowSecond >= rainbowFirst)
-                        rainbowSecond++;
-                }
-            }
-
-            bool bothSame = _bothSameCheckbox.Checked;
+            HashSet<int> rainbowPrimaryTargets = PickRainbowTargets(targets.Count, primaryRainbow, primaryColors.Count == 0);
+            HashSet<int> rainbowSecondaryTargets = bothSame ? rainbowPrimaryTargets :
+                PickRainbowTargets(targets.Count, secondaryRainbow, secondaryColors.Count == 0);
             List<PaintAssignment> assignments = new List<PaintAssignment>();
 
             int count = 0;
@@ -691,46 +731,23 @@ namespace RainbowPaintMod
                     if (slot != null)
                         _rainbowSlots.Remove(slot);
 
-                    ApplyPaintTypeToVehicle(veh);
+                    ApplyPaintTypeToVehicle(veh, true, true);
+                    int idx = rainbowPrimaryTargets.Contains(i) ? RainbowIndex :
+                        PickColorForVehicle(veh, assignments, primaryColors, -1, true);
+                    int idx2 = bothSame ? idx : (rainbowSecondaryTargets.Contains(i) ? RainbowIndex :
+                        PickColorForVehicle(veh, assignments, secondaryColors, idx, false));
 
-                    if (i == rainbowFirst || i == rainbowSecond)
+                    Color primary = ApplyColorToChannel(veh, idx, true);
+                    ApplyColorToChannel(veh, idx2, false);
+                    if (idx == RainbowIndex || idx2 == RainbowIndex)
                     {
-                        rainbowCount++;
                         slot = GetOrCreateSlot(veh);
-                        slot.Primary = true;
-                        slot.Secondary = true;
-
-                        Color hue = ColorFromHSV(_rainbowHue);
-                        veh.Mods.CustomPrimaryColor = hue;
-                        veh.Mods.CustomSecondaryColor = hue;
-                        ApplyTyreSmokeColor(veh, hue);
-                        veh.DirtLevel = 0f;
-                        assignments.Add(new PaintAssignment(veh.Position, RainbowIndex, RainbowIndex));
-                        count++;
-                        continue;
+                        slot.Primary = idx == RainbowIndex;
+                        slot.Secondary = idx2 == RainbowIndex;
+                        rainbowCount++;
                     }
 
-                    if (enabledSolidColors.Count == 0)
-                        continue;
-
-                    int idx = PickColorForVehicle(veh, assignments, enabledSolidColors, -1, true);
-                    var color = _rainbowColors[idx];
-                    Color c = color.Paint;
-                    int idx2 = idx;
-
-                    if (bothSame)
-                    {
-                        veh.Mods.CustomPrimaryColor = c;
-                        veh.Mods.CustomSecondaryColor = c;
-                    }
-                    else
-                    {
-                        idx2 = PickColorForVehicle(veh, assignments, enabledSolidColors, idx, false);
-                        veh.Mods.CustomPrimaryColor = c;
-                        veh.Mods.CustomSecondaryColor = _rainbowColors[idx2].Paint;
-                    }
-
-                    ApplyTyreSmokeColor(veh, c);
+                    ApplyTyreSmokeColor(veh, primary);
                     veh.DirtLevel = 0f;
                     assignments.Add(new PaintAssignment(veh.Position, idx, idx2));
                     count++;
@@ -742,6 +759,26 @@ namespace RainbowPaintMod
             }
 
             GTA.UI.Screen.ShowSubtitle("~g~Покрашено машин: " + count + " (~p~радужных: " + rainbowCount + "~g~)~n~~w~Пропущено (исключения): " + skippedCount + ".", 5000);
+        }
+
+        private HashSet<int> PickRainbowTargets(int count, bool allowed, bool onlyRainbow)
+        {
+            HashSet<int> result = new HashSet<int>();
+            if (!allowed || count == 0) return result;
+            if (onlyRainbow)
+            {
+                for (int i = 0; i < count; i++) result.Add(i);
+                return result;
+            }
+            if (_rng.NextDouble() >= 0.8) return result;
+            int first = _rng.Next(0, count);
+            result.Add(first);
+            if (count > 1 && _rng.NextDouble() < 0.2)
+            {
+                int second = _rng.Next(0, count - 1);
+                result.Add(second >= first ? second + 1 : second);
+            }
+            return result;
         }
 
         private int PickColorForVehicle(Vehicle vehicle, List<PaintAssignment> assignments, List<int> allowedColors, int avoidIndex, bool primary)
@@ -903,12 +940,7 @@ namespace RainbowPaintMod
 
                 _rainbowSlots.Clear();
 
-                if (_menu != null)
-                    _menu.Visible = false;
-                if (_exceptionsMenu != null)
-                    _exceptionsMenu.Visible = false;
-                if (_randomColorsMenu != null)
-                    _randomColorsMenu.Visible = false;
+                CloseMenus();
             }
             catch (Exception ex)
             {
@@ -1013,6 +1045,7 @@ namespace RainbowPaintMod
             settings.EnabledRandomColors = new List<string>();
             for (int i = 0; i < _rainbowColors.Count; i++)
                 settings.EnabledRandomColors.Add(_rainbowColors[i].Name);
+            settings.EnabledSecondaryRandomColors = new List<string>(settings.EnabledRandomColors);
             settings.SmokeMatchesPrimaryColor = false;
             settings.CustomPlateText = "";
             return settings;
@@ -1040,6 +1073,19 @@ namespace RainbowPaintMod
                 settings.EnabledRandomColors = normalized;
             }
 
+            if (settings.EnabledSecondaryRandomColors == null)
+                settings.EnabledSecondaryRandomColors = new List<string>(settings.EnabledRandomColors);
+            else
+            {
+                List<string> normalized = new List<string>();
+                for (int i = 0; i < _rainbowColors.Count; i++)
+                {
+                    if (ContainsColorName(settings.EnabledSecondaryRandomColors, _rainbowColors[i].Name))
+                        normalized.Add(_rainbowColors[i].Name);
+                }
+                settings.EnabledSecondaryRandomColors = normalized;
+            }
+
             if (settings.CustomPlateText == null)
                 settings.CustomPlateText = "";
             if (settings.CustomPlateText.Length > 8)
@@ -1061,6 +1107,7 @@ namespace RainbowPaintMod
         public class RainbowPaintSettings
         {
             public List<string> EnabledRandomColors { get; set; }
+            public List<string> EnabledSecondaryRandomColors { get; set; }
             public bool SmokeMatchesPrimaryColor { get; set; }
             public string CustomPlateText { get; set; }
         }
@@ -1137,30 +1184,46 @@ namespace RainbowPaintMod
             if (_paintTypeList == null) return 0;
 
             int idx = _paintTypeList.SelectedIndex;
-            if (idx < 0 || idx >= PaintTypeStockColors.Length)
+            if (idx < 0 || idx >= PaintTypeIds.Length)
                 idx = 0;
             return idx;
         }
 
-        // Ставим стоковый цвет нужного типа краски, чтобы кастомный RGB
-        // накладывался с этим типом (мат/хром/метал видны явно)
-        private void ApplyPaintTypeToVehicle(Vehicle v)
+        private void ApplyPaintTypeToVehicle(Vehicle v, bool primary, bool secondary)
         {
             try
             {
                 int typeIdx = GetPaintTypeIndex();
+                int type = PaintTypeIds[typeIdx];
                 int stock = PaintTypeStockColors[typeIdx];
-
-                Function.Call(Hash.SET_VEHICLE_COLOURS, v.Handle, stock, stock);
-
-                // Металлик в игре = классический цвет + перламутр того же цвета
-                if (typeIdx == 0)
-                    Function.Call(Hash.SET_VEHICLE_EXTRA_COLOURS, v.Handle, stock, stock);
+                if (typeIdx >= 1 && typeIdx <= 3)
+                {
+                    Function.Call(Hash.SET_VEHICLE_COLOURS, v.Handle, stock, stock);
+                    return;
+                }
+                if (primary) Function.Call(Hash.SET_VEHICLE_MOD_COLOR_1, v.Handle, type, stock, 0);
+                if (secondary) Function.Call(Hash.SET_VEHICLE_MOD_COLOR_2, v.Handle, type, stock);
             }
             catch (Exception ex)
             {
                 PluginLog.Error("RainbowPaint: ApplyPaintTypeToVehicle", ex);
             }
+        }
+
+        private Color ApplyColorToChannel(Vehicle vehicle, int colorIndex, bool primary)
+        {
+            if (colorIndex == RainbowIndex)
+            {
+                Color hue = ColorFromHSV(_rainbowHue);
+                if (primary) vehicle.Mods.CustomPrimaryColor = hue;
+                else vehicle.Mods.CustomSecondaryColor = hue;
+                return hue;
+            }
+
+            Color color = _rainbowColors[colorIndex].Paint;
+            if (primary) vehicle.Mods.CustomPrimaryColor = color;
+            else vehicle.Mods.CustomSecondaryColor = color;
+            return color;
         }
 
         private string GetVehicleName(Vehicle v)
@@ -1338,13 +1401,12 @@ namespace RainbowPaintMod
 
             if (IsRainbowIndex(index))
             {
-                ApplyPaintTypeToVehicle(_currentVehicle);
+                ApplyPaintTypeToVehicle(_currentVehicle, true, false);
 
                 var slot = GetOrCreateSlot(_currentVehicle);
                 slot.Primary = true;
 
-                _currentVehicle.Mods.CustomPrimaryColor = ColorFromHSV(_rainbowHue);
-                ApplyTyreSmokeColor(_currentVehicle, ColorFromHSV(_rainbowHue));
+                ApplyTyreSmokeColor(_currentVehicle, ApplyColorToChannel(_currentVehicle, index, true));
                 _currentVehicle.DirtLevel = 0f;
                 GTA.UI.Screen.ShowSubtitle("~p~Радуга на основной цвет!", 3000);
             }
@@ -1355,11 +1417,10 @@ namespace RainbowPaintMod
                     slot.Primary = false;
                 RemoveSlotIfEmpty(_currentVehicle);
 
-                ApplyPaintTypeToVehicle(_currentVehicle);
+                ApplyPaintTypeToVehicle(_currentVehicle, true, false);
 
                 var color = _rainbowColors[index];
-                _currentVehicle.Mods.CustomPrimaryColor = color.Paint;
-                ApplyTyreSmokeColor(_currentVehicle, color.Paint);
+                ApplyTyreSmokeColor(_currentVehicle, ApplyColorToChannel(_currentVehicle, index, true));
                 _currentVehicle.DirtLevel = 0f;
 
                 GTA.UI.Screen.ShowSubtitle("~g~Основной цвет: " + color.Name + "!", 3000);
@@ -1379,12 +1440,12 @@ namespace RainbowPaintMod
 
             if (IsRainbowIndex(index))
             {
-                ApplyPaintTypeToVehicle(_currentVehicle);
+                ApplyPaintTypeToVehicle(_currentVehicle, false, true);
 
                 var slot = GetOrCreateSlot(_currentVehicle);
                 slot.Secondary = true;
 
-                _currentVehicle.Mods.CustomSecondaryColor = ColorFromHSV(_rainbowHue);
+                ApplyColorToChannel(_currentVehicle, index, false);
                 GTA.UI.Screen.ShowSubtitle("~p~Радуга на вторичный цвет!", 3000);
             }
             else
@@ -1394,10 +1455,10 @@ namespace RainbowPaintMod
                     slot.Secondary = false;
                 RemoveSlotIfEmpty(_currentVehicle);
 
-                ApplyPaintTypeToVehicle(_currentVehicle);
+                ApplyPaintTypeToVehicle(_currentVehicle, false, true);
 
                 var color = _rainbowColors[index];
-                _currentVehicle.Mods.CustomSecondaryColor = color.Paint;
+                ApplyColorToChannel(_currentVehicle, index, false);
 
                 GTA.UI.Screen.ShowSubtitle("~g~Вторичный цвет: " + color.Name + "!", 3000);
             }
@@ -1408,15 +1469,14 @@ namespace RainbowPaintMod
         {
             if (IsRainbowIndex(index))
             {
-                ApplyPaintTypeToVehicle(_currentVehicle);
+                ApplyPaintTypeToVehicle(_currentVehicle, true, true);
 
                 var slot = GetOrCreateSlot(_currentVehicle);
                 slot.Primary = true;
                 slot.Secondary = true;
 
-                Color hueColor = ColorFromHSV(_rainbowHue);
-                _currentVehicle.Mods.CustomPrimaryColor = hueColor;
-                _currentVehicle.Mods.CustomSecondaryColor = hueColor;
+                Color hueColor = ApplyColorToChannel(_currentVehicle, index, true);
+                ApplyColorToChannel(_currentVehicle, index, false);
                 ApplyTyreSmokeColor(_currentVehicle, hueColor);
                 _currentVehicle.DirtLevel = 0f;
                 GTA.UI.Screen.ShowSubtitle("~p~Радужный режим активирован! Машин в переливе: " + _rainbowSlots.Count + ".", 4000);
@@ -1431,12 +1491,12 @@ namespace RainbowPaintMod
                 }
                 RemoveSlotIfEmpty(_currentVehicle);
 
-                ApplyPaintTypeToVehicle(_currentVehicle);
+                ApplyPaintTypeToVehicle(_currentVehicle, true, true);
 
                 var color = _rainbowColors[index];
-                _currentVehicle.Mods.CustomPrimaryColor = color.Paint;
-                _currentVehicle.Mods.CustomSecondaryColor = color.Paint;
-                ApplyTyreSmokeColor(_currentVehicle, color.Paint);
+                Color primary = ApplyColorToChannel(_currentVehicle, index, true);
+                ApplyColorToChannel(_currentVehicle, index, false);
+                ApplyTyreSmokeColor(_currentVehicle, primary);
                 _currentVehicle.DirtLevel = 0f;
 
                 GTA.UI.Screen.ShowSubtitle("~g~Покрашено в " + color.Name + "!", 4000);

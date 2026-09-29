@@ -17,16 +17,17 @@ namespace ModdedCamera.Services
         public NativeMenu FollowOptionsMenu { get; private set; }
         public NativeMenu SavedPathsMenu { get; private set; }
         public NativeMenu NodeEditorMenu { get; private set; }
+        private NativeMenu _resetConfirmMenu;
+        private NativeMenu _overwriteMenu;
+        private NativeItem _overwriteItem;
 
         private NativeItem _startItem;
-        private NativeItem _stopItem;
         private NativeItem _setupNodesItem;
         private NativeItem _savePathItem;
         private NativeItem _loadPathItem;
         private NativeItem _cameraOptionsItem;
         private NativeItem _resetItem;
         private NativeItem _editNodesItem;
-        private NativeItem _closeItem;
         private NativeCheckboxItem _followCameraCheckbox;
         private NativeItem _followOptionsItem;
 
@@ -39,9 +40,14 @@ namespace ModdedCamera.Services
         private readonly List<NativeMenu> _pathSubMenus = new List<NativeMenu>();
         private readonly List<NativeMenu> _nodeSubMenus = new List<NativeMenu>();
         private readonly List<NativeMenu> _pendingSubMenuRemovals = new List<NativeMenu>();
+        private readonly Dictionary<NativeMenu, NativeMenu> _pathParents = new Dictionary<NativeMenu, NativeMenu>();
+        private readonly Dictionary<NativeMenu, int> _pathIndices = new Dictionary<NativeMenu, int>();
 
         private string _savedPathsSearch = "";
         private int _lastSelectedNodeIndex = -1;
+        private SplineCamera.NodeSnapshot _deletedNode;
+        private int _deletedNodeIndex = -1;
+        private int _undoNodeCount;
 
         private enum KeyboardState { None, Search, Rename }
         private KeyboardState _keyboardState = KeyboardState.None;
@@ -93,11 +99,19 @@ namespace ModdedCamera.Services
             CreateSavedPathsMenu();
             CreateNodeEditorMenu();
             CreateMainMenu();
+            CreateConfirmationMenus();
+
+            _saveService.OnOverwriteRequested += delegate(string name)
+            {
+                _overwriteItem.Description = "Заменить путь: " + name;
+                _overwriteMenu.Visible = true;
+            };
 
             _cameraService.OnNodeEditResumed += delegate(int editedNodeIndex)
             {
                 try
                 {
+                    ClearNodeUndo();
                     _lastSelectedNodeIndex = editedNodeIndex;
                     RefreshNodeEditorMenu();
                     NodeEditorMenu.Visible = true;
@@ -114,6 +128,8 @@ namespace ModdedCamera.Services
             ActivePool.Add(FollowOptionsMenu);
             ActivePool.Add(SavedPathsMenu);
             ActivePool.Add(NodeEditorMenu);
+            ActivePool.Add(_resetConfirmMenu);
+            ActivePool.Add(_overwriteMenu);
 
             RefreshSavedPathsMenu();
         }
@@ -123,6 +139,22 @@ namespace ModdedCamera.Services
             UpdateKeyboardInput();
             FlushSubMenuRemovals();
             if (ActivePool != null) ActivePool.Process();
+            if (_startItem != null)
+                _startItem.Title = _cameraService.IsPlaybackRunning ? "~r~Остановить воспроизведение" : "~g~Воспроизвести путь";
+            if (_deletedNode != null && (_cameraService.SplineCamera == null ||
+                _cameraService.SplineCamera.Nodes.Count != _undoNodeCount))
+            {
+                ClearNodeUndo();
+                if (NodeEditorMenu.Visible) RefreshNodeEditorMenu();
+            }
+            if (NodeEditorMenu != null && NodeEditorMenu.Visible && _cameraService.SplineCamera != null)
+                _cameraService.SplineCamera.DrawNodeMarkers(NodeEditorMenu.SelectedIndex - (_deletedNode != null ? 1 : 0));
+        }
+
+        private void ClearNodeUndo()
+        {
+            _deletedNode = null;
+            _deletedNodeIndex = -1;
         }
 
         private void FlushSubMenuRemovals()
@@ -148,15 +180,26 @@ namespace ModdedCamera.Services
                 if (status == 0) return;
                 KeyboardState state = _keyboardState;
                 _keyboardState = KeyboardState.None;
+                int selectedPath = SavedPathsMenu.SelectedIndex;
+                foreach (var menu in _pathSubMenus)
+                {
+                    int index;
+                    if (menu.Visible && _pathIndices.TryGetValue(menu, out index)) selectedPath = index;
+                }
                 if (status == 2)
                 {
-                    SavedPathsMenu.Visible = true;
+                    ReturnToSavedPaths(selectedPath);
                     return;
                 }
                 string input = Function.Call<string>(Hash.GET_ONSCREEN_KEYBOARD_RESULT);
                 if (string.IsNullOrEmpty(input))
                 {
-                    SavedPathsMenu.Visible = true;
+                    if (state == KeyboardState.Search)
+                    {
+                        _savedPathsSearch = "";
+                        RefreshSavedPathsMenu();
+                    }
+                    ReturnToSavedPaths(selectedPath);
                     return;
                 }
                 input = input.Trim();
@@ -164,13 +207,13 @@ namespace ModdedCamera.Services
                 {
                     _savedPathsSearch = input;
                     RefreshSavedPathsMenu();
-                    SavedPathsMenu.Visible = true;
+                    ReturnToSavedPaths(selectedPath);
                 }
                 else if (state == KeyboardState.Rename)
                 {
                     if (_saveService.RenamePath(_renameTargetPath, input))
                         RefreshSavedPathsMenu();
-                    SavedPathsMenu.Visible = true;
+                    ReturnToSavedPaths(selectedPath);
                 }
             }
             catch (Exception ex)
@@ -188,13 +231,18 @@ namespace ModdedCamera.Services
         public void ToggleMenu()
         {
             if (AreAnyVisible)
+            {
+                if (_overwriteMenu.Visible) _saveService.Cancel();
+                ClearNodeUndo();
                 ActivePool.HideAll();
+            }
             else
                 MainMenu.Visible = true;
         }
 
         public void HideAll()
         {
+            ClearNodeUndo();
             if (ActivePool != null) ActivePool.HideAll();
         }
 
@@ -204,6 +252,15 @@ namespace ModdedCamera.Services
             CameraOptionsMenu.Visible = false;
             FollowOptionsMenu.Visible = false;
             MainMenu.Visible = true;
+        }
+
+        private void ReturnToSavedPaths(int selectedIndex)
+        {
+            foreach (var menu in _pathSubMenus) menu.Visible = false;
+            foreach (var menu in _pendingSubMenuRemovals) menu.Visible = false;
+            SavedPathsMenu.Visible = true;
+            if (SavedPathsMenu.Items.Count > 0)
+                SavedPathsMenu.SelectedIndex = Math.Max(0, Math.Min(selectedIndex, SavedPathsMenu.Items.Count - 1));
         }
 
         public void SyncCameraOptionsWithMenu()
@@ -227,16 +284,19 @@ namespace ModdedCamera.Services
                 foreach (var m in _pathSubMenus)
                     _pendingSubMenuRemovals.Add(m);
                 _pathSubMenus.Clear();
+                _pathParents.Clear();
+                _pathIndices.Clear();
                 SavedPathsMenu.Clear();
 
                 List<string> allPaths = PathManager.GetAllSavedPaths();
+                allPaths.Sort(StringComparer.CurrentCultureIgnoreCase);
 
                 NativeItem searchItem = new NativeItem("~b~Поиск", string.IsNullOrEmpty(_savedPathsSearch) ? "Нажмите, чтобы ввести текст" : "Фильтр: \"" + _savedPathsSearch + "\"");
                 searchItem.Activated += delegate
                 {
                     try
                     {
-                        Function.Call(Hash.DISPLAY_ONSCREEN_KEYBOARD, true, "R*", "", "", "", "", "", 64);
+                        Function.Call(Hash.DISPLAY_ONSCREEN_KEYBOARD, true, "R*", "", _savedPathsSearch, "", "", "", 64);
                         _keyboardState = KeyboardState.Search;
                     }
                     catch (Exception ex)
@@ -249,7 +309,7 @@ namespace ModdedCamera.Services
                 if (!string.IsNullOrEmpty(_savedPathsSearch))
                 {
                     NativeItem clearSearch = new NativeItem("~y~Сбросить поиск", "Показать все сохранённые пути");
-                    clearSearch.Activated += delegate { _savedPathsSearch = ""; RefreshSavedPathsMenu(); };
+                    clearSearch.Activated += delegate { _savedPathsSearch = ""; RefreshSavedPathsMenu(); SavedPathsMenu.SelectedIndex = 0; };
                     SavedPathsMenu.Add(clearSearch);
                 }
 
@@ -276,11 +336,9 @@ namespace ModdedCamera.Services
                     NativeMenu pathSubMenu = new NativeMenu(pathName, "Действия");
                     ActivePool.Add(pathSubMenu);
                     _pathSubMenus.Add(pathSubMenu);
-
-                    NativeItem backBtn = new NativeItem("< Назад", "Вернуться назад");
+                    _pathParents[pathSubMenu] = SavedPathsMenu;
+                    _pathIndices[pathSubMenu] = SavedPathsMenu.Items.Count;
                     string currentPathName = pathName;
-                    backBtn.Activated += delegate { pathSubMenu.Visible = false; SavedPathsMenu.Visible = true; };
-                    pathSubMenu.Add(backBtn);
 
                     NativeItem loadBtn = new NativeItem("~g~Загрузить", "Загрузить и воспроизвести");
                     string pn1 = pathName;
@@ -319,10 +377,7 @@ namespace ModdedCamera.Services
                     NativeMenu delMenu = new NativeMenu("Удалить: " + pathName, "Вы уверены?");
                     ActivePool.Add(delMenu);
                     _pathSubMenus.Add(delMenu);
-
-                    NativeItem delBackBtn = new NativeItem("< Назад", "Отмена");
-                    delBackBtn.Activated += delegate { delMenu.Visible = false; pathSubMenu.Visible = true; };
-                    delMenu.Add(delBackBtn);
+                    _pathParents[delMenu] = pathSubMenu;
 
                     NativeItem delYesBtn = new NativeItem("~r~Да, удалить", "Подтвердить");
                     string pn2 = pathName;
@@ -330,16 +385,22 @@ namespace ModdedCamera.Services
                     {
                         try
                         {
-                            _saveService.DeletePath(pn2);
-                            RefreshSavedPathsMenu();
+                            int selected = _pathIndices.ContainsKey(pathSubMenu) ? _pathIndices[pathSubMenu] : 0;
+                            if (_saveService.DeletePath(pn2))
+                            {
+                                delMenu.Visible = false;
+                                pathSubMenu.Visible = false;
+                                RefreshSavedPathsMenu();
+                                SavedPathsMenu.Visible = true;
+                                if (SavedPathsMenu.Items.Count > 0)
+                                    SavedPathsMenu.SelectedIndex = Math.Min(selected, SavedPathsMenu.Items.Count - 1);
+                            }
                         }
                         catch (Exception ex)
                         {
                             Logger.Error(ex, "Error deleting: " + pn2);
                             GTA.UI.Notification.PostTicker("~r~Не удалось удалить: " + ex.Message, false, false);
                         }
-                        delMenu.Visible = false;
-                        pathSubMenu.Visible = true;
                     };
                     delMenu.Add(delYesBtn);
 
@@ -362,30 +423,33 @@ namespace ModdedCamera.Services
         {
             try
             {
-                foreach (var m in _pathSubMenus)
+                if (_keyboardState != KeyboardState.None) return true;
+                if (_overwriteMenu != null && _overwriteMenu.Visible)
                 {
-                    if (m.Visible && m.BannerText.Text.StartsWith("Удалить: "))
-                    {
-                        m.Visible = false;
-                        string pathName = m.BannerText.Text.Substring("Удалить: ".Length);
-                        foreach (var pm in _pathSubMenus)
-                        {
-                            if (pm.BannerText.Text == pathName && !pm.Visible)
-                            {
-                                pm.Visible = true;
-                                break;
-                            }
-                        }
-                        return true;
-                    }
+                    _overwriteMenu.Visible = false;
+                    _saveService.Cancel();
+                    MainMenu.Visible = true;
+                    return true;
                 }
-
+                if (_resetConfirmMenu != null && _resetConfirmMenu.Visible)
+                {
+                    _resetConfirmMenu.Visible = false;
+                    MainMenu.Visible = true;
+                    return true;
+                }
                 foreach (var m in _pathSubMenus)
                 {
                     if (m.Visible)
                     {
                         m.Visible = false;
-                        SavedPathsMenu.Visible = true;
+                        NativeMenu parent;
+                        if (_pathParents.TryGetValue(m, out parent))
+                        {
+                            parent.Visible = true;
+                            int index;
+                            if (parent == SavedPathsMenu && _pathIndices.TryGetValue(m, out index))
+                                SavedPathsMenu.SelectedIndex = index;
+                        }
                         return true;
                     }
                 }
@@ -402,7 +466,10 @@ namespace ModdedCamera.Services
                     if (m.Visible)
                     {
                         m.Visible = false;
+                        RefreshNodeEditorMenu();
                         NodeEditorMenu.Visible = true;
+                        if (_lastSelectedNodeIndex >= 0 && _lastSelectedNodeIndex < NodeEditorMenu.Items.Count)
+                            NodeEditorMenu.SelectedIndex = _lastSelectedNodeIndex + (_deletedNode != null ? 1 : 0);
                         return true;
                     }
                 }
@@ -410,6 +477,7 @@ namespace ModdedCamera.Services
                 if (NodeEditorMenu.Visible)
                 {
                     NodeEditorMenu.Visible = false;
+                    ClearNodeUndo();
                     MainMenu.Visible = true;
                     return true;
                 }
@@ -434,7 +502,7 @@ namespace ModdedCamera.Services
                     return true;
                 }
 
-                if (MainMenu.Visible) return true;
+                if (MainMenu.Visible) { MainMenu.Visible = false; return true; }
                 return false;
             }
             catch (Exception ex)
@@ -472,22 +540,32 @@ namespace ModdedCamera.Services
             _startItem = new NativeItem("~g~Воспроизвести путь", "");
             _startItem.Activated += (s, e) =>
             {
-                ActivePool.HideAll();
-                _cameraService.StartPlayback();
+                if (_cameraService.IsPlaybackRunning) _cameraService.StopPlayback();
+                else
+                {
+                    ActivePool.HideAll();
+                    _cameraService.StartPlayback();
+                }
             };
             MainMenu.Add(_startItem);
 
-            _stopItem = new NativeItem("~r~Остановить воспроизведение", "");
-            _stopItem.Activated += (s, e) => _cameraService.StopPlayback();
-            MainMenu.Add(_stopItem);
-
-            _setupNodesItem = new NativeItem("~y~Настроить узлы", "");
+            _setupNodesItem = new NativeItem("~g~Расставить узлы", "Создать новые точки камеры");
             _setupNodesItem.Activated += (s, e) =>
             {
                 ActivePool.HideAll();
                 _cameraService.EnterPointSelector();
             };
             MainMenu.Add(_setupNodesItem);
+
+            _editNodesItem = new NativeItem("~b~Редактировать узлы", "Изменить существующие точки камеры");
+            _editNodesItem.Activated += (s, e) =>
+            {
+                _lastSelectedNodeIndex = -1;
+                RefreshNodeEditorMenu();
+                MainMenu.Visible = false;
+                NodeEditorMenu.Visible = true;
+            };
+            MainMenu.Add(_editNodesItem);
 
             _savePathItem = new NativeItem("Сохранить текущий путь", "");
             _savePathItem.Activated += (s, e) =>
@@ -521,23 +599,43 @@ namespace ModdedCamera.Services
             };
             MainMenu.Add(_followOptionsItem);
 
-            _editNodesItem = new NativeItem("~y~Редактор узлов", "Изменить длительность и интерполяцию каждого узла");
-            _editNodesItem.Activated += (s, e) =>
-            {
-                _lastSelectedNodeIndex = -1;
-                RefreshNodeEditorMenu();
-                MainMenu.Visible = false;
-                NodeEditorMenu.Visible = true;
-            };
-            MainMenu.Add(_editNodesItem);
-
-            _resetItem = new NativeItem("Сбросить все камеры", "");
-            _resetItem.Activated += (s, e) => _cameraService.ResetAll();
+            _resetItem = new NativeItem("~r~Сбросить все камеры", "Удалить все узлы текущего пути");
+            _resetItem.Activated += (s, e) => { MainMenu.Visible = false; _resetConfirmMenu.Visible = true; };
             MainMenu.Add(_resetItem);
+        }
 
-            _closeItem = new NativeItem("Закрыть", "");
-            _closeItem.Activated += (s, e) => ActivePool.HideAll();
-            MainMenu.Add(_closeItem);
+        private void CreateConfirmationMenus()
+        {
+            _resetConfirmMenu = new NativeMenu("Сброс камер", "Удалить все узлы?");
+            NativeItem resetYes = new NativeItem("~r~Да, сбросить");
+            resetYes.Activated += delegate
+            {
+                _cameraService.ResetAll();
+                _saveService.ForgetCurrentPath();
+                ClearNodeUndo();
+                _resetConfirmMenu.Visible = false;
+                MainMenu.Visible = true;
+            };
+            _resetConfirmMenu.Add(resetYes);
+            NativeItem resetNo = new NativeItem("Отмена");
+            resetNo.Activated += delegate { _resetConfirmMenu.Visible = false; MainMenu.Visible = true; };
+            _resetConfirmMenu.Add(resetNo);
+
+            _overwriteMenu = new NativeMenu("Сохранение пути", "Имя уже существует");
+            _overwriteItem = new NativeItem("~r~Перезаписать");
+            _overwriteItem.Activated += delegate
+            {
+                _overwriteMenu.Visible = false;
+                _saveService.ConfirmOverwrite();
+                MainMenu.Visible = true;
+            };
+            _overwriteMenu.Add(_overwriteItem);
+            NativeItem differentName = new NativeItem("Другое имя");
+            differentName.Activated += delegate { _overwriteMenu.Visible = false; _saveService.ChooseDifferentName(); };
+            _overwriteMenu.Add(differentName);
+            NativeItem cancel = new NativeItem("Отмена");
+            cancel.Activated += delegate { _overwriteMenu.Visible = false; _saveService.Cancel(); MainMenu.Visible = true; };
+            _overwriteMenu.Add(cancel);
         }
 
         private void CreateCameraOptionsMenu()
@@ -591,7 +689,7 @@ namespace ModdedCamera.Services
 
         private void CreateNodeEditorMenu()
         {
-            NodeEditorMenu = new NativeMenu("Редактор узлов", "Выберите узел для редактирования");
+            NodeEditorMenu = new NativeMenu("Редактор узлов", "Выберите узел");
         }
 
         public void RefreshNodeEditorMenu()
@@ -606,18 +704,26 @@ namespace ModdedCamera.Services
                 var spline = _cameraService.SplineCamera;
                 if (spline == null || spline.Nodes.Count == 0)
                 {
-                    NodeEditorMenu.Add(new NativeItem("~y~Нет узлов", "Сначала добавьте узлы (Настроить узлы)"));
+                    NodeEditorMenu.Add(new NativeItem("~y~Нет узлов", "Сначала расставьте узлы"));
                     return;
                 }
                 int nodeCount = spline.Nodes.Count;
 
-                NativeItem backMain = new NativeItem("< Назад", "Вернуться в главное меню");
-                backMain.Activated += delegate
+                if (_deletedNode != null)
                 {
-                    NodeEditorMenu.Visible = false;
-                    MainMenu.Visible = true;
-                };
-                NodeEditorMenu.Add(backMain);
+                    NativeItem undo = new NativeItem("~g~Отменить удаление", "Восстановить удалённый узел");
+                    undo.Activated += delegate
+                    {
+                        if (spline.RestoreNode(_deletedNodeIndex, _deletedNode))
+                        {
+                            _lastSelectedNodeIndex = _deletedNodeIndex;
+                            ClearNodeUndo();
+                            _cameraService.RestartPlaybackIfActive();
+                            RefreshNodeEditorMenu();
+                        }
+                    };
+                    NodeEditorMenu.Add(undo);
+                }
 
                 float totalSec = 0f;
                 for (int i = 0; i < nodeCount; i++)
@@ -629,19 +735,15 @@ namespace ModdedCamera.Services
                         int duration = spline.GetDurations()[i];
                         int nodeMode = (i < spline.GetNodeInterpolationModes().Count) ? spline.GetNodeInterpolationModes()[i] : 0;
 
-                        string modeLabel = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Плавно с остановкой" : "Плавно без остановки";
+                        string modeLabel = (nodeMode == 0) ? "Линейно" : (nodeMode == 1) ? "Стоп" : "Дуга";
                         float durSec = (float)duration / 1000f;
                         totalSec += durSec;
-                        string label = "Узел " + (i + 1) + "  (" + durSec.ToString("F2") + "с, " + modeLabel + ") | всего: " + totalSec.ToString("F2") + "с";
+                        string label = "Узел " + (i + 1) + " · " + durSec.ToString("F2") + "с · " + modeLabel;
                         string desc = "Поз: " + pos.X.ToString("F1") + ", " + pos.Y.ToString("F1") + ", " + pos.Z.ToString("F1");
 
                         NativeMenu nodeMenu = new NativeMenu("Узел " + (i + 1), "Длительность и интерполяция");
                         ActivePool.Add(nodeMenu);
                         _nodeSubMenus.Add(nodeMenu);
-
-                        NativeItem nodeBack = new NativeItem("< Назад", "К списку узлов");
-                        nodeBack.Activated += delegate { nodeMenu.Visible = false; NodeEditorMenu.Visible = true; if (_lastSelectedNodeIndex >= 0) NodeEditorMenu.SelectedIndex = _lastSelectedNodeIndex + 1; };
-                        nodeMenu.Add(nodeBack);
 
                         // Duration list item: 0.00..30.00 in 0.25s steps
                         NativeListItem<string> durItem = new NativeListItem<string>("Длительность", "Длительность узла в секундах");
@@ -661,9 +763,9 @@ namespace ModdedCamera.Services
                                 if (sp != null)
                                 {
                                     sp.SetNodeDuration(capturedIndex, newDurMs);
+                                    ClearNodeUndo();
                                     sp.SetStartNodeIndex(capturedIndex);
                                     _cameraService.RestartPlaybackIfActive();
-                                    RefreshNodeEditorMenu();
                                 }
                             }
                         };
@@ -683,9 +785,9 @@ namespace ModdedCamera.Services
                             if (sp != null)
                             {
                                 sp.SetNodeInterpolationMode(capturedIndex2, newMode);
+                                ClearNodeUndo();
                                 sp.SetStartNodeIndex(capturedIndex2);
                                 _cameraService.RestartPlaybackIfActive();
-                                RefreshNodeEditorMenu();
                             }
                         };
                         nodeMenu.Add(modeItem);
@@ -721,7 +823,7 @@ namespace ModdedCamera.Services
                             if (sp != null)
                             {
                                 sp.SetNodeColor(capturedColorIndex, newArgb);
-                                RefreshNodeEditorMenu();
+                                ClearNodeUndo();
                             }
                         };
                         nodeMenu.Add(colorItem);
@@ -729,7 +831,7 @@ namespace ModdedCamera.Services
                         // Per-node FOV
                         int curFov = _cameraService.SplineCamera.GetNodeFov(nodeIndex);
                         NativeListItem<string> fovItem = new NativeListItem<string>("Поле зрения (FOV)", "Индивидуальное поле зрения узла");
-                        for (int f = 1; f <= 100; f++)
+                        for (int f = 1; f <= 130; f++)
                             fovItem.Items.Add(f.ToString());
                         string foundFov = curFov.ToString();
                         if (fovItem.Items.Contains(foundFov))
@@ -744,8 +846,8 @@ namespace ModdedCamera.Services
                                 if (sp != null)
                                 {
                                     sp.SetNodeFov(capturedFovIndex, newFov);
-                                    _cameraService.RestartPlaybackIfActive();
-                                    RefreshNodeEditorMenu();
+                                    ClearNodeUndo();
+                                    _cameraService.PreviewNodeFov(capturedFovIndex);
                                 }
                             }
                         };
@@ -756,6 +858,7 @@ namespace ModdedCamera.Services
                         int editCamIndex = nodeIndex;
                         editCamItem.Activated += delegate
                         {
+                            ClearNodeUndo();
                             nodeMenu.Visible = false;
                             NodeEditorMenu.Visible = false;
                             _cameraService.EnterPointSelectorForNode(editCamIndex);
@@ -770,9 +873,12 @@ namespace ModdedCamera.Services
                             var sp = _cameraService.SplineCamera;
                             if (sp != null && sp.DuplicateNode(dupIndex))
                             {
+                                ClearNodeUndo();
                                 _lastSelectedNodeIndex = dupIndex + 1;
                                 _cameraService.RestartPlaybackIfActive();
+                                nodeMenu.Visible = false;
                                 RefreshNodeEditorMenu();
+                                NodeEditorMenu.Visible = true;
                             }
                         };
                         nodeMenu.Add(dupItem);
@@ -785,11 +891,18 @@ namespace ModdedCamera.Services
                             var sp = _cameraService.SplineCamera;
                             if (sp != null)
                             {
+                                var snapshot = sp.CaptureNode(delIndex);
                                 if (sp.RemoveNode(delIndex))
                                 {
+                                    _deletedNode = snapshot;
+                                    _deletedNodeIndex = delIndex;
+                                    _undoNodeCount = sp.Nodes.Count;
                                     _lastSelectedNodeIndex = Math.Min(delIndex, sp.Nodes.Count - 1);
+                                    sp.CancelFovPreview();
                                     _cameraService.RestartPlaybackIfActive();
+                                    nodeMenu.Visible = false;
                                     RefreshNodeEditorMenu();
+                                    NodeEditorMenu.Visible = true;
                                 }
                                 else
                                 {
@@ -800,6 +913,7 @@ namespace ModdedCamera.Services
                         nodeMenu.Add(delItem);
 
                         NativeItem nodeItem = new NativeItem(label, desc);
+                        nodeItem.AltTitle = totalSec.ToString("F2") + "с";
                         if (curArgb != Color.White.ToArgb())
                         {
                             Color nodeTextColor = Color.FromArgb(curArgb);
@@ -816,7 +930,7 @@ namespace ModdedCamera.Services
                         NodeEditorMenu.Add(new NativeItem("~r~Узел " + (i + 1) + " (ошибка)", ex.Message));
                     }
                 }
-                int restoreIdx = _lastSelectedNodeIndex + 1;
+                int restoreIdx = _lastSelectedNodeIndex + (_deletedNode != null ? 1 : 0);
                 if (_lastSelectedNodeIndex >= 0 && restoreIdx < NodeEditorMenu.Items.Count)
                     NodeEditorMenu.SelectedIndex = restoreIdx;
             }

@@ -148,16 +148,24 @@ scripts\ReloaderPlugins\CrashLogger\CrashReports\<дата-время>\CrashRepo
 Текущая история watcher находится в `scripts\ReloaderPlugins\CrashLogger\CrashMonitor.log`.
 В этой же папке хранятся временные файлы сессии и рабочая копия watcher.
 Для передачи ошибки достаточно всей папки конкретного отчёта. Минидампы необязательны
-и по умолчанию выключены:
+и по умолчанию выключены. После распаковки архива в `Plugins` включите их
+однократным запуском `InstallCrashDumps.cmd` с подтверждением UAC. Разработчик
+может использовать те же настройки через:
 
 ```powershell
 .\modpack.cmd CrashDumps On
 .\modpack.cmd CrashDumps Off
 ```
 
-Первый вариант включает Windows Error Reporting только для `GTA5.exe`, сохраняет
-до трёх mini dump в `scripts\ReloaderPlugins\CrashLogger\CrashDumps`; второй отключает будущие
-дампы, не удаляя уже созданные. Изолированная проверка watcher:
+Первый вариант включает Windows Error Reporting только для `GTA5.exe` через
+`HKLM`, сохраняет до трёх минидампов в
+`scripts\ReloaderPlugins\CrashLogger\CrashDumps`; второй отключает будущие
+дампы, не удаляя уже созданные. Оба варианта требуют права администратора только
+при изменении настройки и проверяют результат в реестре. Во время игры дамп
+не записывается: Windows создаёт его после зарегистрированного сбоя. Принудительное
+завершение GTA, зависание и собственный обработчик игры могут не создать `.dmp`.
+При следующем реальном падении ищите также `CrashReport.txt`; дамп анализируется
+отдельно, без автоматического WinDbg. Изолированная проверка watcher:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\test-crash-watcher.ps1

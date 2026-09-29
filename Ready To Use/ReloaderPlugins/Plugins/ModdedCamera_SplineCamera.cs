@@ -22,6 +22,8 @@ namespace ModdedCamera
         private List<int> _nodeFovs = new List<int>();
         private int _defaultDuration = 5000;
         private int _defaultFov = 50;
+        private int _previewNodeIndex = -1;
+        private long _previewUntilMs;
         private float _currentSpeedMult = 1.0f;
         private long _lastFrameMs = 0;
         private bool _usePlayerView;
@@ -434,6 +436,42 @@ namespace ModdedCamera
             }
         }
 
+        public sealed class NodeSnapshot
+        {
+            public Vector3 Position;
+            public Vector3 Rotation;
+            public int Duration;
+            public int Mode;
+            public int Color;
+            public int Fov;
+        }
+
+        public NodeSnapshot CaptureNode(int index)
+        {
+            if (index < 0 || index >= _nodes.Count) return null;
+            return new NodeSnapshot {
+                Position = _nodes[index].Item1,
+                Rotation = _nodes[index].Item2,
+                Duration = _baseDurations[index],
+                Mode = (int)_nodeInterpModes[index],
+                Color = _nodeColors[index],
+                Fov = _nodeFovs[index]
+            };
+        }
+
+        public bool RestoreNode(int index, NodeSnapshot node)
+        {
+            if (node == null || index < 0 || index > _nodes.Count) return false;
+            _nodes.Insert(index, new Tuple<Vector3, Vector3>(node.Position, node.Rotation));
+            _baseDurations.Insert(index, node.Duration);
+            _durations.Insert(index, (int)Math.Max(0, node.Duration / _currentSpeedMult));
+            _nodeInterpModes.Insert(index, (NodeInterpMode)NormalizeInterpolationMode(node.Mode));
+            _nodeColors.Insert(index, node.Color);
+            _nodeFovs.Insert(index, node.Fov);
+            if (_startNodeIndex > index) _startNodeIndex++;
+            return true;
+        }
+
         public bool DuplicateNode(int index)
         {
             try
@@ -464,19 +502,26 @@ namespace ModdedCamera
 
         public void DrawNodeMarkers()
         {
+            DrawNodeMarkers(-1);
+        }
+
+        public void DrawNodeMarkers(int selectedIndex)
+        {
             try
             {
                 for (int i = 0; i < _nodes.Count; i++)
                 {
                     int argb = GetNodeColor(i);
                     Color c = Color.FromArgb(argb);
+                    bool selected = i == selectedIndex;
+                    float size = selected ? 1.0f + 0.16f * (float)Math.Sin(Utils.NowMs() / 180.0) : 0.6f;
                     Function.Call(NativeHashes.DRAW_MARKER,
                         1,
                         _nodes[i].Item1.X, _nodes[i].Item1.Y, _nodes[i].Item1.Z,
                         0f, 0f, 0f,
                         0f, 0f, 0f,
-                        0.6f, 0.6f, 0.6f,
-                        (int)c.R, (int)c.G, (int)c.B, (int)c.A,
+                        size, size, size,
+                        selected ? 255 : (int)c.R, selected ? 230 : (int)c.G, selected ? 40 : (int)c.B, selected ? 255 : (int)c.A,
                         false, true, 2, false,
                         false, false, false);
                 }
@@ -524,6 +569,24 @@ namespace ModdedCamera
             {
                 Logger.Error(ex, "Error restarting interpolator");
             }
+        }
+
+        public void PreviewNodeFov(int index)
+        {
+            if (index < 0 || index >= _nodes.Count || _nodes.Count < 2) return;
+            _previewNodeIndex = index;
+            _previewUntilMs = 0;
+            SetStartNodeIndex(index);
+            if (_mainCamera.IsActive) RestartInterpolator();
+            _mainCamera.Position = _nodes[index].Item1;
+            _mainCamera.Rotation = _nodes[index].Item2;
+            _mainCamera.FieldOfView = GetNodeFov(index);
+        }
+
+        public void CancelFovPreview()
+        {
+            _previewNodeIndex = -1;
+            _previewUntilMs = 0;
         }
 
         public void UpdateSpeed(float speed)
@@ -603,6 +666,25 @@ namespace ModdedCamera
                 _lastFrameMs = now;
                 if (frameDelta < 0) frameDelta = 0;
                 if (frameDelta > 250) frameDelta = 250;
+                if (_previewNodeIndex >= 0)
+                {
+                    if (_previewNodeIndex >= _nodes.Count) CancelFovPreview();
+                    else
+                    {
+                        if (_previewUntilMs == 0) _previewUntilMs = now + 1000;
+                        if (now < _previewUntilMs)
+                        {
+                            _mainCamera.Position = _nodes[_previewNodeIndex].Item1;
+                            _mainCamera.Rotation = _nodes[_previewNodeIndex].Item2;
+                            _mainCamera.FieldOfView = GetNodeFov(_previewNodeIndex);
+                            _previousPos = _mainCamera.Position;
+                            UpdateRenderScene();
+                            return;
+                        }
+                        CancelFovPreview();
+                        frameDelta = 0;
+                    }
+                }
                 _interpolator.Advance(frameDelta);
                 _interpolator.UpdateAt(_interpolator.ElapsedMs, out interpPos, out interpRot, out interpFov);
 
