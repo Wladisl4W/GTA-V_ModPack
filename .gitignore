@@ -8,3 +8,10 @@
 # Visual Studio
 .vs/
 modpack.local.json
+.modpack-local/
+dist/
+/ScriptHookV.log
+# Local game media: provenance and redistribution rights are not confirmed.
+/assets/models/
+# CI builds this DLL from source; keep local reference copies out of Git.
+/modules/Loader/assets/Reloader.dll

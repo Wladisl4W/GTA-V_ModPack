@@ -4,11 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      - main
-    paths:
-      - '.github/workflows/release.yml'
-      - 'release-notes/v1.5.md'
 
 permissions:
   contents: write
@@ -18,35 +13,45 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: windows-latest
     env:
-      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.5' }}
+      RELEASE_TAG: ${{ github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_TAG }}
 
-      - name: Package and publish
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify documentation and data ownership
+        shell: pwsh
+        run: |
+          python tools/test-docs.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test-data-ownership.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build and verify release archives
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = $env:RELEASE_TAG.TrimStart('v')
-          $project = [xml](Get-Content 'Source Code/Reloader/Reloader.csproj' -Raw)
-          $loaderVersion = ($project.Project.PropertyGroup.FileVersion -split '\.')[0..1] -join '.'
-          $plugins = Join-Path $env:RUNNER_TEMP "ModPack-Plugins-$version.zip"
-          $loader = Join-Path $env:RUNNER_TEMP "Reloader-$loaderVersion.zip"
-          $files = @(Get-ChildItem 'Ready To Use/ReloaderPlugins/Plugins' -File | Select-Object -ExpandProperty FullName)
-          Compress-Archive -LiteralPath $files -DestinationPath $plugins
-          Compress-Archive -LiteralPath 'Ready To Use/Reloader.dll' -DestinationPath $loader
-          $notes = "Crash reports for GTA V are saved under scripts/ReloaderPlugins/CrashLogger. Download the plugin archive and extract its contents directly into scripts/ReloaderPlugins/Plugins. Reloader $loaderVersion is optional for existing 2.0 users and adds detailed plugin exception logging."
-          gh release create $env:RELEASE_TAG $plugins $loader --verify-tag --title "ModPack $version" --notes $notes
+          & pwsh -NoProfile -File tools/package-release.ps1 -Version ($env:RELEASE_TAG.TrimStart('v'))
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test-assets.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/test-install-release.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-  update_v1_5_notes:
-    if: github.ref == 'refs/heads/main' && github.event.head_commit.message == 'Update ModPack 1.5 release notes'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Update release description
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release edit v1.5 --notes-file release-notes/v1.5.md
+      - name: Publish verified archives
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseVersion = $env:RELEASE_TAG.TrimStart('v')
+          $archives = @(Get-ChildItem 'dist/releases' -Filter "*-$releaseVersion.zip" -File | Select-Object -ExpandProperty FullName)
+          if ($archives.Count -ne 5) { throw 'Expected installer, plugins, loader and two tool ZIP files.' }
+          $notes = "docs/releases/$env:RELEASE_TAG.md"
+          if (!(Test-Path -LiteralPath $notes)) { throw "Missing release notes: $notes" }
+          $title = (Get-Content -LiteralPath $notes -TotalCount 1 -Encoding UTF8) -replace '^#\s*', ''
+          gh release create $env:RELEASE_TAG $archives --verify-tag --title $title --notes-file $notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
