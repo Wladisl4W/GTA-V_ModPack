@@ -7,7 +7,7 @@ if (!$?) { throw 'Map generation failed.' }
 $manifest = Get-Content -LiteralPath (Join-Path $repo 'catalog/modules.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $html = Get-Content -LiteralPath (Join-Path $repo '.modpack-local/project-map.html') -Raw -Encoding UTF8
 foreach ($module in $manifest.modules) {
-    if (!(Test-Path -LiteralPath (Join-Path $repo "modules/$($module.id)/README.md"))) {
+    if (!(Test-Path -LiteralPath (Join-Path $repo "development/$($module.id)/README.md"))) {
         throw "Missing README: $($module.id)"
     }
     if (!$html.Contains('"id":"' + $module.id + '"')) { throw "Missing map entry: $($module.id)" }

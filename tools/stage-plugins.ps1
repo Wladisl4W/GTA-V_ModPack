@@ -12,19 +12,18 @@ if ($manifest.schemaVersion -ne 1) { throw 'Unsupported catalog schema.' }
 $expected = @{}
 foreach ($module in $manifest.modules) {
     foreach ($name in $module.sources) {
-        $relative = "$($module.id)/Code/$name"
+        $relative = $name
         if ($expected.ContainsKey($relative)) { throw "Duplicate source: $relative" }
-        $source = Join-Path $Repository "modules/$($module.id)/src/Code/$name"
+        $source = Join-Path $Repository "modules/$($module.codeDirectory)/$name"
         if (!(Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing source: $source" }
         $expected[$relative] = $source
     }
 }
-$actual = @(Get-ChildItem -LiteralPath (Join-Path $Repository 'modules') -Filter '*.cs' -File -Recurse |
-    Where-Object { $_.FullName -match '[\\/]src[\\/]Code[\\/]' })
+$actual = @(Get-ChildItem -LiteralPath (Join-Path $Repository 'modules/ReloaderPlugins/Plugins') -Filter '*.cs' -File -Recurse |
+    Where-Object { $_.FullName -match '[\\/]Code[\\/]' })
 if ($actual.Count -ne $expected.Count) { throw "Source count mismatch: $($actual.Count) vs $($expected.Count)" }
 foreach ($file in $actual) {
-    $relative = $file.FullName.Substring((Join-Path $Repository 'modules').Length + 1) -replace '[\\/]src[\\/]','/' -replace '\\','/'
-    if (!$expected.ContainsKey($relative)) { throw "Unlisted plugin source: $relative" }
+    if (@($expected.Values) -notcontains $file.FullName) { throw "Unlisted plugin source: $($file.FullName)" }
 }
 [IO.Directory]::CreateDirectory($Destination) | Out-Null
 foreach ($relative in $expected.Keys) {

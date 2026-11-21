@@ -14,4 +14,4 @@ dist/
 # Local game media: provenance and redistribution rights are not confirmed.
 /assets/models/
 # CI builds this DLL from source; keep local reference copies out of Git.
-/modules/Loader/assets/Reloader.dll
+/development/Loader/assets/Reloader.dll

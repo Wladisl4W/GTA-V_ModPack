@@ -52,7 +52,7 @@ jobs:
           "ModPackShvdnRef=$shvdn" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "ModPackLemonUIRef=$lemon" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Build and verify release archives
+      - name: Build and verify release archive
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -60,18 +60,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test-assets.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/test-install-release.ps1
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Publish verified archives
+      - name: Publish verified archive
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $releaseVersion = $env:RELEASE_TAG.TrimStart('v')
-          $archives = @(Get-ChildItem 'dist/releases' -Filter "*-$releaseVersion.zip" -File | Select-Object -ExpandProperty FullName)
-          if ($archives.Count -ne 5) { throw 'Expected installer, plugins, loader and two tool ZIP files.' }
+          $archive = "dist/releases/ModPack-$releaseVersion.zip"
+          if (!(Test-Path -LiteralPath $archive)) { throw "Missing release archive: $archive" }
           $notes = "docs/releases/$env:RELEASE_TAG.md"
           if (!(Test-Path -LiteralPath $notes)) { throw "Missing release notes: $notes" }
           $title = (Get-Content -LiteralPath $notes -TotalCount 1 -Encoding UTF8) -replace '^#\s*', ''
-          gh release create $env:RELEASE_TAG $archives --verify-tag --title $title --notes-file $notes
+          gh release create $env:RELEASE_TAG $archive --verify-tag --title $title --notes-file $notes
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

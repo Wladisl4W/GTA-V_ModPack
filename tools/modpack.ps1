@@ -27,17 +27,17 @@ $scripts = Join-Path $settings.GameDirectory 'scripts'
 $live = Join-Path $scripts 'ReloaderPlugins\Plugins'
 $ready = Join-Path $repo 'dist\ReloaderPlugins\Plugins'
 $source = Join-Path $repo 'dist\SourcePlugins'
-$watcherProject = Join-Path $repo 'modules\Crash\src\CrashWatcher.csproj'
-$watcherOutput = Join-Path $repo 'modules\Crash\src\bin\Release\net48\CrashWatcher.exe'
+$watcherProject = Join-Path $repo 'development/Crash\src\CrashWatcher.csproj'
+$watcherOutput = Join-Path $repo 'development/Crash\src\bin\Release\net48\CrashWatcher.exe'
 $watcherConfig = $watcherOutput + '.config'
-$dumpInstaller = Join-Path $repo 'modules\Crash\src\ConfigureCrashDumps.ps1'
-$dumpInstallerCommand = Join-Path $repo 'modules\Crash\src\InstallCrashDumps.cmd'
-$captureInstaller = Join-Path $repo 'modules\Crash\src\ConfigureCrashCapture.ps1'
-$captureInstallCommand = Join-Path $repo 'modules\Crash\src\InstallCrashCapture.cmd'
-$captureDisableCommand = Join-Path $repo 'modules\Crash\src\DisableCrashCapture.cmd'
-$silentInstaller = Join-Path $repo 'modules\Crash\src\ConfigureSilentExit.ps1'
-$silentInstallCommand = Join-Path $repo 'modules\Crash\src\InstallSilentExit.cmd'
-$silentDisableCommand = Join-Path $repo 'modules\Crash\src\DisableSilentExit.cmd'
+$dumpInstaller = Join-Path $repo 'development/Crash\src\ConfigureCrashDumps.ps1'
+$dumpInstallerCommand = Join-Path $repo 'development/Crash\src\InstallCrashDumps.cmd'
+$captureInstaller = Join-Path $repo 'development/Crash\src\ConfigureCrashCapture.ps1'
+$captureInstallCommand = Join-Path $repo 'development/Crash\src\InstallCrashCapture.cmd'
+$captureDisableCommand = Join-Path $repo 'development/Crash\src\DisableCrashCapture.cmd'
+$silentInstaller = Join-Path $repo 'development/Crash\src\ConfigureSilentExit.ps1'
+$silentInstallCommand = Join-Path $repo 'development/Crash\src\InstallSilentExit.cmd'
+$silentDisableCommand = Join-Path $repo 'development/Crash\src\DisableSilentExit.cmd'
 $shvdn = Join-Path $settings.GameDirectory 'ScriptHookVDotNet3.dll'
 $lemon = Join-Path $scripts 'LemonUI.SHVDN3.dll'
 if ($Mode -eq 'CrashDumps') {
@@ -82,7 +82,7 @@ if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $watcherOutput) -or !(Test-
     throw 'CrashWatcher build failed. No files copied.'
 }
 Write-Host "CrashWatcher built: $watcherOutput"
-Add-Type -Path (Join-Path $repo 'modules\Loader\src\PluginCompiler.cs') -ReferencedAssemblies System.Core,Microsoft.CSharp
+Add-Type -Path (Join-Path $repo 'development\Loader\src\PluginCompiler.cs') -ReferencedAssemblies System.Core,Microsoft.CSharp
 $fingerprint = ''
 $result = [PluginCompiler]::Compile($source,$scripts,$shvdn,$lemon,[ref]$fingerprint)
 foreach ($diagnostic in $result.Errors) { Write-Host $diagnostic.ToString() }
@@ -106,7 +106,7 @@ if ($Module) {
     $entry = @($manifest.modules | Where-Object { $_.id -eq $Module })
     if ($entry.Count -ne 1 -or !$entry[0].sources.Count) { throw "Unknown or non-plugin module: $Module" }
     foreach ($name in $entry[0].sources) {
-        $relative = if ($entry[0].codeDirectory) { Join-Path $entry[0].id (Join-Path 'Code' $name) } else { $name }
+        $relative = $name.Replace('/', '\')
         $selected[$relative] = $true
     }
 }
@@ -120,7 +120,8 @@ if (Test-Path -LiteralPath $renamePath) {
     foreach ($property in $renameCatalog.renames.PSObject.Properties) {
         $oldRelative = $property.Name.Replace('/', '\')
         $newRelative = ([string]$property.Value).Replace('/', '\')
-        if (!$expected.ContainsKey($newRelative) -or $expected.ContainsKey($oldRelative) -or
+        if (!$expected.ContainsKey($newRelative)) { continue }
+        if ($expected.ContainsKey($oldRelative) -or
             $renamedSources.ContainsKey($oldRelative)) { throw "Invalid source rename: $oldRelative" }
         $renamedSources[$oldRelative] = $newRelative
     }
@@ -177,7 +178,7 @@ $watcherArtifacts = @(
 foreach ($artifact in $(if ($Module) { @() } else { $watcherArtifacts })) {
     $artifactHash = Get-Sha256 $artifact.Source
     foreach ($destination in @($ready,$live)) {
-        $target = Join-Path $destination (Join-Path 'Crash\Tools' $artifact.Name)
+        $target = Join-Path $destination (Join-Path '_System\Diagnostics\Tools' $artifact.Name)
         if (!(Test-Path -LiteralPath $target) -or (Get-Sha256 $target) -ne $artifactHash) {
             $changes += [pscustomobject]@{Source=$artifact.Source;Target=$target;Hash=$artifactHash;Live=($destination -eq $live);Reload=$false}
         }
@@ -186,7 +187,7 @@ foreach ($artifact in $(if ($Module) { @() } else { $watcherArtifacts })) {
     }
 }
 if (!$changes.Count -and !$legacyMoves.Count) { Write-Host 'Already synchronized. No reload requested.'; return }
-$logPath = Join-Path $scripts 'ReloaderPlugins\Plugins\Loader\Data\Logs\Reloader.log'
+$logPath = Join-Path $scripts 'ReloaderPlugins\Plugins\_System\Diagnostics\Data\Loader\Logs\Reloader.log'
 $offset = if (Test-Path -LiteralPath $logPath) { (Get-Item -LiteralPath $logPath).Length } else { 0 }
 $lockPath = Join-Path $live '.deploy.lock'
 $deploymentLock = $null

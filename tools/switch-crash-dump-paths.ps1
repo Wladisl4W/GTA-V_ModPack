@@ -2,8 +2,9 @@
 param([Parameter(Mandatory=$true)][string]$ScriptsDirectory)
 $ErrorActionPreference = 'Stop'
 $scripts = [IO.Path]::GetFullPath($ScriptsDirectory)
-$old = Join-Path $scripts 'ReloaderPlugins\CrashLogger\CrashDumps'
-$newRoot = Join-Path $scripts 'ReloaderPlugins\Plugins\Crash\Data'
+$old = Join-Path $scripts 'ReloaderPlugins\Plugins\Crash\Data\CrashDumps'
+$older = Join-Path $scripts 'ReloaderPlugins\CrashLogger\CrashDumps'
+$newRoot = Join-Path $scripts 'ReloaderPlugins\Plugins\_System\Diagnostics\Data\Crash'
 $new = Join-Path $newRoot 'CrashDumps'
 $localKey = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\GTA5.exe'
 $silentKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SilentProcessExit\GTA5.exe'
@@ -18,7 +19,7 @@ if (!(New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole([Secur
 }
 $localBefore = (Get-ItemProperty -LiteralPath $localKey -ErrorAction Stop).DumpFolder
 $silentBefore = (Get-ItemProperty -LiteralPath $silentKey -ErrorAction Stop).LocalDumpFolder
-if ($localBefore -notin @($old,$new) -or $silentBefore -notin @((Join-Path $old 'SilentExit'),(Join-Path $new 'SilentExit'))) {
+if ($localBefore -notin @($old,$older,$new) -or $silentBefore -notin @((Join-Path $old 'SilentExit'),(Join-Path $older 'SilentExit'),(Join-Path $new 'SilentExit'))) {
     throw 'Existing registry paths differ from the expected ModPack paths; nothing changed.'
 }
 $snapshot = Join-Path $newRoot 'RegistryPathsBeforeMigration.json'

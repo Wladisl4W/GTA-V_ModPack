@@ -7,17 +7,19 @@
       "kind": "core",
       "key": "",
       "description": "Общие интерфейсы, управление, хранение данных и журнал ошибок.",
-      "codeDirectory": "Core/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "IGtaPlugin.cs",
-        "ControlSession.cs",
-        "CoreServices.cs",
-        "PluginStorage.cs",
-        "PluginLog.cs"
+        "_System/Shared/Code/IGtaPlugin.cs",
+        "_System/Shared/Code/ControlSession.cs",
+        "_System/Shared/Code/CoreServices.cs",
+        "_System/Shared/Code/MenuRegistry.cs",
+        "_System/Shared/Code/ModuleMenus.cs",
+        "_System/Shared/Code/PluginStorage.cs",
+        "_System/Shared/Code/PluginLog.cs"
       ],
       "data": [
-        "Plugins/Core/Data/Logs",
-        "Plugins/Newtonsoft.Json.dll"
+        "Plugins/_System/Shared/Data/Logs",
+        "Plugins/_System/Shared/Libraries/Newtonsoft.Json.dll"
       ]
     },
     {
@@ -28,8 +30,20 @@
       "description": "Компиляция и автоматическая перезагрузка плагинов.",
       "sources": [],
       "data": [
-        "Plugins/Loader/Data/Logs"
+        "Plugins/_System/Diagnostics/Data/Loader/Logs"
       ]
+    },
+    {
+      "id": "Hub",
+      "name": "Меню «Разное» и «Оптимизация»",
+      "kind": "plugin",
+      "key": "L, O",
+      "description": "Общие входы в независимые игровые режимы и работу с педами.",
+      "codeDirectory": "ReloaderPlugins/Plugins",
+      "sources": [
+        "_System/Navigation/Code/HubPlugin.cs"
+      ],
+      "data": []
     },
     {
       "id": "Catalog",
@@ -37,9 +51,9 @@
       "kind": "plugin",
       "key": "F5",
       "description": "Список установленных игровых модов.",
-      "codeDirectory": "Catalog/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "CatalogPlugin.cs"
+        "Catalog/Code/CatalogPlugin.cs"
       ],
       "data": []
     },
@@ -47,27 +61,27 @@
       "id": "Camera",
       "name": "Камера",
       "kind": "plugin",
-      "key": "T",
+      "key": "K",
       "description": "Пролётки, пути и следящая камера.",
-      "codeDirectory": "Camera/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "CameraPlugin.cs",
-        "CameraBase.cs",
-        "CameraInterpolator.cs",
-        "CameraService.cs",
-        "CameraData.cs",
-        "FollowCameraService.cs",
-        "CameraInput.cs",
-        "InputService.cs",
-        "MenuService.cs",
-        "CameraPath.cs",
-        "PositionSelector.cs",
-        "SaveService.cs",
-        "SplineCamera.cs"
+        "Camera/Code/CameraPlugin.cs",
+        "Camera/Code/CameraBase.cs",
+        "Camera/Code/CameraInterpolator.cs",
+        "Camera/Code/CameraService.cs",
+        "Camera/Code/CameraData.cs",
+        "Misc/Code/FollowCamera/FollowCameraService.cs",
+        "Camera/Code/CameraInput.cs",
+        "Camera/Code/InputService.cs",
+        "Camera/Code/MenuService.cs",
+        "Camera/Code/CameraPath.cs",
+        "Camera/Code/PositionSelector.cs",
+        "Camera/Code/SaveService.cs",
+        "Camera/Code/SplineCamera.cs"
       ],
       "data": [
         "Plugins/Camera/Data/Logs",
-        "Plugins/Camera/Data/Saves/Paths"
+        "Plugins/Camera/Data/Paths"
       ]
     },
     {
@@ -76,9 +90,9 @@
       "kind": "plugin",
       "key": "Mouse4",
       "description": "Замедление и управление камерой.",
-      "codeDirectory": "SlowMo/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "SlowMoPlugin.cs"
+        "SlowMo/Code/SlowMoPlugin.cs"
       ],
       "data": []
     },
@@ -86,16 +100,18 @@
       "id": "Paint",
       "name": "Машины и покраска",
       "kind": "plugin",
-      "key": "I",
+      "key": "I, T",
       "description": "Покраска и работа с машинами.",
-      "codeDirectory": "Paint/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "PaintPlugin.cs",
-        "PaintPlugin.MotorcyclePassengers.cs",
-        "PaintPlugin.Presets.cs"
+        "VehiclePaint/Code/PaintPlugin.cs",
+        "Templates/Code/PaintPlugin.MotorcyclePassengers.cs",
+        "Templates/Code/PaintPlugin.Presets.cs",
+        "Misc/Code/VehicleSwap/PaintPlugin.VehicleSwap.cs"
       ],
       "data": [
-        "Plugins/Paint/Data/Settings"
+        "Plugins/VehiclePaint/Data/Settings",
+        "Plugins/Templates/Data/Settings"
       ]
     },
     {
@@ -104,10 +120,10 @@
       "kind": "plugin",
       "key": "Y",
       "description": "Анимации выбранных персонажей.",
-      "codeDirectory": "Animations/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "AnimationsPlugin.cs",
-        "AnimationCatalog.cs"
+        "Animations/Code/AnimationsPlugin.cs",
+        "Animations/Code/AnimationCatalog.cs"
       ],
       "data": []
     },
@@ -117,9 +133,9 @@
       "kind": "plugin",
       "key": "L",
       "description": "Управление оружием и ударами.",
-      "codeDirectory": "Weapons/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "WeaponsPlugin.cs"
+        "Misc/Code/Weapons/WeaponsPlugin.cs"
       ],
       "data": []
     },
@@ -127,32 +143,32 @@
       "id": "Wildlife",
       "name": "Акула и крокодил",
       "kind": "plugin",
-      "key": "O",
+      "key": "L, Mouse5",
       "description": "Акула и крокодил.",
-      "codeDirectory": "Wildlife/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "WildlifePlugin.cs",
-        "SharkBiteController.cs",
-        "CrocodileHunter.cs"
+        "Misc/Code/Wildlife/WildlifePlugin.cs",
+        "Misc/Code/Wildlife/SharkBiteController.cs",
+        "Misc/Code/Wildlife/CrocodileHunter.cs"
       ],
       "data": [
-        "Plugins/Wildlife/Data/Settings",
-        "Plugins/Wildlife/Data/Logs"
+        "Plugins/Misc/Data/Wildlife/Settings",
+        "Plugins/Misc/Data/Wildlife/Logs"
       ]
     },
     {
       "id": "Streamer",
       "name": "Загрузка педов",
       "kind": "plugin",
-      "key": "U",
+      "key": "O",
       "description": "Стриминг персонажей Menyoo.",
-      "codeDirectory": "Streamer/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "StreamerPlugin.cs"
+        "Optimization/Code/Streamer/StreamerPlugin.cs"
       ],
       "data": [
-        "Plugins/Streamer/Data/Settings",
-        "Plugins/Streamer/Data/Logs"
+        "Plugins/Optimization/Data/Streamer/Settings",
+        "Plugins/Optimization/Data/Streamer/Logs"
       ]
     },
     {
@@ -161,9 +177,9 @@
       "kind": "plugin",
       "key": ";",
       "description": "Готовые конструкции в Object Spooner.",
-      "codeDirectory": "Prefabs/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "PrefabsPlugin.cs"
+        "Prefabs/Code/PrefabsPlugin.cs"
       ],
       "data": []
     },
@@ -171,29 +187,29 @@
       "id": "PedControl",
       "name": "Управление NPC",
       "kind": "plugin",
-      "key": "K",
+      "key": "O",
       "description": "Управление NPC.",
-      "codeDirectory": "PedControl/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "PedControlPlugin.cs"
+        "Optimization/Code/PedControl/PedControlPlugin.cs"
       ],
       "data": [
-        "Plugins/PedControl/Data/Logs"
+        "Plugins/Optimization/Data/PedControl/Logs"
       ]
     },
     {
       "id": "Cleanup",
       "name": "Очистка педов",
       "kind": "plugin",
-      "key": "H",
+      "key": "O",
       "description": "Удаление упавших персонажей.",
-      "codeDirectory": "Cleanup/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "CleanupPlugin.cs"
+        "Optimization/Code/Cleanup/CleanupPlugin.cs"
       ],
       "data": [
-        "Plugins/Cleanup/Data/Settings",
-        "Plugins/Cleanup/Data/Logs"
+        "Plugins/Optimization/Data/Cleanup/Settings",
+        "Plugins/Optimization/Data/Cleanup/Logs"
       ]
     },
     {
@@ -202,13 +218,13 @@
       "kind": "plugin",
       "key": "Ctrl+F10",
       "description": "Вспомогательная игровая диагностика.",
-      "codeDirectory": "Dev/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "DevPlugin.cs"
+        "_System/Diagnostics/Code/Dev/DevPlugin.cs"
       ],
       "data": [
-        "Plugins/Dev/Data/Settings",
-        "Plugins/Dev/Data/Logs"
+        "Plugins/_System/Diagnostics/Data/Dev/Settings",
+        "Plugins/_System/Diagnostics/Data/Dev/Logs"
       ]
     },
     {
@@ -217,12 +233,13 @@
       "kind": "plugin",
       "key": "",
       "description": "Захват и отчёты о сбоях.",
-      "codeDirectory": "Crash/src/Code",
+      "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "CrashPlugin.cs"
+        "_System/Diagnostics/Code/Crash/CrashPlugin.cs"
       ],
       "data": [
-        "Plugins/Crash/Data"
+        "Plugins/_System/Diagnostics/Data/Crash",
+        "Plugins/_System/Diagnostics/Tools"
       ]
     },
     {

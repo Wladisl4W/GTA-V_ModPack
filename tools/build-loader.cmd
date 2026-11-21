@@ -2,6 +2,8 @@
 setlocal
 call "%~dp0..\modpack.cmd" Check
 if errorlevel 1 exit /b 1
-dotnet build "%~dp0..\modules\Loader\src\Reloader.csproj" -c Release
+dotnet build "%~dp0..\development\Loader\src\Reloader.csproj" -c Release
 if errorlevel 1 exit /b 1
-echo Loader built under modules\Loader\src\bin\Release\net48.
+copy /Y "%~dp0..\development\Loader\src\bin\Release\net48\Reloader.dll" "%~dp0..\modules\Reloader.dll" >nul
+if errorlevel 1 exit /b 1
+echo Loader built and copied to modules\Reloader.dll.

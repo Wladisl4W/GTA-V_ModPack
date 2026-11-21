@@ -22,7 +22,7 @@ checked = [
 ]
 
 for module in modules:
-    readme = root / "modules" / module["id"] / "README.md"
+    readme = root / "development" / module["id"] / "README.md"
     if not readme.is_file():
         raise AssertionError(f"Missing README: {module['id']}")
     checked.append(readme)
@@ -35,13 +35,14 @@ for module in modules:
     if module["sources"] and module["sources"][0] not in body:
         raise AssertionError(f"Missing main source in {module['id']}")
     if module["kind"] in {"plugin", "tool"}:
-        link = f"../modules/{module['id']}/README.md"
+        link = f"../development/{module['id']}/README.md"
         if index.count(f"]({link})") != 1:
             raise AssertionError(f"Index link missing or duplicated: {module['id']}")
         if module["name"] not in index:
             raise AssertionError(f"Index name differs from catalog: {module['id']}")
 
-checked = list(dict.fromkeys(checked + list((root / "docs").rglob("*.md"))))
+checked = list(dict.fromkeys(checked + list((root / "docs").rglob("*.md")) +
+                             list((root / "modules").rglob("*.md"))))
 for document in checked:
     body = document.read_text(encoding="utf-8")
     for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", body):

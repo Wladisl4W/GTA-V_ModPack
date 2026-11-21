@@ -1,42 +1,21 @@
 # Данные и доставка ModPack
 
-Этот реестр отделяет исходники, поставку и файлы, возникающие во время игры. Пути ниже даны относительно `GTA V/scripts`, если не указан другой корень. `dist` находится в репозитории и создаётся сборкой; это не папка пользовательских данных.
+Пути в таблице даны относительно `GTA V/scripts/ReloaderPlugins/Plugins`. В репозитории папки `Data` не содержат пользовательских файлов. Исторические ключи (`ModdedCamera`, `RainbowPaint` и другие) сохраняются в коде для чтения старых настроек.
 
-## Игровые данные
-
-| Владелец | Текущие данные | Исторический ключ и прежнее место |
+| Игровое меню | Данные в установленной GTA | Прежнее место |
 | --- | --- | --- |
-| Camera | `ReloaderPlugins/Plugins/Camera/Data/Saves/Paths/*`, `Data/Logs/ModdedCamera.log` | `ModdedCamera`, прежде `ReloaderPlugins/ModdedCamera/Paths/*` и файл журнала в этой папке; ещё более старый каталог `ReloaderPlugins/Paths` |
-| Paint | `Plugins/Paint/Data/Settings/RainbowPaint{Settings,Exceptions,Presets,PassengerModels}.json` | `RainbowPaint`, прежняя одноимённая папка в `ReloaderPlugins` или его корень |
-| Wildlife | `Plugins/Wildlife/Data/Settings/SharkRiderSettings.json`, `Data/Logs/SharkRider.log` | `SharkRider` |
-| Cleanup | `Plugins/Cleanup/Data/Settings/RemoveDroppedPeds.json`, `Data/Logs/RemoveDroppedPeds.log` | `RemoveDroppedPeds` |
-| PedControl | `Plugins/PedControl/Data/Logs/FrozenDynamic.log` | `FrozenDynamic` |
-| Streamer | `Plugins/Streamer/Data/Settings/MenyooStreamer.ini`, `Data/Logs/MenyooStreamer.log` и `error.log` | `MenyooStreamer` |
-| Dev | `Plugins/Dev/Data/Settings/DevelopmentSettings.json`, `Data/Logs/Development.log` | `Development` |
-| Core | `Plugins/Core/Data/Logs/PluginErrors.log` и `StorageMigration.log` | `Logs` и старые файлы в корне `ReloaderPlugins` |
-| Loader | `Plugins/Loader/Data/Logs/Reloader.log`, `compile_errors.txt` | Загрузчик пишет непосредственно в эту папку; `Reloader.dll` находится в `scripts` |
-| Crash | `Plugins/Crash/Data` — контекст запуска, heartbeat, отчёты, дампы и runtime-копии; `Plugins/Crash/Tools` — поставляемый watcher и установщики | Старый `ReloaderPlugins/CrashLogger`; системные пути захвата дампов настраиваются отдельно |
+| Camera | `Camera/Data/Paths/*`, `Camera/Data/Logs/ModdedCamera.log` | `Camera/Data/Saves/Paths/*`, ещё раньше `ReloaderPlugins/ModdedCamera/Paths/*` |
+| Templates | `Templates/Data/Settings/RainbowPaintPresets.json`, `RainbowPaintPassengerModels.json` | `Paint/Data/Settings/*` |
+| VehiclePaint | `VehiclePaint/Data/Settings/RainbowPaintSettings.json`, `RainbowPaintExceptions.json` | `Paint/Data/Settings/*` |
+| Misc → Wildlife | `Misc/Data/Wildlife/Settings/SharkRiderSettings.json`, `Logs/SharkRider.log` | `Wildlife/Data/*` |
+| Optimization → Streamer | `Optimization/Data/Streamer/Settings/MenyooStreamer.ini`, `Logs/*` | `Streamer/Data/*` |
+| Optimization → Cleanup | `Optimization/Data/Cleanup/Settings/RemoveDroppedPeds.json`, `Logs/*` | `Cleanup/Data/*` |
+| Optimization → PedControl | `Optimization/Data/PedControl/Logs/FrozenDynamic.log` | `PedControl/Data/*` |
+| _System → Shared | `_System/Shared/Data/Logs/*` | `Core/Data/Logs/*` |
+| _System → Diagnostics | `_System/Diagnostics/Data/Loader/Logs/*`, `Data/Crash/*`, `Data/Dev/*` | `Loader/Data/*`, `Crash/Data/*`, `Dev/Data/*` |
 
-В таблице для строк Paint и ниже префикс `Plugins/` означает `ReloaderPlugins/Plugins/`. Резервные `.bak`, повреждённые `.corrupt-*` и предыдущие копии принадлежат тому же модулю. `PluginStorage` переносит семейство файлов при первом обращении; при отличии нового файла помещает старый в `Data/Legacy`. При ошибке перенос прекращается и текущий сеанс использует старый путь. Исторические ключи в исходниках сохранены именно для совместимости. Проверка ключей: `python tools/test-data-ownership.py`.
+Перед переносом сохранённых пролёток создаётся резервная копия. Новый и прежний наборы сверяются по относительным именам и SHA-256; прежний путь остаётся для отката до проверки в игре. Другие старые настройки могут оставаться в прежних папках как резервная копия. Наличие двух разных файлов с одним именем требует ручного разбора; не перезаписывайте пользовательские данные вслепую.
 
-Модули Catalog, SlowMo, Animations, Weapons и Prefabs не сохраняют собственные настройки. Animations **читает** `GTA V/menyooStuff/PedAnimList.txt` и `FavouriteAnims.xml`; Streamer читает карты Menyoo. Это внешние данные, переносить или менять их при обновлении ModPack нельзя.
+`modpack.cmd Check` проверяет код, `modpack.cmd Build` обновляет готовые файлы в `modules`, `tools/package-release.ps1` создаёт единый архив. Копирование его содержимого в `GTA V/scripts` заменяет одноимённые файлы, но не удаляет устаревшие `.cs`; список прежних путей приведён в [инструкции](INSTALL_RU.md). `Reloader.dll` заменяется только при закрытой GTA.
 
-## Отдельные программы и временные файлы
-
-- Ped Importer хранит журнал, настройки управления редактором и временные задания в `%LOCALAPPDATA%/ModPack/PedImporter`. Режим «Избранное Menyoo» изменяет `GTA V/menyooStuff/FavouritePeds.xml` только после явного нажатия кнопки; при замене создаётся резервная копия. Полный импорт отдельно управляет AddonPeds Editor по команде пользователя.
-- PedToProp хранит свою копию зависимостей Sollumz, рабочие файлы и журналы ошибок в `%LOCALAPPDATA%/ModPack/PedToProp`. Итог записывает в выбранный пользователем каталог. Исходные педы и GTA не меняет.
-- `modpack.local.json` содержит локальный путь игры и не попадает в Git или релиз. `.modpack-local` содержит локальную карту и резервные копии этапов переноса. Сборочные `bin`, `obj` и `dist` пересоздаются инструментами.
-- `ReloaderPlugins/Plugins/Newtonsoft.Json.dll` — общая поставляемая зависимость Core, не пользовательские данные. Копия в корне `scripts` относится к отдельной установке и командой `Update` не заменяется.
-
-## Доставка и откат
-
-1. Проверить `modpack.cmd Check` и профильные тесты, затем сравнить исходники с `dist` и игрой. `Update` синхронизирует игровые `.cs` и инструменты Crash, проверяет SHA-256 и отпечаток исходников. При ошибке копирования восстанавливает прежние байты; тайм-аут ожидания журнала означает, что доставка могла состояться, но перезагрузка не подтверждена.
-2. Для закрытой GTA применять `modpack.cmd Update -Offline`; при открытой игре использовать обычный `Update` и дождаться `Reload OK` в **новых** строках журнала. Если другая часть рабочего дерева не синхронизирована, обновлять конкретный модуль только после проверки полного набора изменений.
-3. `Reloader.dll` собирать отдельно, закрыть GTA, сохранить старый DLL и заменить его вручную с проверкой хеша. `Update` DLL не копирует. Откат загрузчика — вернуть сохранённый DLL при закрытой GTA вместе с совместимым набором исходников.
-4. Ped Importer и PedToProp собирать своими скриптами; они публикуются в `dist/Tools/<модуль>`. Закрыть программу перед заменой её EXE. Старую копию программы хранить для отката отдельно от `%LOCALAPPDATA%`.
-5. Релиз создаёт пять архивов: единый установщик для GTA, отдельно плагины и загрузчик, а также две программы. Проверка упаковки распаковывает их во временную папку и сравнивает хеши. Пользовательские `Data`, `%LOCALAPPDATA%`, карты Menyoo, AddonPeds и игровые архивы в них не включаются.
-
-При восстановлении старой версии данных не удалять текущие настройки. Сначала сделать отдельную копию; затем сверить SHA-256 резервной копии и восстановленного файла. Инструменты переноса и установки системных дампов запускать только по их отдельным инструкциям.
-
-Подробные команды находятся в [руководстве разработчика](DEVELOPMENT_RU.md), правила модулей — в [структуре проекта](STRUCTURE_RU.md).
-Собственные модели и изображения перечислены отдельно в [реестре ресурсов](ASSETS_RU.md); текущие пять архивов их не содержат.
+Готовые Ped Importer и PedToProp поставляются в `ReloaderPlugins/Tools`. Они не изменяют игровые файлы при установке. Menyoo, AddonPeds, карты и архивы GTA не входят в модпак. Системные пути дампов CrashWatcher настраиваются отдельно и не меняются от простого копирования папки.

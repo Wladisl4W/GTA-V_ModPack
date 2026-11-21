@@ -4,7 +4,7 @@ import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STORAGE = ROOT / "modules/Core/src/Code/PluginStorage.cs"
+STORAGE = ROOT / "modules/ReloaderPlugins/Plugins/_System/Shared/Code/PluginStorage.cs"
 ALIASES = {
     "ModdedCamera": "Camera",
     "RainbowPaint": "Paint",
@@ -15,6 +15,16 @@ ALIASES = {
     "Development": "Dev",
     "Logs": "Core",
 }
+CODE_PREFIXES = {
+    "ModdedCamera": ("Camera/Code/",),
+    "RainbowPaint": ("VehiclePaint/Code/", "Templates/Code/"),
+    "SharkRider": ("Misc/Code/Wildlife/",),
+    "RemoveDroppedPeds": ("Optimization/Code/Cleanup/",),
+    "FrozenDynamic": ("Optimization/Code/PedControl/",),
+    "MenyooStreamer": ("Optimization/Code/Streamer/",),
+    "Development": ("_System/Diagnostics/Code/Dev/", "_System/Shared/Code/"),
+    "Logs": ("_System/Shared/Code/",),
+}
 
 
 def check():
@@ -22,19 +32,17 @@ def check():
     actual = dict(re.findall(r'case "([^"]+)": return "([^"]+)";', source))
     assert actual == ALIASES, f"Storage aliases changed: {actual}"
     count = 0
-    for module in (ROOT / "modules").iterdir():
-        code = module / "src/Code"
-        if not code.is_dir():
+    plugins = ROOT / "modules/ReloaderPlugins/Plugins"
+    for file in plugins.rglob("*.cs"):
+        if "Code" not in file.relative_to(plugins).parts:
             continue
-        for file in code.glob("*.cs"):
-            text = file.read_text(encoding="utf-8-sig")
-            for owner, name in re.findall(r'PluginStorage\.FilePath\("([^"]+)",\s*"([^"]+)"\)', text):
-                assert owner in ALIASES, f"Unknown storage key: {file}: {owner}"
-                assert ALIASES[owner] == module.name or (module.name == "Core" and owner == "Development"), (
-                    f"Wrong owner: {file}: {owner} -> {ALIASES[owner]}"
-                )
-                assert Path(name).name == name and name, f"Nested storage name: {file}: {name}"
-                count += 1
+        relative = file.relative_to(plugins).as_posix()
+        text = file.read_text(encoding="utf-8-sig")
+        for owner, name in re.findall(r'PluginStorage\.FilePath\("([^"]+)",\s*"([^"]+)"\)', text):
+            assert owner in ALIASES, f"Unknown storage key: {file}: {owner}"
+            assert relative.startswith(CODE_PREFIXES[owner]), f"Wrong owner: {relative}: {owner}"
+            assert Path(name).name == name and name, f"Nested storage name: {file}: {name}"
+            count += 1
     assert count >= 15, f"Storage calls unexpectedly missing: {count}"
     print(f"Data ownership OK: {len(ALIASES)} aliases, {count} call sites.")
 

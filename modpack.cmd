@@ -1,4 +1,8 @@
 @echo off
+if /I "%~1"=="Build" (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\build-modules.ps1"
+  exit /b %errorlevel%
+)
 if /I "%~1"=="Map" goto map
 if /I "%~1"=="Update" if not "%~2"=="" goto maybeModule
 :default

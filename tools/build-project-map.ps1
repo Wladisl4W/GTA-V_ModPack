@@ -15,11 +15,11 @@ foreach ($module in $manifest.modules) {
     }
     $ids[$module.id] = $true
     $codeDirectory = if ($module.codeDirectory) { [string]$module.codeDirectory } else { '' }
-    if ($codeDirectory -and $codeDirectory -ne "$($module.id)/src/Code") {
+    if ($codeDirectory -and $codeDirectory -ne 'ReloaderPlugins/Plugins') {
         throw "Invalid code directory for $($module.id)"
     }
     foreach ($name in $module.sources) {
-        if ($name -notmatch '^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\.cs$' -or $sourceNames.ContainsKey($name)) {
+        if ($name -notmatch '^(?:[A-Za-z_][A-Za-z0-9_]*/)*[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\.cs$' -or $sourceNames.ContainsKey($name)) {
             throw "Invalid or duplicate source: $name"
         }
         $sourceNames[$name] = $true
@@ -30,18 +30,15 @@ foreach ($module in $manifest.modules) {
         $seen[$relative.Replace('/', '\')] = $module.id
     }
 }
-$allSources = @()
-foreach ($directory in Get-ChildItem -LiteralPath $sourceRoot -Directory) {
-    $code = Join-Path $directory.FullName 'src/Code'
-    if (Test-Path -LiteralPath $code) { $allSources += @(Get-ChildItem -LiteralPath $code -Filter '*.cs' -File) }
-}
+$allSources = @(Get-ChildItem -LiteralPath (Join-Path $sourceRoot 'ReloaderPlugins/Plugins') -Filter '*.cs' -File -Recurse |
+    Where-Object { $_.FullName -match '[\\/]Code[\\/]' })
 $unlisted = @($allSources | Where-Object {
     !$seen.ContainsKey($_.FullName.Substring($sourceRoot.Length + 1))
 } | Select-Object -ExpandProperty FullName)
 if ($unlisted.Count) { throw "Unlisted plugin sources: $($unlisted -join ', ')" }
 if ($Check) { Write-Host "Catalog OK: $($manifest.modules.Count) modules, $($seen.Count) plugin sources."; return }
 
-$moduleRoot = Join-Path $repo 'modules'
+$moduleRoot = Join-Path $repo 'development'
 foreach ($module in $manifest.modules) {
     $directory = Join-Path $moduleRoot $module.id
     [IO.Directory]::CreateDirectory($directory) | Out-Null
@@ -52,8 +49,8 @@ foreach ($module in $manifest.modules) {
             $relative = if ($module.codeDirectory) { "$($module.codeDirectory)/$_" } else { $_ }
             "- ``modules/$relative``"
         }) -join "`n"
-    } elseif ($module.kind -eq 'loader') { '- `modules/Loader/src`' }
-    else { "- ``modules/$($module.id)/src``" }
+    } elseif ($module.kind -eq 'loader') { '- `development/Loader/src`' }
+    else { "- ``development/$($module.id)/src``" }
     $dataLines = if ($module.data.Count) {
         @($module.data | ForEach-Object { "- ``scripts/ReloaderPlugins/$_``" }) -join "`n"
     } else { '- Постоянных данных в `ReloaderPlugins` нет.' }
@@ -113,7 +110,7 @@ foreach ($module in $manifest.modules) {
         $liveRoot = Join-Path $gameDirectory 'scripts/ReloaderPlugins/Plugins'
         $liveFiles = @($module.sources | ForEach-Object {
             $relative = if ($module.codeDirectory) { "$($module.codeDirectory)/$_" } else { $_ }
-            $path = Join-Path $liveRoot $relative
+            $path = Join-Path $liveRoot $_
             [pscustomobject]@{ name = $_; exists = (Test-Path -LiteralPath $path -PathType Leaf) }
         })
     }

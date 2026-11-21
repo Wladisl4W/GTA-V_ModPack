@@ -1,5 +1,14 @@
-﻿function Publish-ModPackTool {
+﻿function Get-ModPackHash([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { return [pscustomobject]@{Hash=([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','')} }
+        finally { $sha.Dispose() }
+    } finally { $stream.Dispose() }
+}
+function Publish-ModPackTool {
     param([hashtable]$Files, [string]$Destination)
+    $ErrorActionPreference = 'Stop'
     if (!$Files -or !$Destination) { throw 'Files and Destination are required.' }
     $stage = Join-Path ([IO.Path]::GetTempPath()) ('ModPackPublish-' + [Guid]::NewGuid().ToString('N'))
     $backups = @{}
@@ -12,8 +21,8 @@
             if (!(Test-Path -LiteralPath $source -PathType Leaf)) { throw "Build output missing: $source" }
             $staged = Join-Path $stage $name
             Copy-Item -LiteralPath $source -Destination $staged
-            if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
-                (Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash) { throw "Staging hash mismatch: $name" }
+            if ((Get-ModPackHash -Path $source).Hash -ne
+                (Get-ModPackHash -Path $staged).Hash) { throw "Staging hash mismatch: $name" }
             $target = Join-Path $Destination $name
             if (Test-Path -LiteralPath $target -PathType Leaf) {
                 try {
@@ -29,8 +38,8 @@
             $target = Join-Path $Destination $name
             $touched += $target
             Copy-Item -LiteralPath (Join-Path $stage $name) -Destination $target -Force
-            if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ne
-                (Get-FileHash -LiteralPath (Join-Path $stage $name) -Algorithm SHA256).Hash) {
+            if ((Get-ModPackHash -Path $target).Hash -ne
+                (Get-ModPackHash -Path (Join-Path $stage $name)).Hash) {
                 throw "Delivery hash mismatch: $name"
             }
         }

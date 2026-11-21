@@ -4,25 +4,26 @@
 
 | Мод | Клавиша | Для чего | Инструкция |
 | --- | --- | --- | --- |
-| Каталог модов | F5 | Посмотреть состав пакета и клавиши | [Catalog](../modules/Catalog/README.md) |
-| Камера | T | Записать, сохранить и смешать пролётки; включить следование | [Camera](../modules/Camera/README.md) |
-| Замедление | Mouse4 | Замедлить момент и управлять камерой удержанием | [SlowMo](../modules/SlowMo/README.md) |
-| Машины и покраска | I | Покраска, обмен моделей, пассажиры и пресеты | [Paint](../modules/Paint/README.md) |
-| Анимации педов | Y | Назначить клип нескольким педам в Object Spooner | [Animations](../modules/Animations/README.md) |
-| Оружие и физика | L | Оружие, удары машиной и скользкое падение | [Weapons](../modules/Weapons/README.md) |
-| Акула и крокодил | O; Mouse5 для вызова крокодила | Катание, атака акулы и вызов крокодила | [Wildlife](../modules/Wildlife/README.md) |
-| Загрузка педов | U | Сканирование и потоковая загрузка педов | [Streamer](../modules/Streamer/README.md) |
-| Заготовки | ; | Стенка из мячей и горка в Object Spooner | [Prefabs](../modules/Prefabs/README.md) |
-| Управление NPC | K | Заморозить и разморозить пешеходов | [PedControl](../modules/PedControl/README.md) |
-| Очистка педов | H | Удалять педов, упавших в воду | [Cleanup](../modules/Cleanup/README.md) |
-| Разработка | Ctrl+F10 | Панель состояний и диагностика | [Dev](../modules/Dev/README.md) |
-| Отчёты о сбоях | Без клавиши | Фоновый наблюдатель GTA и отчёты | [Crash](../modules/Crash/README.md) |
+| Каталог модов | F5 | Посмотреть состав пакета и клавиши | [Catalog](../development/Catalog/README.md) |
+| Камера | K | Записать, сохранить и смешать пути камеры | [Camera](../development/Camera/README.md) |
+| Замедление | Mouse4 | Замедлить момент и управлять камерой удержанием | [SlowMo](../development/SlowMo/README.md) |
+| Машины и покраска | I — выбранная машина; T — пресеты; L — обмен моделей | Личная покраска, пресеты массовых действий и обмен моделей | [Paint](../development/Paint/README.md) |
+| Анимации педов | Y | Назначить клип нескольким педам в Object Spooner | [Animations](../development/Animations/README.md) |
+| Меню «Разное» и «Оптимизация» | L — разное; O — оптимизация | Оружие, физика, животные, следование камеры и обмен моделей; загрузка и очистка педов, управление NPC | [Hub](../development/Hub/README.md) |
+| Оружие и физика | L → Оружие и физика | Оружие и скользкое падение | [Weapons](../development/Weapons/README.md) |
+| Акула и крокодил | L → Животные; Mouse5 для вызова крокодила | Катание, атака акулы и вызов крокодила | [Wildlife](../development/Wildlife/README.md) |
+| Загрузка педов | O → Загрузка педов | Управление стримингом педов | [Streamer](../development/Streamer/README.md) |
+| Очистка педов | O → Очистка педов | Удаление брошенных педов | [Cleanup](../development/Cleanup/README.md) |
+| Управление NPC | O → Управление NPC | Действия с педами | [PedControl](../development/PedControl/README.md) |
+| Заготовки | ; | Стенка из мячей и горка в Object Spooner | [Prefabs](../development/Prefabs/README.md) |
+| Разработка | Ctrl+F10 | Панель состояний и диагностика | [Dev](../development/Dev/README.md) |
+| Отчёты о сбоях | Без клавиши | Фоновый наблюдатель GTA и отчёты | [Crash](../development/Crash/README.md) |
 
 ## Отдельные программы
 
 | Программа | Для чего | Инструкция |
 | --- | --- | --- |
-| Импорт педов | Массовое добавление установленных педов в избранное Menyoo; отдельный режим полного импорта | [PedImporter](../modules/PedImporter/README.md) |
-| Конвертер педа в статичный проп | Конвертация четырёх файлов педа в статичный проп | [PedToProp](../modules/PedToProp/README.md) |
+| Импорт педов | Массовое добавление установленных педов в избранное Menyoo; отдельный режим полного импорта | [PedImporter](../development/PedImporter/README.md) |
+| Конвертер педа в статичный проп | Конвертация четырёх файлов педа в статичный проп | [PedToProp](../development/PedToProp/README.md) |
 
 Menyoo и AddonPeds остаются внешними инструментами. Если мод зависит от Object Spooner, модели животного или файлов Menyoo, это указано в его инструкции. Для поиска по исходникам запустите `modpack.cmd Map` и откройте локальную карту проекта.
