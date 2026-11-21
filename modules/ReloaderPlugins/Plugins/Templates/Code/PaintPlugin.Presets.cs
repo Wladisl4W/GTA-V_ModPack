@@ -57,6 +57,7 @@ namespace ModPack.Paint
         private readonly List<PaintPreset> _presets = new List<PaintPreset>();
         private NativeMenu _presetsMenu, _presetDetailMenu, _presetEditMenu, _presetPaintMenu, _presetColorsMenu;
         private NativeMenu _presetModelsMenu, _presetPassengerModelsMenu, _presetTextureModelsMenu, _presetDeleteMenu;
+        private NativeMenu _presetClearListMenu, _clearListParent;
         private NativeMenu _presetWeatherMenu, _presetCloudMenu;
         private string _previewCloudName;
         private string _cloudBeforePreview;
@@ -95,6 +96,7 @@ namespace ModPack.Paint
             _presetWeatherMenu = new NativeMenu("Погода", "Варианты для случайного выбора");
             _presetCloudMenu = new NativeMenu("Облака", "Варианты для случайного выбора");
             _presetDeleteMenu = new NativeMenu("Удалить пресет?", "Подтверждение");
+            _presetClearListMenu = new NativeMenu("Очистить список?", "Подтверждение");
             _typingBackdrop = new ScaledRectangle(new System.Drawing.PointF(0, 0), new System.Drawing.SizeF(1280, 720));
             _typingBackdrop.Color = System.Drawing.Color.FromArgb(145, 0, 0, 0);
             _typingPanel = new ScaledRectangle(new System.Drawing.PointF(365, 235), new System.Drawing.SizeF(550, 245));
@@ -105,7 +107,8 @@ namespace ModPack.Paint
                 "Enter — сохранить   Esc — отмена   Delete — очистить", 0.29f);
             foreach (NativeMenu menu in new[] { _presetsMenu, _presetDetailMenu, _presetEditMenu,
                 _presetPaintMenu, _presetColorsMenu, _presetModelsMenu, _presetPassengerModelsMenu,
-                _presetTextureModelsMenu, _presetWeatherMenu, _presetCloudMenu, _presetDeleteMenu }) _pool.Add(menu);
+                _presetTextureModelsMenu, _presetWeatherMenu, _presetCloudMenu, _presetDeleteMenu,
+                _presetClearListMenu }) _pool.Add(menu);
             _presetDetailMenu.Closed += (s, e) => ReturnToPresetMenu(_presetsMenu);
             _presetEditMenu.Closed += (s, e) => ReturnToPresetMenu(_presetDetailMenu);
             _presetPaintMenu.Closed += (s, e) => ReturnToPresetMenu(_presetEditMenu);
@@ -120,10 +123,14 @@ namespace ModPack.Paint
             _presetCloudMenu.SelectedIndexChanged += (s, e) => PreviewSelectedCloud();
             _presetCloudMenu.Closed += (s, e) =>
             {
-                RestoreCloudPreview();
+                if (!_closingMenus) RestoreCloudPreview();
                 ReturnToPresetMenu(_presetEditMenu);
             };
             _presetDeleteMenu.Closed += (s, e) => ReturnToPresetMenu(_presetDetailMenu);
+            _presetClearListMenu.Closed += (s, e) =>
+            {
+                if (_clearListParent != null) ReturnToPresetMenu(_clearListParent);
+            };
             RefreshPresetsMenu();
         }
 
@@ -323,7 +330,14 @@ namespace ModPack.Paint
 
         private void OpenPreset(PaintPreset preset)
         {
-            _selectedPreset = preset;
+            // Menu entries can outlive the preset object replaced by CommitPresetEdit.
+            // Always open the current saved instance instead of the captured old one.
+            _selectedPreset = _presets.Find(value => value.Id == preset.Id);
+            if (_selectedPreset == null)
+            {
+                RefreshPresetsMenu();
+                return;
+            }
             RefreshPresetDetail();
             ShowMenu(_presetsMenu, _presetDetailMenu);
         }
@@ -490,6 +504,13 @@ namespace ModPack.Paint
         private void OpenPresetColors(bool primary)
         {
             _editingPrimaryColors = primary;
+            RefreshPresetColors();
+            ShowMenu(_presetPaintMenu, _presetColorsMenu);
+        }
+
+        private void RefreshPresetColors()
+        {
+            bool primary = _editingPrimaryColors;
             _presetColorsMenu.Name = primary ? "Основные цвета" : "Вторичные цвета";
             _presetColorsMenu.Clear();
             List<string> list = primary ? _draftPreset.PrimaryColors : _draftPreset.SecondaryColors;
@@ -506,7 +527,7 @@ namespace ModPack.Paint
                 };
                 _presetColorsMenu.Add(item);
             }
-            ShowMenu(_presetPaintMenu, _presetColorsMenu);
+            AddClearPresetList(_presetColorsMenu, list, RefreshPresetColors);
         }
 
         private void OpenPresetModels(bool doors)
@@ -552,6 +573,7 @@ namespace ModPack.Paint
                 };
                 _presetModelsMenu.Add(remove);
             }
+            AddClearPresetList(_presetModelsMenu, list, RefreshPresetModels);
         }
 
         private void OpenPresetPassengerModels()
@@ -567,6 +589,19 @@ namespace ModPack.Paint
         }
 
         private void OpenPresetChoices(bool weather)
+        {
+            NativeMenu menu = weather ? _presetWeatherMenu : _presetCloudMenu;
+            RefreshPresetChoices(weather);
+            ShowMenu(_presetEditMenu, menu);
+            if (!weather)
+            {
+                _cloudBeforePreview = _lastPresetCloudName;
+                _cloudPreviewActive = true;
+                PreviewSelectedCloud();
+            }
+        }
+
+        private void RefreshPresetChoices(bool weather)
         {
             NativeMenu menu = weather ? _presetWeatherMenu : _presetCloudMenu;
             menu.Clear();
@@ -586,13 +621,7 @@ namespace ModPack.Paint
                 };
                 menu.Add(item);
             }
-            ShowMenu(_presetEditMenu, menu);
-            if (!weather)
-            {
-                _cloudBeforePreview = _lastPresetCloudName;
-                _cloudPreviewActive = true;
-                PreviewSelectedCloud();
-            }
+            AddClearPresetList(menu, selected, () => RefreshPresetChoices(weather));
         }
 
         private void PreviewSelectedCloud()
@@ -669,6 +698,7 @@ namespace ModPack.Paint
                 };
                 _presetTextureModelsMenu.Add(remove);
             }
+            AddClearPresetList(_presetTextureModelsMenu, _draftPreset.TextureModels, RefreshPresetTextureModels);
         }
 
         private Prop GetAimedTextureProp()
@@ -732,6 +762,34 @@ namespace ModPack.Paint
                 };
                 _presetPassengerModelsMenu.Add(remove);
             }
+            AddClearPresetList(_presetPassengerModelsMenu, _draftPreset.PassengerModels, RefreshPresetPassengerModels);
+        }
+
+        private void AddClearPresetList<T>(NativeMenu menu, List<T> list, Action refresh)
+        {
+            var clear = new NativeItem("~r~Очистить весь список", "Откроется подтверждение");
+            clear.Activated += (s, e) =>
+            {
+                _clearListParent = menu;
+                _presetClearListMenu.Name = "Очистить " + menu.Name + "?";
+                _presetClearListMenu.Clear();
+                var no = new NativeItem("Нет", "Вернуться без изменений");
+                no.Activated += (sender, args) => ShowMenu(_presetClearListMenu, menu);
+                _presetClearListMenu.Add(no);
+                var yes = new NativeItem("~r~Да, очистить", "Удалить все элементы этого списка");
+                yes.Activated += (sender, args) =>
+                {
+                    var previous = new List<T>(list);
+                    list.Clear();
+                    if (!CommitPresetEdit()) list.AddRange(previous);
+                    refresh();
+                    ShowMenu(_presetClearListMenu, menu);
+                };
+                _presetClearListMenu.Add(yes);
+                _presetClearListMenu.SelectedIndex = 0;
+                ShowMenu(menu, _presetClearListMenu);
+            };
+            menu.Add(clear);
         }
 
         private void OpenPresetText(bool name)
@@ -841,6 +899,7 @@ namespace ModPack.Paint
             _presetTyping = false;
             _presetTextReturnPending = true;
             RefreshPresetEditor();
+            _presetMenuDismissed = false;
             _presetEditMenu.Visible = true;
         }
 
@@ -871,7 +930,8 @@ namespace ModPack.Paint
             return _presetsMenu != null && (_presetsMenu.Visible || _presetDetailMenu.Visible ||
                 _presetEditMenu.Visible || _presetPaintMenu.Visible || _presetColorsMenu.Visible || _presetModelsMenu.Visible ||
                 _presetPassengerModelsMenu.Visible || _presetTextureModelsMenu.Visible ||
-                _presetWeatherMenu.Visible || _presetCloudMenu.Visible || _presetDeleteMenu.Visible);
+                _presetWeatherMenu.Visible || _presetCloudMenu.Visible || _presetDeleteMenu.Visible ||
+                _presetClearListMenu.Visible);
         }
 
         private void ReturnToPresetMenu(NativeMenu parent)
@@ -885,6 +945,8 @@ namespace ModPack.Paint
             if (_presetsMenu == null) return;
             _presetMenuDismissed = true;
             RestoreCloudPreview();
+            _presetClearListMenu.Visible = false;
+            _clearListParent = null;
             _presetDeleteMenu.Visible = false;
             _presetModelsMenu.Visible = false;
             _presetPassengerModelsMenu.Visible = false;
