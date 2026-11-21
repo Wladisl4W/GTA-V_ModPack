@@ -7,13 +7,23 @@
     <RootNamespace>Reloader</RootNamespace>
     <FileVersion>2.1.0.0</FileVersion>
   </PropertyGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(GITHUB_ACTIONS)' != 'true'">
     <Reference Include="ScriptHookVDotNet3">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookVDotNet3.dll</HintPath>
     </Reference>
     <Reference Include="LemonUI.SHVDN3">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\scripts\LemonUI.SHVDN3.dll</HintPath>
     </Reference>
+  </ItemGroup>
+  <ItemGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <Reference Include="ScriptHookVDotNet3">
+      <HintPath>$(ModPackShvdnRef)</HintPath>
+    </Reference>
+    <Reference Include="LemonUI.SHVDN3">
+      <HintPath>$(ModPackLemonUIRef)</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="Microsoft.CSharp" />

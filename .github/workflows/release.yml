@@ -32,6 +32,26 @@ jobs:
           python tools/test-data-ownership.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Prepare pinned loader build references
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $refs = Join-Path $env:RUNNER_TEMP 'modpack-loader-refs'
+          New-Item -ItemType Directory -Path $refs -Force | Out-Null
+          $shvdnZip = Join-Path $refs 'ScriptHookVDotNet.zip'
+          Invoke-WebRequest 'https://github.com/scripthookvdotnet/scripthookvdotnet-nightly/releases/download/v3.7.0-nightly.106/ScriptHookVDotNet-v3.7.0-nightly.106.zip' -OutFile $shvdnZip
+          if ((Get-FileHash $shvdnZip -Algorithm SHA256).Hash -ne 'C8433215F890E9138636DC65F8C0658B29F6D444D8B96B0BAB9FCF72BE664E6B') { throw 'ScriptHookVDotNet archive hash mismatch.' }
+          $lemonZip = Join-Path $refs 'LemonUI.zip'
+          Invoke-WebRequest 'https://api.nuget.org/v3-flatcontainer/lemonui.shvdn3/2.2.0/lemonui.shvdn3.2.2.0.nupkg' -OutFile $lemonZip
+          if ((Get-FileHash $lemonZip -Algorithm SHA256).Hash -ne 'AB9488022C5E36B7D923C12C1ADBC03BA2C7E95A2DF96A90E1DC98340AA85C2B') { throw 'LemonUI archive hash mismatch.' }
+          Expand-Archive -LiteralPath $shvdnZip -DestinationPath (Join-Path $refs 'shvdn')
+          Expand-Archive -LiteralPath $lemonZip -DestinationPath (Join-Path $refs 'lemon')
+          $shvdn = Join-Path $refs 'shvdn/ScriptHookVDotNet3.dll'
+          $lemon = Join-Path $refs 'lemon/lib/net48/LemonUI.SHVDN3.dll'
+          if (!(Test-Path $shvdn) -or !(Test-Path $lemon)) { throw 'Loader build references missing from archives.' }
+          "ModPackShvdnRef=$shvdn" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ModPackLemonUIRef=$lemon" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Build and verify release archives
         shell: pwsh
         run: |
