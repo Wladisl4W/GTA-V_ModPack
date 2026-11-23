@@ -12,9 +12,9 @@
 | Меню «Разное» и «Оптимизация» | L — разное; O — оптимизация | Оружие, физика, животные, следование камеры и обмен моделей; загрузка и очистка педов, управление NPC | [Hub](../development/Hub/README.md) |
 | Оружие и физика | L → Оружие и физика | Оружие и скользкое падение | [Weapons](../development/Weapons/README.md) |
 | Акула и крокодил | L → Животные; Mouse5 для вызова крокодила | Катание, атака акулы и вызов крокодила | [Wildlife](../development/Wildlife/README.md) |
-| Загрузка педов | O → Загрузка педов | Управление стримингом педов | [Streamer](../development/Streamer/README.md) |
-| Очистка педов | O → Очистка педов | Удаление брошенных педов | [Cleanup](../development/Cleanup/README.md) |
-| Управление NPC | O → Управление NPC | Действия с педами | [PedControl](../development/PedControl/README.md) |
+| Стриминг педов | O → Стриминг педов | Включение потока и настройки загрузки | [Streamer](../development/Streamer/README.md) |
+| Удаление упавших педов | O → Удаление упавших педов | Галочка удаления и настройки сканирования | [Cleanup](../development/Cleanup/README.md) |
+| Заморозка/Разморозка | O → Заморозка/Разморозка | Мгновенные команды для загруженных NPC | [PedControl](../development/PedControl/README.md) |
 | Заготовки | ; | Стенка из мячей и горка в Object Spooner | [Prefabs](../development/Prefabs/README.md) |
 | Разработка | Ctrl+F10 | Панель состояний и диагностика | [Dev](../development/Dev/README.md) |
 | Отчёты о сбоях | Без клавиши | Фоновый наблюдатель GTA и отчёты | [Crash](../development/Crash/README.md) |

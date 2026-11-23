@@ -1267,7 +1267,7 @@ namespace ModPack.Wildlife
             try
             {
                 string line = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + message;
-                File.AppendAllText(
+                ModPack.Core.BoundedLog.Append(
                     ModPack.Core.PluginStorage.FilePath("SharkRider", "SharkRider.log"),
                     line + Environment.NewLine);
             }

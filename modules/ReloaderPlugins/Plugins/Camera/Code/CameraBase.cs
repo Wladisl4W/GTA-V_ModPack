@@ -119,7 +119,7 @@ namespace ModPack.Camera
                 {
                     lock (_lockObj)
                     {
-                        File.AppendAllLines(LogFile, linesToFlush);
+                        ModPack.Core.BoundedLog.Append(LogFile, string.Join(Environment.NewLine, linesToFlush) + Environment.NewLine);
                     }
                 }
             }

@@ -29,6 +29,7 @@ namespace ModPack.Core
                 case "RemoveDroppedPeds": return Path.Combine("Optimization", "Data", "Cleanup");
                 case "FrozenDynamic": return Path.Combine("Optimization", "Data", "PedControl");
                 case "MenyooStreamer": return Path.Combine("Optimization", "Data", "Streamer");
+                case "Prefabs": return Path.Combine("Prefabs", "Data");
                 case "Development": return Path.Combine("_System", "Diagnostics", "Data", "Dev");
                 case "Logs": return Path.Combine("_System", "Shared", "Data");
                 default: return null;
@@ -45,6 +46,7 @@ namespace ModPack.Core
                 case "RemoveDroppedPeds": return "Cleanup";
                 case "FrozenDynamic": return "PedControl";
                 case "MenyooStreamer": return "Streamer";
+                case "Prefabs": return "Prefabs";
                 case "Development": return "Dev";
                 case "Logs": return "Core";
                 default: return null;
@@ -259,7 +261,7 @@ namespace ModPack.Core
             {
                 string directory = Path.Combine(root, "Plugins", "_System", "Shared", "Data", "Logs");
                 Directory.CreateDirectory(directory);
-                File.AppendAllText(Path.Combine(directory, "StorageMigration.log"), DateTime.Now.ToString("o") + " " + ex + Environment.NewLine);
+                ModPack.Core.BoundedLog.Append(Path.Combine(directory, "StorageMigration.log"), DateTime.Now.ToString("o") + " " + ex + Environment.NewLine);
             }
             catch { System.Diagnostics.Trace.WriteLine(ex); }
         }

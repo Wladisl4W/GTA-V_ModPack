@@ -933,7 +933,7 @@ namespace ModPack.Wildlife
             DevelopmentDiagnostics.Event("Crocodile", message);
             try
             {
-                File.AppendAllText(PluginStorage.FilePath("SharkRider", "SharkRider.log"),
+                ModPack.Core.BoundedLog.Append(PluginStorage.FilePath("SharkRider", "SharkRider.log"),
                     "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] Crocodile: " + message + Environment.NewLine);
             }
             catch { }

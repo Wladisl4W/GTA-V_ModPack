@@ -110,10 +110,10 @@ namespace ModPack.PedControl
         {
             try
             {
-                _menu = new NativeMenu("Управление NPC", "Пешеходы в мире");
+                _menu = new NativeMenu("Заморозка/Разморозка", "Пешеходы в мире");
 
-                _freezeItem = new NativeItem("Заморозить NPC", "Остановить всех пешеходов на месте");
-                _unfreezeItem = new NativeItem("Разморозить NPC", "Вернуть NPC к обычному поведению");
+                _freezeItem = new NativeItem("Заморозить педов", "Сразу заморозить всех загруженных педов, кроме игрока и прикреплённых");
+                _unfreezeItem = new NativeItem("Разморозить педов", "Сразу разморозить всех загруженных педов, кроме игрока и прикреплённых");
 
                 _menu.Add(_freezeItem);
                 _menu.Add(_unfreezeItem);
@@ -123,7 +123,7 @@ namespace ModPack.PedControl
             }
             catch (Exception ex)
             {
-                try { System.IO.File.AppendAllText(
+                try { ModPack.Core.BoundedLog.Append(
                     ModPack.Core.PluginStorage.FilePath("FrozenDynamic", "FrozenDynamic.log"),
                     "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] Ошибка конструктора: " + ex.Message + "\n"); }
                 catch { }
@@ -178,7 +178,7 @@ namespace ModPack.PedControl
             {
                 Log("FrozenDynamic выгружается, размораживаем NPC...");
                 if (_pool != null) _pool.HideAll();
-                UnfreezeAllPeds();
+                SetPedFreeze(false, true);
                 _isFrozen = false;
             }
             catch (Exception ex)
@@ -191,18 +191,11 @@ namespace ModPack.PedControl
         {
             try
             {
-                if (_isFrozen)
-                {
-                    ShowNotification("~y~NPC уже заморожены!");
-                    return;
-                }
-
-                int count = FreezeAllPeds();
+                int count = SetPedFreeze(true, false);
                 _isFrozen = true;
                 _lastMaintainMs = NowMs();
-
-                Log("Заморожено NPC: " + count + " (сохранено анимаций: " + _pedAnimStates.Count + ")");
-                ShowNotification("~g~Заморожено NPC: " + count);
+                Log("Заморозка применена к " + count + " педам");
+                GTA.UI.Screen.ShowSubtitle("~g~Заморозка применена: " + count, 2500);
             }
             catch (Exception ex)
             {
@@ -214,22 +207,46 @@ namespace ModPack.PedControl
         {
             try
             {
-                if (!_isFrozen)
-                {
-                    ShowNotification("~y~NPC уже разморожены!");
-                    return;
-                }
-
-                int count = UnfreezeAllPeds();
+                int count = SetPedFreeze(false, false);
                 _isFrozen = false;
-
-                Log("Разморожено NPC: " + count);
-                ShowNotification("~g~Разморожено NPC: " + count);
+                Log("Разморозка применена к " + count + " педам");
+                GTA.UI.Screen.ShowSubtitle("~g~Разморозка применена: " + count, 2500);
             }
             catch (Exception ex)
             {
                 Log("OnUnfreezeActivated: " + ex.Message);
             }
+        }
+
+        private int SetPedFreeze(bool frozen, bool trackedOnly)
+        {
+            int count = 0;
+            Ped player = Game.Player.Character;
+            if (player == null || !player.Exists()) return 0;
+            Ped[] allPeds = World.GetAllPeds();
+            if (allPeds == null) return 0;
+            foreach (Ped ped in allPeds)
+            {
+                try
+                {
+                    if (ped == null || !ped.Exists() || ped.Handle == player.Handle ||
+                        Function.Call<bool>(Hash.IS_ENTITY_ATTACHED, ped.Handle) ||
+                        (trackedOnly && !_frozenPeds.Contains(ped.Handle))) continue;
+                    ped.IsPositionFrozen = frozen;
+                    if (frozen) _frozenPeds.Add(ped.Handle);
+                    else _frozenPeds.Remove(ped.Handle);
+                    count++;
+                }
+                catch (Exception ex) { Log("Не удалось изменить педа " + (ped == null ? 0 : ped.Handle) + ": " + ex.Message); }
+            }
+            if (!frozen)
+            {
+                _frozenPeds.Clear();
+                _pedAnimStates.Clear();
+                _pendingRestores.Clear();
+                _pendingRestoreStart.Clear();
+            }
+            return count;
         }
 
         /// <summary>
@@ -582,6 +599,11 @@ namespace ModPack.PedControl
                         _frozenPeds.Remove(handle);
                         _pedAnimStates.Remove(handle);
                     }
+                    else if (Function.Call<bool>(Hash.IS_ENTITY_ATTACHED, ped.Handle))
+                    {
+                        ped.IsPositionFrozen = false;
+                        _frozenPeds.Remove(handle);
+                    }
                     else
                     {
                         // Просто убеждаемся что позиция всё ещё заморожена
@@ -647,7 +669,7 @@ namespace ModPack.PedControl
             try
             {
                 string line = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + message;
-                File.AppendAllText(
+                ModPack.Core.BoundedLog.Append(
                     ModPack.Core.PluginStorage.FilePath("FrozenDynamic", "FrozenDynamic.log"),
                     line + Environment.NewLine);
             }

@@ -6,6 +6,61 @@ using System.Text;
 
 namespace ModPack.Core
 {
+    internal static class BoundedLog
+    {
+        internal const int MaxBytes = 5 * 1024 * 1024;
+        private const int RetainedBytes = 4 * 1024 * 1024;
+        private static readonly object Sync = new object();
+
+        public static void Append(string path, string text)
+        {
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(text)) return;
+            byte[] entry = new UTF8Encoding(false).GetBytes(text);
+            if (entry.Length > MaxBytes)
+            {
+                // Keep the end of a pathological entry, including its final newline.
+                int offset = entry.Length - RetainedBytes;
+                while (offset < entry.Length && (entry[offset] & 0xC0) == 0x80) offset++;
+                byte[] tail = new byte[entry.Length - offset];
+                Buffer.BlockCopy(entry, offset, tail, 0, tail.Length);
+                entry = tail;
+            }
+            lock (Sync)
+            {
+                string directory = Path.GetDirectoryName(Path.GetFullPath(path));
+                Directory.CreateDirectory(directory);
+                using (var stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read))
+                {
+                    if (stream.Length + entry.Length > MaxBytes)
+                    {
+                        int count = (int)Math.Min(stream.Length, Math.Max(0, RetainedBytes - entry.Length));
+                        byte[] tail = new byte[count];
+                        stream.Position = stream.Length - count;
+                        int read = 0;
+                        while (read < count)
+                        {
+                            int next = stream.Read(tail, read, count - read);
+                            if (next == 0) break;
+                            read += next;
+                        }
+                        int start = 0;
+                        if (stream.Length > count)
+                        {
+                            // Drop the first partial line and keep UTF-8 text intact.
+                            while (start < read && tail[start] != (byte)'\n') start++;
+                            if (start < read) start++;
+                        }
+                        stream.Position = 0;
+                        stream.Write(tail, start, read - start);
+                        stream.SetLength(read - start);
+                    }
+                    stream.Position = stream.Length;
+                    stream.Write(entry, 0, entry.Length);
+                }
+            }
+        }
+    }
+
     internal static class CrashDiagnostics
     {
         private static readonly object Sync = new object();
@@ -19,7 +74,7 @@ namespace ModPack.Core
             try
             {
                 string line = DateTime.UtcNow.ToString("O") + " EVENT " + source + ": " + message;
-                lock (Sync) File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
+                BoundedLog.Append(path, line + Environment.NewLine);
             }
             catch { }
         }
@@ -155,16 +210,7 @@ namespace ModPack.Core
         }
         public static void Append(string path, string line, long limit)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(line + Environment.NewLine);
-            if (bytes.Length > limit) return;
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-            if (File.Exists(path) && new FileInfo(path).Length + bytes.Length > limit)
-            {
-                if (File.Exists(path + ".previous")) File.Delete(path + ".previous");
-                File.Move(path, path + ".previous");
-            }
-            using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
-                stream.Write(bytes, 0, bytes.Length);
+            BoundedLog.Append(path, line + Environment.NewLine);
         }
     }
 

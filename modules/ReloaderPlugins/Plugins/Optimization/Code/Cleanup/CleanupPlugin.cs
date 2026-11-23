@@ -23,6 +23,8 @@ namespace ModPack.Cleanup
         // LemonUI
         private readonly ObjectPool _pool = new ObjectPool();
         private NativeMenu _mainMenu;
+        private NativeMenu _settingsMenu;
+        private bool _suppressSettingsReturn;
         private NativeCheckboxItem _enableCheckbox;
         private NativeListItem<int> _radiusList;
         private NativeListItem<string> _intervalList;
@@ -86,7 +88,8 @@ namespace ModPack.Cleanup
             _lastSaveGameTime = Game.GameTime;
 
             // Создание меню
-            _mainMenu = new NativeMenu("Очистка педов", "Педы, упавшие в воду");
+            _mainMenu = new NativeMenu("Удаление упавших педов", "Педы, упавшие в воду");
+            _settingsMenu = new NativeMenu("Настройки удаления", "Радиус и частота сканирования");
 
             // Checkbox — вкл/выкл мод
             _enableCheckbox = new NativeCheckboxItem(
@@ -117,12 +120,25 @@ namespace ModPack.Cleanup
 
             // Добавление элементов в меню
             _mainMenu.Add(_enableCheckbox);
-            _mainMenu.Add(_radiusList);
-            _mainMenu.Add(_intervalList);
+            var settingsItem = new NativeItem("~b~Настройки", "Радиус и частота сканирования");
+            _mainMenu.Add(settingsItem);
+            _settingsMenu.Add(_radiusList);
+            _settingsMenu.Add(_intervalList);
+            settingsItem.Activated += (s, e) =>
+            {
+                _settingsMenu.Visible = true;
+                _mainMenu.Visible = false;
+            };
+            _settingsMenu.Closed += (s, e) =>
+            {
+                if (!_suppressSettingsReturn && !_mainMenu.Visible) _mainMenu.Visible = true;
+            };
 
             // Добавление меню в пул
             _pool.Add(_mainMenu);
+            _pool.Add(_settingsMenu);
             MenuRegistry.Register("Cleanup", _mainMenu);
+            MenuRegistry.Register("CleanupSettings", _settingsMenu);
 
             // Обработчики изменений (только помечаем dirty, сохраняем отложенно)
             _enableCheckbox.CheckboxChanged += (s, e) =>
@@ -165,7 +181,7 @@ namespace ModPack.Cleanup
 
             // Автосканирование если мод включен. В меню и на паузе не сканируем —
             // незачем тратить нативы, когда игрок не в мире
-            if (_modEnabled && !_mainMenu.Visible && !Game.IsPaused &&
+            if (_modEnabled && !_mainMenu.Visible && !_settingsMenu.Visible && !Game.IsPaused &&
                 HasElapsed(_lastScanGameTime, _scanIntervalMs))
             {
                 ScanAndRemoveUnderwaterPeds();
@@ -178,6 +194,9 @@ namespace ModPack.Cleanup
         public void OnAbort()
         {
             MenuRegistry.Unregister("Cleanup", _mainMenu);
+            MenuRegistry.Unregister("CleanupSettings", _settingsMenu);
+            _suppressSettingsReturn = true;
+            if (_settingsMenu != null) _settingsMenu.Visible = false;
             // Сохраняем настройки при завершении мода
             if (_settingsDirty)
             {
@@ -353,7 +372,7 @@ namespace ModPack.Cleanup
                     {
                         Directory.CreateDirectory(directory);
                     }
-                    File.AppendAllText(LogPath, formatted + Environment.NewLine);
+                    ModPack.Core.BoundedLog.Append(LogPath, formatted + Environment.NewLine);
                 }
             }
             catch

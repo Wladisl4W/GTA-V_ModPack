@@ -12,7 +12,7 @@ using ModPack.Core;
 
 namespace ModPack.Prefabs
 {
-public sealed class PrefabsPlugin : IGtaPlugin
+public sealed partial class PrefabsPlugin : IGtaPlugin
 {
     private const int BallHash = unchecked((int)0xC00C3530);
     private const int Columns = 10;
@@ -65,6 +65,7 @@ public sealed class PrefabsPlugin : IGtaPlugin
 
     public void OnStart()
     {
+        Current = this;
         _placeKeyWasDown = Game.IsKeyPressed(Keys.Oem1);
         _enterWasDown = Game.IsKeyPressed(Keys.Return);
         _menu = new NativeMenu(ModPack.Core.ModuleMenus.Prefabs.Title, "Object Spooner");
@@ -76,13 +77,17 @@ public sealed class PrefabsPlugin : IGtaPlugin
             _preview = true;
             _previewStartedAt = Game.GameTime;
             _menu.Visible = false;
-            GTA.UI.Screen.ShowSubtitle("~b~Наведи стенку. ~w~Enter или ; — разместить, Backspace — отмена.", 6000);
+            GTA.UI.Screen.ShowSubtitle(CapturingPreset
+                ? "~b~Наведи стенку. ~w~Enter — запомнить место, Backspace — отмена."
+                : "~b~Наведи стенку. ~w~Enter или ; — разместить, Backspace — отмена.", 6000);
         };
         _menu.Add(wall);
         var rampStart = new NativeItem("Поставить горку", "Наведи на верхнюю точку; синяя точка — начало, красная — конец.");
         rampStart.Activated += (s, e) => BeginRampSelection();
         _menu.Add(rampStart);
+        _menu.Closed += (s, e) => { if (CapturingPreset && !_preview && !_rampSelecting) CancelPresetPlacement(); };
         _pool.Add(_menu);
+        InitializePrefabStreaming();
     }
 
     public void OnTick()
@@ -91,6 +96,13 @@ public sealed class PrefabsPlugin : IGtaPlugin
         {
             ReleaseNextBall();
             UpdateRampCleanup();
+            UpdatePrefabStreaming();
+            if (_presetMenuPending && Game.GameTime - _presetMenuRequestedAt >= 200 &&
+                !Game.IsKeyPressed(Keys.Return))
+            {
+                _presetMenuPending = false;
+                _menu.Visible = true;
+            }
             _pool.Process();
             if (_menu != null && _menu.Visible && !IsSpoonerActive()) _menu.Visible = false;
             if (_rampSelecting)
@@ -113,7 +125,7 @@ public sealed class PrefabsPlugin : IGtaPlugin
             _enterWasDown = enterDown;
             if (confirm && (uint)(Game.GameTime - _previewStartedAt) >= 250u)
             {
-                if (_hasPlacement) SpawnWall();
+                if (_hasPlacement) ConfirmWallPlacement();
                 else GTA.UI.Screen.ShowSubtitle("~y~Наведи прицел на поверхность и дождись загрузки мяча.", 2500);
             }
             if (!_preview) return;
@@ -190,6 +202,7 @@ public sealed class PrefabsPlugin : IGtaPlugin
             _rampPreviewPoints = null;
             Function.Call(Hash.SET_MODEL_AS_NO_LONGER_NEEDED,
                 unchecked((int)StringHash.AtStringHash(RampModelName)));
+            if (CapturingPreset) CancelPresetPlacement();
             return;
         }
         if (_rampSelecting)
@@ -201,13 +214,13 @@ public sealed class PrefabsPlugin : IGtaPlugin
         }
         if (key == Keys.Return && _preview)
         {
-            if ((uint)(Game.GameTime - _previewStartedAt) >= 250u && _hasPlacement) SpawnWall();
+            if ((uint)(Game.GameTime - _previewStartedAt) >= 250u && _hasPlacement) ConfirmWallPlacement();
             return;
         }
         if (key != Keys.Oem1) return;
         if (_preview)
         {
-            if ((uint)(Game.GameTime - _previewStartedAt) >= 250u && _hasPlacement) SpawnWall();
+            if ((uint)(Game.GameTime - _previewStartedAt) >= 250u && _hasPlacement) ConfirmWallPlacement();
             return;
         }
         if (!IsSpoonerActive()) return;
@@ -251,6 +264,7 @@ public sealed class PrefabsPlugin : IGtaPlugin
                 Function.Call(Hash.SET_ENTITY_DYNAMIC, handle, true);
             }
             _pendingRelease.AddRange(created);
+            RememberBallWall(created);
             _releaseIndex = 0;
             _releaseStartTime = Game.GameTime + 150;
             _preview = false;
@@ -274,6 +288,19 @@ public sealed class PrefabsPlugin : IGtaPlugin
         }
     }
 
+    private void ConfirmWallPlacement()
+    {
+        if (!CapturingPreset) { SpawnWall(); return; }
+        var placement = new PrefabPlacement
+        {
+            Kind = "Balls", X = _placement.X, Y = _placement.Y, Z = _placement.Z,
+            DirectionX = _right.X, DirectionY = _right.Y,
+            Spacing = _spacing, Radius = _radius
+        };
+        Function.Call(Hash.SET_MODEL_AS_NO_LONGER_NEEDED, BallHash);
+        CompletePresetPlacement(placement);
+    }
+
     private void BeginRampSelection()
     {
         if (!IsSpoonerActive()) return;
@@ -294,7 +321,9 @@ public sealed class PrefabsPlugin : IGtaPlugin
         _placeKeyWasDown = Game.IsKeyPressed(Keys.Oem1);
         _enterWasDown = Game.IsKeyPressed(Keys.Return);
         _menu.Visible = false;
-        GTA.UI.Screen.ShowSubtitle("~b~Наведи на верх горки. ~w~Enter или ; — разместить, Backspace — отмена.", 5000);
+        GTA.UI.Screen.ShowSubtitle(CapturingPreset
+            ? "~b~Наведи на верх горки. ~w~Enter — запомнить место, Backspace — отмена."
+            : "~b~Наведи на верх горки. ~w~Enter или ; — разместить, Backspace — отмена.", 5000);
     }
 
     private void UpdateRampSelection()
@@ -305,6 +334,7 @@ public sealed class PrefabsPlugin : IGtaPlugin
             _rampPreviewPoints = null;
             Function.Call(Hash.SET_MODEL_AS_NO_LONGER_NEEDED,
                 unchecked((int)StringHash.AtStringHash(RampModelName)));
+            if (CapturingPreset) CancelPresetPlacement();
             return;
         }
         GTA.Camera camera = ScriptCameraDirector.RenderingCam;
@@ -367,6 +397,19 @@ public sealed class PrefabsPlugin : IGtaPlugin
             return;
         }
         _rampSelecting = false;
+        if (CapturingPreset)
+        {
+            var placement = new PrefabPlacement
+            {
+                Kind = "Ramp", X = _rampStart.X, Y = _rampStart.Y, Z = _rampStart.Z,
+                DirectionX = _rampDirection.X, DirectionY = _rampDirection.Y
+            };
+            _rampPreviewPoints = null;
+            Function.Call(Hash.SET_MODEL_AS_NO_LONGER_NEEDED,
+                unchecked((int)StringHash.AtStringHash(RampModelName)));
+            CompletePresetPlacement(placement);
+            return;
+        }
         SpawnRamp();
     }
 
@@ -425,6 +468,7 @@ public sealed class PrefabsPlugin : IGtaPlugin
             }
             _rampPieces.Clear();
             _rampPieces.AddRange(created);
+            RememberRamp(created, points, _rampPreviewTangents, bankAngles, _rampAlongX);
             _rampTouched = new bool[created.Count];
             _rampDeleteAt = new int[created.Count];
             _rampPiecePositions = points;
@@ -772,6 +816,11 @@ public sealed class PrefabsPlugin : IGtaPlugin
 
     public void OnAbort()
     {
+        if (ReferenceEquals(Current, this)) Current = null;
+        if (CapturingPreset) CancelPresetPlacement(false);
+        if (_streamMenu != null) MenuRegistry.Unregister("PrefabStreamer", _streamMenu);
+        if (_streamSettingsMenu != null) MenuRegistry.Unregister("PrefabStreamerSettings", _streamSettingsMenu);
+        StopPrefabStreaming();
         _rampSelecting = false;
         _rampPreviewPoints = null;
         _rampTouched = null;
@@ -796,6 +845,7 @@ public sealed class PrefabsPlugin : IGtaPlugin
         _preview = false;
         _hasPlacement = false;
         Function.Call(Hash.SET_MODEL_AS_NO_LONGER_NEEDED, BallHash);
+        if (CapturingPreset) CancelPresetPlacement();
     }
 }
 }

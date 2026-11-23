@@ -579,7 +579,7 @@ namespace ModPack.Camera.Services
 
                 NodeDuration = path.DefaultDuration;
                 CurrentFov = path.Fov;
-                CurrentSpeed = path.Speed;
+                // Playback speed is a user preference, independent of the saved path.
                 ApplyCameraSettings();
 
                 Logger.Info("CameraService: Path loaded with " + nodes.Count + " nodes");

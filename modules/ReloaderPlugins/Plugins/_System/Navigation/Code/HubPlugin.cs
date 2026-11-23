@@ -18,14 +18,15 @@ namespace ModPack.Hub
         public void OnStart()
         {
             _modes = new NativeMenu(ModuleMenus.Misc.Title, "Игровые функции");
-            _optimization = new NativeMenu(ModuleMenus.Optimization.Title, "Педы в мире");
+            _optimization = new NativeMenu(ModuleMenus.Optimization.Title, "Стриминг и управление миром");
             Add(_modes, "Оружие и физика", "Weapons");
             Add(_modes, "Животные", "Wildlife");
             Add(_modes, "Следование камеры", "CameraFollow");
             Add(_modes, "Обмен моделей машин", "VehicleSwap");
-            Add(_optimization, "Загрузка педов", "Streamer");
-            Add(_optimization, "Очистка педов", "Cleanup");
-            Add(_optimization, "Управление NPC", "PedControl");
+            Add(_optimization, "Стриминг педов", "Streamer");
+            Add(_optimization, "Стриминг префабов", "PrefabStreamer");
+            Add(_optimization, "Удаление упавших педов", "Cleanup");
+            Add(_optimization, "Заморозка/Разморозка", "PedControl");
             _pool.Add(_modes);
             _pool.Add(_optimization);
         }
@@ -58,14 +59,29 @@ namespace ModPack.Hub
         private void ChildClosed(object sender, EventArgs args)
         {
             NativeMenu child = sender as NativeMenu;
-            if (child != null) child.Closed -= ChildClosed;
             if (_activeChild != child) return;
+            if (NestedMenuVisible(child)) return;
+            if (child != null) child.Closed -= ChildClosed;
             _activeChild = null;
             if (!_switching)
             {
                 if (_activeParent != null) ScheduleShow(_activeParent);
             }
             _activeParent = null;
+        }
+
+        private static NativeMenu NestedMenu(NativeMenu child)
+        {
+            if (child == MenuRegistry.Find("Streamer")) return MenuRegistry.Find("StreamerSettings");
+            if (child == MenuRegistry.Find("PrefabStreamer")) return MenuRegistry.Find("PrefabStreamerSettings");
+            if (child == MenuRegistry.Find("Cleanup")) return MenuRegistry.Find("CleanupSettings");
+            return null;
+        }
+
+        private static bool NestedMenuVisible(NativeMenu child)
+        {
+            NativeMenu nested = NestedMenu(child);
+            return nested != null && nested.Visible;
         }
 
         private void ScheduleShow(NativeMenu menu)
@@ -109,6 +125,8 @@ namespace ModPack.Hub
                 NativeMenu child = _activeChild;
                 _activeChild = null;
                 child.Closed -= ChildClosed;
+                NativeMenu nested = NestedMenu(child);
+                if (nested != null) nested.Visible = false;
                 child.Visible = false;
                 _activeParent = null;
             }
@@ -124,6 +142,8 @@ namespace ModPack.Hub
             if (_activeChild != null)
             {
                 _activeChild.Closed -= ChildClosed;
+                NativeMenu nested = NestedMenu(_activeChild);
+                if (nested != null) nested.Visible = false;
                 _activeChild.Visible = false;
                 _activeChild = null;
                 _activeParent = null;

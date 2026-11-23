@@ -158,7 +158,7 @@
     },
     {
       "id": "Streamer",
-      "name": "Загрузка педов",
+      "name": "Стриминг педов",
       "kind": "plugin",
       "key": "O",
       "description": "Стриминг персонажей Menyoo.",
@@ -179,13 +179,16 @@
       "description": "Готовые конструкции в Object Spooner.",
       "codeDirectory": "ReloaderPlugins/Plugins",
       "sources": [
-        "Prefabs/Code/PrefabsPlugin.cs"
+        "Prefabs/Code/PrefabsPlugin.cs",
+        "Prefabs/Code/PrefabStreaming.cs"
       ],
-      "data": []
+      "data": [
+        "Plugins/Prefabs/Data/Settings"
+      ]
     },
     {
       "id": "PedControl",
-      "name": "Управление NPC",
+      "name": "Заморозка/Разморозка",
       "kind": "plugin",
       "key": "O",
       "description": "Управление NPC.",
@@ -199,7 +202,7 @@
     },
     {
       "id": "Cleanup",
-      "name": "Очистка педов",
+      "name": "Удаление упавших педов",
       "kind": "plugin",
       "key": "O",
       "description": "Удаление упавших персонажей.",

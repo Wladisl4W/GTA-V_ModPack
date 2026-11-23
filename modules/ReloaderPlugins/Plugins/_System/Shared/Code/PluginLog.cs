@@ -47,7 +47,7 @@ namespace ModPack.Core
                 var dir = Path.GetDirectoryName(LogFile);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
-                File.AppendAllText(LogFile,
+                ModPack.Core.BoundedLog.Append(LogFile,
                     "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + line + "\n");
             }
             catch

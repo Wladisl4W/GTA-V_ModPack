@@ -14,6 +14,7 @@ using LemonUI.Elements;
 using LemonUI.Menus;
 
 using ModPack.Core;
+using ModPack.Prefabs;
 
 namespace ModPack.Paint
 {
@@ -51,6 +52,8 @@ namespace ModPack.Paint
             public bool ApplyPlate { get; set; }
             public bool OpenDoors { get; set; }
             public bool SeatMotorcyclePassengers { get; set; }
+            public bool SpawnPrefabs { get; set; }
+            public List<PrefabPlacement> Prefabs { get; set; }
         }
 
         private readonly string _presetsPath = ModPack.Core.PluginStorage.FilePath("RainbowPaint", "RainbowPaintPresets.json");
@@ -59,6 +62,7 @@ namespace ModPack.Paint
         private NativeMenu _presetModelsMenu, _presetPassengerModelsMenu, _presetTextureModelsMenu, _presetDeleteMenu;
         private NativeMenu _presetClearListMenu, _clearListParent;
         private NativeMenu _presetWeatherMenu, _presetCloudMenu;
+        private NativeMenu _presetPrefabsMenu, _presetPrefabDeleteMenu;
         private string _previewCloudName;
         private string _cloudBeforePreview;
         private string _lastPresetCloudName;
@@ -95,6 +99,8 @@ namespace ModPack.Paint
             _presetTextureModelsMenu = new NativeMenu("Текстуры объектов", "Модели объектов пресета");
             _presetWeatherMenu = new NativeMenu("Погода", "Варианты для случайного выбора");
             _presetCloudMenu = new NativeMenu("Облака", "Варианты для случайного выбора");
+            _presetPrefabsMenu = new NativeMenu("Префабы пресета", "В порядке добавления");
+            _presetPrefabDeleteMenu = new NativeMenu("Удалить префаб?", "Подтверждение");
             _presetDeleteMenu = new NativeMenu("Удалить пресет?", "Подтверждение");
             _presetClearListMenu = new NativeMenu("Очистить список?", "Подтверждение");
             _typingBackdrop = new ScaledRectangle(new System.Drawing.PointF(0, 0), new System.Drawing.SizeF(1280, 720));
@@ -108,7 +114,7 @@ namespace ModPack.Paint
             foreach (NativeMenu menu in new[] { _presetsMenu, _presetDetailMenu, _presetEditMenu,
                 _presetPaintMenu, _presetColorsMenu, _presetModelsMenu, _presetPassengerModelsMenu,
                 _presetTextureModelsMenu, _presetWeatherMenu, _presetCloudMenu, _presetDeleteMenu,
-                _presetClearListMenu }) _pool.Add(menu);
+                _presetClearListMenu, _presetPrefabsMenu, _presetPrefabDeleteMenu }) _pool.Add(menu);
             _presetDetailMenu.Closed += (s, e) => ReturnToPresetMenu(_presetsMenu);
             _presetEditMenu.Closed += (s, e) => ReturnToPresetMenu(_presetDetailMenu);
             _presetPaintMenu.Closed += (s, e) => ReturnToPresetMenu(_presetEditMenu);
@@ -127,6 +133,8 @@ namespace ModPack.Paint
                 ReturnToPresetMenu(_presetEditMenu);
             };
             _presetDeleteMenu.Closed += (s, e) => ReturnToPresetMenu(_presetDetailMenu);
+            _presetPrefabsMenu.Closed += (s, e) => ReturnToPresetMenu(_presetEditMenu);
+            _presetPrefabDeleteMenu.Closed += (s, e) => ReturnToPresetMenu(_presetPrefabsMenu);
             _presetClearListMenu.Closed += (s, e) =>
             {
                 if (_clearListParent != null) ReturnToPresetMenu(_clearListParent);
@@ -190,7 +198,28 @@ namespace ModPack.Paint
             preset.PaintTypeIndex = Math.Max(0, Math.Min(PaintTypeNames.Length - 1, preset.PaintTypeIndex));
             preset.SpeedIndex = Math.Max(0, Math.Min(CycleSeconds.Length - 1, preset.SpeedIndex));
             preset.PlateText = NormalizePlateText(preset.PlateText);
+            preset.Prefabs = NormalizePrefabPlacements(preset.Prefabs);
             return preset;
+        }
+
+        private static List<PrefabPlacement> NormalizePrefabPlacements(List<PrefabPlacement> placements)
+        {
+            var result = new List<PrefabPlacement>();
+            if (placements == null) return result;
+            foreach (PrefabPlacement placement in placements)
+            {
+                if (placement == null || result.Count >= 50 ||
+                    (placement.Kind != "Balls" && placement.Kind != "Ramp")) continue;
+                if (float.IsNaN(placement.X) || float.IsNaN(placement.Y) || float.IsNaN(placement.Z) ||
+                    float.IsInfinity(placement.X) || float.IsInfinity(placement.Y) || float.IsInfinity(placement.Z)) continue;
+                if (placement.Kind == "Balls" && (placement.Spacing <= 0f || placement.Radius <= 0f)) continue;
+                if (float.IsNaN(placement.DirectionX) || float.IsNaN(placement.DirectionY) ||
+                    float.IsInfinity(placement.DirectionX) || float.IsInfinity(placement.DirectionY) ||
+                    float.IsNaN(placement.Spacing) || float.IsInfinity(placement.Spacing) ||
+                    float.IsNaN(placement.Radius) || float.IsInfinity(placement.Radius)) continue;
+                result.Add(placement.Copy());
+            }
+            return result;
         }
 
         private List<string> NormalizePresetColors(List<string> names)
@@ -242,7 +271,9 @@ namespace ModPack.Paint
                 RandomTextures = source.RandomTextures, RandomWeather = source.RandomWeather,
                 RandomClouds = source.RandomClouds, ApplyPlate = source.ApplyPlate,
                 OpenDoors = source.OpenDoors,
-                SeatMotorcyclePassengers = source.SeatMotorcyclePassengers
+                SeatMotorcyclePassengers = source.SeatMotorcyclePassengers,
+                SpawnPrefabs = source.SpawnPrefabs,
+                Prefabs = source.Prefabs.ConvertAll(item => item.Copy())
             };
         }
 
@@ -279,6 +310,17 @@ namespace ModPack.Paint
             for (int n = 1; ; n++)
             {
                 string name = "Пресет " + n;
+                if (!PresetNameExists(name, null)) return name;
+            }
+        }
+
+        private string NextPresetCopyName(string sourceName)
+        {
+            for (int number = 1; ; number++)
+            {
+                string suffix = number == 1 ? " копия" : " копия " + number;
+                string prefix = sourceName.Substring(0, Math.Min(sourceName.Length, Math.Max(0, 24 - suffix.Length))).TrimEnd();
+                string name = prefix + suffix;
                 if (!PresetNameExists(name, null)) return name;
             }
         }
@@ -362,6 +404,24 @@ namespace ModPack.Paint
             };
             _presetDetailMenu.Add(edit);
             if (isDefault) return;
+            var duplicate = new NativeItem("~b~Дублировать пресет", "Создать независимую копию со всеми настройками");
+            duplicate.Activated += (s, e) =>
+            {
+                PaintPreset copy = ClonePreset(_selectedPreset);
+                copy.Id = Guid.NewGuid().ToString("N");
+                copy.Name = NextPresetCopyName(_selectedPreset.Name);
+                _presets.Add(copy);
+                if (!SavePresets())
+                {
+                    _presets.Remove(copy);
+                    return;
+                }
+                RefreshPresetsMenu();
+                _selectedPreset = copy;
+                RefreshPresetDetail();
+                GTA.UI.Screen.ShowSubtitle("~g~Создан пресет: " + copy.Name, 2500);
+            };
+            _presetDetailMenu.Add(duplicate);
             var delete = new NativeItem("~r~Удалить пресет");
             delete.Activated += (s, e) =>
             {
@@ -414,6 +474,9 @@ namespace ModPack.Paint
             AddPresetToggle("Посадить пассажиров на мотоциклы", _draftPreset.SeatMotorcyclePassengers,
                 value => _draftPreset.SeatMotorcyclePassengers = value);
             AddEditorLink("~b~  Модели пассажиров мотоциклов", OpenPresetPassengerModels);
+            AddPresetToggle("Спавнить префабы", _draftPreset.SpawnPrefabs,
+                value => _draftPreset.SpawnPrefabs = value);
+            AddEditorLink("~b~  Задать префабы", OpenPresetPrefabs);
             if (_draftPreset.Id != DefaultPresetId)
                 AddEditorLink("~b~Имя: " + _draftPreset.Name, () => OpenPresetText(true));
         }
@@ -445,6 +508,99 @@ namespace ModPack.Paint
             AddMenuLink(_presetPaintMenu, "~b~Основные цвета", () => OpenPresetColors(true));
             AddMenuLink(_presetPaintMenu, "~b~Вторичные цвета", () => OpenPresetColors(false));
             AddMenuLink(_presetPaintMenu, "~b~Исключения рандомайзера", () => OpenPresetModels(false));
+        }
+
+        private void OpenPresetPrefabs()
+        {
+            RefreshPresetPrefabs();
+            ShowMenu(_presetEditMenu, _presetPrefabsMenu);
+        }
+
+        private void RefreshPresetPrefabs()
+        {
+            _presetPrefabsMenu.Clear();
+            var add = new NativeItem("~g~Поставить новый", "Запомнить место через меню заготовок; объект пока не появится");
+            add.Activated += (s, e) =>
+            {
+                PrefabsPlugin prefabs = PrefabsPlugin.Current;
+                if (prefabs == null)
+                {
+                    GTA.UI.Screen.ShowSubtitle("~r~Мод заготовок не загружен.", 3000);
+                    return;
+                }
+                string presetId = _draftPreset.Id;
+                if (!prefabs.BeginPresetPlacement(placement =>
+                {
+                    if (_draftPreset == null || _draftPreset.Id != presetId)
+                    {
+                        _presetMenuDismissed = false;
+                        return;
+                    }
+                    _draftPreset.Prefabs.Add(placement);
+                    CommitPresetEdit();
+                    RefreshPresetPrefabs();
+                    _presetMenuDismissed = false;
+                    _presetPrefabsMenu.Visible = true;
+                }, () =>
+                {
+                    _presetMenuDismissed = false;
+                    _presetPrefabsMenu.Visible = true;
+                })) return;
+                _presetMenuDismissed = true;
+                _presetPrefabsMenu.Visible = false;
+            };
+            _presetPrefabsMenu.Add(add);
+            for (int i = 0; i < _draftPreset.Prefabs.Count; i++)
+            {
+                int index = i;
+                PrefabPlacement placement = _draftPreset.Prefabs[i];
+                string name = placement.Kind == "Ramp" ? "Горка" : "Стенка мячиков";
+                var item = new NativeItem((i + 1) + ". " + name,
+                    "X: " + placement.X.ToString("F1") + "  Y: " + placement.Y.ToString("F1") +
+                    "  Z: " + placement.Z.ToString("F1"));
+                item.Activated += (s, e) =>
+                {
+                    _presetPrefabDeleteMenu.Name = "Удалить префаб?";
+                    _presetPrefabDeleteMenu.Clear();
+                    var no = new NativeItem("Нет, оставить");
+                    no.Activated += (sender, args) => ShowMenu(_presetPrefabDeleteMenu, _presetPrefabsMenu);
+                    _presetPrefabDeleteMenu.Add(no);
+                    var yes = new NativeItem("~r~Да, удалить " + name);
+                    yes.Activated += (sender, args) =>
+                    {
+                        _draftPreset.Prefabs.RemoveAt(index);
+                        CommitPresetEdit();
+                        RefreshPresetPrefabs();
+                        ShowMenu(_presetPrefabDeleteMenu, _presetPrefabsMenu);
+                    };
+                    _presetPrefabDeleteMenu.Add(yes);
+                    ShowMenu(_presetPrefabsMenu, _presetPrefabDeleteMenu);
+                };
+                _presetPrefabsMenu.Add(item);
+            }
+            if (_draftPreset.Prefabs.Count > 0)
+            {
+                var clear = new NativeItem("~r~Очистить список", "Удалить все префабы этого пресета");
+                clear.Activated += (s, e) =>
+                {
+                    _presetPrefabDeleteMenu.Name = "Очистить префабы?";
+                    _presetPrefabDeleteMenu.Clear();
+                    var no = new NativeItem("Нет, оставить");
+                    no.Activated += (sender, args) => ShowMenu(_presetPrefabDeleteMenu, _presetPrefabsMenu);
+                    _presetPrefabDeleteMenu.Add(no);
+                    var yes = new NativeItem("~r~Да, очистить список");
+                    yes.Activated += (sender, args) =>
+                    {
+                        _draftPreset.Prefabs.Clear();
+                        CommitPresetEdit();
+                        RefreshPresetPrefabs();
+                        ShowMenu(_presetPrefabDeleteMenu, _presetPrefabsMenu);
+                    };
+                    _presetPrefabDeleteMenu.Add(yes);
+                    ShowMenu(_presetPrefabsMenu, _presetPrefabDeleteMenu);
+                };
+                _presetPrefabsMenu.Add(clear);
+            }
         }
 
         private void AddPresetToggle(string title, bool initial, Action<bool> changed)
@@ -685,6 +841,32 @@ namespace ModPack.Paint
                 RefreshPresetTextureModels();
             };
             _presetTextureModelsMenu.Add(add);
+            var removeAimed = new NativeItem("~r~Удалить объект под прицелом из списка",
+                "В Object Spooner наведи камеру на объект из списка и нажми Enter");
+            removeAimed.Activated += (s, e) =>
+            {
+                Prop prop = GetAimedTextureProp();
+                if (prop == null)
+                {
+                    GTA.UI.Screen.ShowSubtitle("~y~Наведи камеру Object Spooner на объект.", 3000);
+                    return;
+                }
+                int hash = prop.Model.Hash;
+                var previous = new List<ModelExclusion>(_draftPreset.TextureModels);
+                int removed = _draftPreset.TextureModels.RemoveAll(value => value.Hash == hash);
+                if (removed == 0)
+                {
+                    GTA.UI.Screen.ShowSubtitle("~y~Этой модели нет в списке.", 3000);
+                    return;
+                }
+                if (!CommitPresetEdit())
+                {
+                    _draftPreset.TextureModels.Clear();
+                    _draftPreset.TextureModels.AddRange(previous);
+                }
+                RefreshPresetTextureModels();
+            };
+            _presetTextureModelsMenu.Add(removeAimed);
             foreach (ModelExclusion model in new List<ModelExclusion>(_draftPreset.TextureModels))
             {
                 ModelExclusion selected = model;
@@ -931,7 +1113,7 @@ namespace ModPack.Paint
                 _presetEditMenu.Visible || _presetPaintMenu.Visible || _presetColorsMenu.Visible || _presetModelsMenu.Visible ||
                 _presetPassengerModelsMenu.Visible || _presetTextureModelsMenu.Visible ||
                 _presetWeatherMenu.Visible || _presetCloudMenu.Visible || _presetDeleteMenu.Visible ||
-                _presetClearListMenu.Visible);
+                _presetClearListMenu.Visible || _presetPrefabsMenu.Visible || _presetPrefabDeleteMenu.Visible);
         }
 
         private void ReturnToPresetMenu(NativeMenu parent)
@@ -946,6 +1128,8 @@ namespace ModPack.Paint
             _presetMenuDismissed = true;
             RestoreCloudPreview();
             _presetClearListMenu.Visible = false;
+            _presetPrefabDeleteMenu.Visible = false;
+            _presetPrefabsMenu.Visible = false;
             _clearListParent = null;
             _presetDeleteMenu.Visible = false;
             _presetModelsMenu.Visible = false;
@@ -983,6 +1167,11 @@ namespace ModPack.Paint
                 return;
             }
             _presetRun = ClonePreset(selected);
+            PrefabsPlugin prefabPlugin = PrefabsPlugin.Current;
+            if (prefabPlugin != null)
+                prefabPlugin.ApplyPresetPlacements(_presetRun.SpawnPrefabs ? _presetRun.Prefabs : null);
+            else if (_presetRun.SpawnPrefabs)
+                GTA.UI.Screen.ShowSubtitle("~r~Заготовки не загружены: стриминг не запущен.", 3500);
             _presetStage = PresetStage.Paint;
             _presetPaintTargets = null;
             _presetPaintIndex = _presetPaintedCount = _presetSkippedCount = 0;

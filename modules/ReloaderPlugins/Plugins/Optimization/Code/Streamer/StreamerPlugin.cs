@@ -21,9 +21,8 @@ namespace ModPack.Streamer
         private ObjectPool _pool;
         private MenuManager _menu;
         private string _logPath;
-        private List<PedRecord> _cachedPeds;
         private bool _startPending;
-        private bool _rescanPending;
+        private int _runGeneration;
         private bool _working;
 
         public void OnStart()
@@ -41,9 +40,9 @@ namespace ModPack.Streamer
             _pool = new ObjectPool();
             _menu = new MenuManager(_pool);
             if (_menu.NativeMenu != null) MenuRegistry.Register("Streamer", _menu.NativeMenu);
+            if (_menu.SettingsMenu != null) MenuRegistry.Register("StreamerSettings", _menu.SettingsMenu);
             _menu.SetValues((int)_config.ScanRadius, (int)_config.LoadRadius, (int)_config.ClearRadius, _config.MaxPeds);
-            _menu.StartRequested += () => _startPending = true;
-            _menu.RescanRequested += () => _rescanPending = true;
+            _menu.StartRequested += () => { _runGeneration++; _startPending = true; };
             _menu.StopRequested += ExecuteStop;
             _menu.ValuesChanged += () =>
             {
@@ -67,14 +66,7 @@ namespace ModPack.Streamer
                 if (_startPending)
                 {
                     _startPending = false;
-                    ExecuteRestart();
-                    return;
-                }
-
-                if (_rescanPending)
-                {
-                    _rescanPending = false;
-                    ExecuteRescan();
+                    ExecuteStart();
                     return;
                 }
 
@@ -97,6 +89,7 @@ namespace ModPack.Streamer
         public void OnAbort()
         {
             if (_menu != null && _menu.NativeMenu != null) MenuRegistry.Unregister("Streamer", _menu.NativeMenu);
+            if (_menu != null && _menu.SettingsMenu != null) MenuRegistry.Unregister("StreamerSettings", _menu.SettingsMenu);
             try
             {
                 Log("Завершение, остановка стрима...");
@@ -116,7 +109,7 @@ namespace ModPack.Streamer
                 var dir = Path.GetDirectoryName(_logPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
-                File.AppendAllText(_logPath, DateTime.Now.ToString("HH:mm:ss.fff") + " " + msg + "\n");
+                ModPack.Core.BoundedLog.Append(_logPath, DateTime.Now.ToString("HH:mm:ss.fff") + " " + msg + "\n");
             }
             catch { }
         }
@@ -128,63 +121,14 @@ namespace ModPack.Streamer
             return "scripts";
         }
 
-        private void ExecuteRestart()
-        {
-            if (_working) return;
-
-            if (_cachedPeds == null || _cachedPeds.Count == 0)
-            {
-                ExecuteRescan();
-                return;
-            }
-
-            _working = true;
-            try
-            {
-                _menu.Close();
-                Script.Yield();
-
-                if (_streamerSystem.IsStreaming)
-                {
-                    _streamerSystem.Stop();
-                    Script.Yield();
-                }
-
-                _config.LoadRadius = _menu.LoadRadius;
-                _config.ClearRadius = _menu.UnloadRadius;
-                _config.MaxPeds = _menu.MaxPeds;
-                _config.Save();
-
-                Log("Перезапуск стрима с " + _cachedPeds.Count + " сохранёнными педами");
-                _streamerSystem.Start(_cachedPeds);
-                Script.Yield();
-
-                int chunks = _streamerSystem.TotalChunkCount;
-                GTA.UI.Notification.PostTicker(
-                    "~g~Перезапуск~w~: " + _cachedPeds.Count + " педов, ~g~" + chunks + " чанков.", false, false);
-            }
-            catch (Exception ex)
-            {
-                Log("Ошибка перезапуска: " + ex);
-                GTA.UI.Notification.PostTicker("~r~Ошибка: ~w~" + ex.Message, false, false);
-                try { File.AppendAllText(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
-            }
-            finally
-            {
-                _working = false;
-            }
-        }
-
-        private void ExecuteRescan()
+        private void ExecuteStart()
         {
             if (_working) return;
             _working = true;
+            int generation = _runGeneration;
 
             try
             {
-                _menu.Close();
-                Script.Yield();
-
                 if (_streamerSystem.IsStreaming)
                 {
                     _streamerSystem.Stop();
@@ -200,8 +144,10 @@ namespace ModPack.Streamer
                 Log("Сканирование педов: скан=" + _config.ScanRadius + "м загрузка=" + _config.LoadRadius + "м выгрузка=" + _config.ClearRadius + "м");
                 GTA.UI.Screen.ShowSubtitle("~b~Сканирование педов...", 2000);
                 Script.Yield();
+                if (generation != _runGeneration) return;
 
                 var peds = _captureSystem.CaptureAllPeds(_config.ScanRadius);
+                if (generation != _runGeneration) return;
                 Log("Захвачено педов: " + peds.Count);
 
                 if (peds.Count == 0)
@@ -210,9 +156,7 @@ namespace ModPack.Streamer
                     return;
                 }
 
-                _cachedPeds = peds;
-                _streamerSystem.Start(_cachedPeds);
-                Script.Yield();
+                _streamerSystem.Start(peds);
 
                 int chunks = _streamerSystem.TotalChunkCount;
                 Log("Стрим запущен: " + peds.Count + " педов, " + chunks + " чанков");
@@ -224,10 +168,11 @@ namespace ModPack.Streamer
             {
                 Log("Ошибка сканирования: " + ex);
                 GTA.UI.Notification.PostTicker("~r~Ошибка: ~w~" + ex.Message, false, false);
-                try { File.AppendAllText(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
+                try { ModPack.Core.BoundedLog.Append(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
             }
             finally
             {
+                _menu.SetEnabled(_streamerSystem.IsStreaming);
                 _working = false;
             }
         }
@@ -236,14 +181,17 @@ namespace ModPack.Streamer
         {
             try
             {
+                _runGeneration++;
+                _startPending = false;
                 Log("Остановка стрима...");
                 _streamerSystem.Stop();
+                _menu.SetEnabled(false);
                 GTA.UI.Notification.PostTicker("~y~Загрузка педов остановлена.", false, false);
             }
             catch (Exception ex)
             {
                 Log("Ошибка остановки: " + ex);
-                try { File.AppendAllText(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
+                try { ModPack.Core.BoundedLog.Append(Path.Combine(DataDir(), "error.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + ex + "\n"); } catch { }
             }
         }
     }
@@ -468,14 +416,14 @@ namespace ModPack.Streamer
     public class MenuManager
     {
         private NativeMenu _menu;
+        private NativeMenu _settingsMenu;
+        private NativeItem _toggleItem;
+        private bool _enabled;
         private NativeListItem<int> _scanList;
         private NativeListItem<int> _loadList;
         private NativeListItem<int> _unloadList;
         private NativeListItem<int> _maxPedsList;
-        private NativeItem _startItem;
-        private NativeItem _rescanItem;
-        private NativeItem _stopItem;
-        private NativeItem _debugItem;
+        private NativeItem _settingsItem;
 
         public bool IsOpen { get; private set; }
         public int ScanRadius
@@ -496,61 +444,51 @@ namespace ModPack.Streamer
         }
 
         public event Action StartRequested;
-        public event Action RescanRequested;
         public event Action StopRequested;
         public event Action ValuesChanged;
 
         public NativeMenu NativeMenu { get { return _menu; } }
+        public NativeMenu SettingsMenu { get { return _settingsMenu; } }
 
         public MenuManager(ObjectPool pool)
         {
             try
             {
-                _menu = new NativeMenu("Загрузка педов", "Потоковый режим");
+                _menu = new NativeMenu("Стриминг педов", "Загрузка сохранённых педов");
+                _settingsMenu = new NativeMenu("Настройки стриминга", "Радиусы и лимит педов");
+                _toggleItem = new NativeItem("~g~Включить стриминг", "Захватить педов с текущими настройками");
+                _settingsItem = new NativeItem("~b~Настройки", "Радиусы и лимит педов");
 
                 _scanList = CreateNumberList("Радиус сканирования", 100, 5000, 100);
                 _loadList = CreateNumberList("Радиус загрузки", 5, 2000, 5);
                 _unloadList = CreateNumberList("Радиус выгрузки", 10, 2500, 5);
                 _maxPedsList = CreateNumberList("Лимит педов", 50, 1000, 50);
 
-                _startItem = new NativeItem(
-                    "~g~Перезапустить загрузку",
-                    "Перезапустить загрузку сохранённых педов без нового сканирования");
-                _rescanItem = new NativeItem(
-                    "~y~Сканировать заново",
-                    "Сканировать мир заново и перезапустить поток");
-                _stopItem = new NativeItem(
-                    "~r~Остановить загрузку",
-                    "Остановить загрузку и удалить всех созданных педов");
-                _debugItem = new NativeItem(
-                    "Отладка",
-                    "Показать текущий статус потока");
-
-                _menu.Add(_scanList);
-                _menu.Add(_loadList);
-                _menu.Add(_unloadList);
-                _menu.Add(_maxPedsList);
-                _menu.Add(_startItem);
-                _menu.Add(_rescanItem);
-                _menu.Add(_stopItem);
-                _menu.Add(_debugItem);
-
-                _startItem.Activated += (s, e) =>
+                _menu.Add(_toggleItem);
+                _menu.Add(_settingsItem);
+                _settingsMenu.Add(_scanList);
+                _settingsMenu.Add(_loadList);
+                _settingsMenu.Add(_unloadList);
+                _settingsMenu.Add(_maxPedsList);
+                _toggleItem.Activated += (s, e) =>
                 {
-                    try { if (StartRequested != null) StartRequested(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: StartRequested", ex); }
+                    try
+                    {
+                        if (_enabled) { if (StopRequested != null) StopRequested(); }
+                        else
+                        {
+                            SetEnabled(true);
+                            if (StartRequested != null) StartRequested();
+                        }
+                    }
+                    catch (Exception ex) { PluginLog.Error("MenyooStreamer: Toggle", ex); }
                 };
-                _rescanItem.Activated += (s, e) =>
+                _settingsItem.Activated += (s, e) =>
                 {
-                    try { if (RescanRequested != null) RescanRequested(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: RescanRequested", ex); }
+                    _settingsMenu.Visible = true;
+                    _menu.Visible = false;
                 };
-                _stopItem.Activated += (s, e) =>
-                {
-                    try { if (StopRequested != null) StopRequested(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: StopRequested", ex); }
-                };
-                _debugItem.Activated += (s, e) =>
-                {
-                    try { UpdateDebugInfo(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: UpdateDebugInfo", ex); }
-                };
+                _settingsMenu.Closed += (s, e) => { if (!IsOpen) _menu.Visible = true; };
 
                 _scanList.ItemChanged += (s, e) => { try { if (ValuesChanged != null) ValuesChanged(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: ValuesChanged", ex); } };
                 _loadList.ItemChanged += (s, e) => { try { if (ValuesChanged != null) ValuesChanged(); } catch (Exception ex) { PluginLog.Error("MenyooStreamer: ValuesChanged", ex); } };
@@ -562,6 +500,7 @@ namespace ModPack.Streamer
                 _menu.Shown += (s, e) => IsOpen = true;
 
                 pool.Add(_menu);
+                pool.Add(_settingsMenu);
             }
             catch
             {
@@ -631,11 +570,22 @@ namespace ModPack.Streamer
             }
         }
 
+        public void SetEnabled(bool enabled)
+        {
+            _enabled = enabled;
+            if (_toggleItem == null) return;
+            _toggleItem.Title = enabled ? "~r~Выключить стриминг" : "~g~Включить стриминг";
+            _toggleItem.Description = enabled
+                ? "Остановить поток и удалить созданных им педов"
+                : "Захватить педов с текущими настройками";
+        }
+
         public void Close()
         {
             try
             {
                 IsOpen = false;
+                if (_settingsMenu != null) _settingsMenu.Visible = false;
                 if (_menu != null)
                     _menu.Visible = false;
             }
@@ -658,28 +608,6 @@ namespace ModPack.Streamer
             }
         }
 
-        private void UpdateDebugInfo()
-        {
-            try
-            {
-                int worldPeds = 0;
-                try
-                {
-                    Ped[] allPeds = GTA.World.GetAllPeds();
-                    if (allPeds != null)
-                        worldPeds = allPeds.Length;
-                }
-                catch (Exception ex) { PluginLog.Error("MenyooStreamer: GetAllPeds", ex); }
-                string msg = "Педы в мире: " + worldPeds + "\n" +
-                             "Скан: " + ScanRadius + "м | Загрузка: " + LoadRadius + "м | Выгрузка: " + UnloadRadius + "м";
-
-                if (_menu != null)
-                    _menu.Name = msg;
-            }
-            catch
-            {
-            }
-        }
     }
 
     public class PedCaptureSystem

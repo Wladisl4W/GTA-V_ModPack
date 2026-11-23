@@ -12,6 +12,7 @@ ALIASES = {
     "RemoveDroppedPeds": "Cleanup",
     "FrozenDynamic": "PedControl",
     "MenyooStreamer": "Streamer",
+    "Prefabs": "Prefabs",
     "Development": "Dev",
     "Logs": "Core",
 }
@@ -22,6 +23,7 @@ CODE_PREFIXES = {
     "RemoveDroppedPeds": ("Optimization/Code/Cleanup/",),
     "FrozenDynamic": ("Optimization/Code/PedControl/",),
     "MenyooStreamer": ("Optimization/Code/Streamer/",),
+    "Prefabs": ("Prefabs/Code/",),
     "Development": ("_System/Diagnostics/Code/Dev/", "_System/Shared/Code/"),
     "Logs": ("_System/Shared/Code/",),
 }
