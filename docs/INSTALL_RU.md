@@ -1,10 +1,10 @@
 # Установка и обновление
 
-Для текущей структуры нужен GTA V с Script Hook V, ScriptHookVDotNet3 и LemonUI.SHVDN3. Содержимое [modules](../modules) или единого архива `ModPack-<версия>.zip` копируется прямо в `Grand Theft Auto V/scripts`. Закройте GTA перед заменой `Reloader.dll`.
+Для текущей структуры нужен GTA V с Script Hook V, ScriptHookVDotNet3 и LemonUI.SHVDN3. Содержимое [scripts](../scripts) или единого архива `ModPack-<версия>.zip` копируется прямо в `Grand Theft Auto V/scripts`. Закройте GTA перед заменой `Reloader.dll`.
 
 ## Новая установка
 
-1. Скопируйте содержимое `modules` в `GTA V/scripts`. В результате `scripts/Reloader.dll` и `scripts/ReloaderPlugins/Plugins` должны существовать рядом.
+1. Скопируйте содержимое папки проекта `scripts` в `GTA V/scripts`. В результате `scripts/Reloader.dll` и `scripts/ReloaderPlugins/Plugins` должны существовать рядом.
 2. Запустите GTA. F5 открывает каталог меню. В `scripts/ReloaderPlugins/Plugins/_System/Diagnostics/Data/Loader/Logs/Reloader.log` должна появиться свежая запись загрузки плагинов.
 3. Ped Importer и PedToProp находятся в `scripts/ReloaderPlugins/Tools`; игра их автоматически не запускает.
 
@@ -16,4 +16,4 @@
 
 После запуска проверьте F5, меню камеры K, наличие сохранённых пролёток и свежий журнал загрузчика. Старые данные остальных модов могут остаться как резервная копия; новая версия пишет их в папки соответствующих меню. Системные пути CrashWatcher и дампов требуют отдельной перенастройки: до её проверки не удаляйте `Plugins/Crash/Data` и `Plugins/Crash/Tools`.
 
-Исторический установщик и пять раздельных архивов версии 2.0 описаны в [старой инструкции](releases/v2.0.0.md). Текущий единый архив и шаги перехода описаны в [примечаниях к 2.1.0](releases/v2.1.0.md). Menyoo, AddonPeds и игровые архивы GTA не входят в обновление.
+Исторический установщик и пять раздельных архивов версии 2.0 описаны в [старой инструкции](releases/v2.0.0.md). Переход на текущую структуру и удаление прежних файлов Ped Importer и PedToProp описаны в [примечаниях к 3.0.0](releases/v3.0.0.md). Menyoo, AddonPeds и игровые архивы GTA не входят в обновление.

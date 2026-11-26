@@ -1,24 +1,17 @@
 # GTA V ModPack
 
-Скриптовые моды и инструменты для GTA V. [Установка и обновление](docs/INSTALL_RU.md) · [Моды и клавиши](docs/MODS_RU.md) · [Карта структуры](docs/STRUCTURE_RU.md) · [Дорожная карта](docs/ROADMAP_RU.md) · [Руководство разработчика](docs/DEVELOPMENT_RU.md) · [Итог проверки](docs/FINAL_AUDIT_RU.md).
+Скриптовые моды и инструменты для GTA V. [Установка и обновление](docs/INSTALL_RU.md) · [Моды и клавиши](docs/MODS_RU.md) · [Структура](docs/STRUCTURE_RU.md) · [Разработка](docs/DEVELOPMENT_RU.md) · [Дорожная карта](docs/ROADMAP_RU.md).
 
 ## Где что лежит
 
 | Папка | Назначение |
 | --- | --- |
-| [`modules`](modules) | Готовая для копирования в `GTA V/scripts` папка: загрузчик, игровые `.cs` и инструменты. |
-| [`development`](development) | Проекты сборки, тесты и техническая документация модулей. |
-| [`docs`](docs) | Инструкции, структура, дорожная карта и история проекта. |
-| [`tools`](tools) | Команды сборки, доставки и проверок. |
-| [`catalog`](catalog) | Машинный реестр модулей и шаблон поисковой карты. |
-| [`assets`](assets) | Локальные рабочие ресурсы; модели не входят в релиз. |
-| `dist` | Создаваемая сборкой поставка и ZIP; не хранится в Git. |
-| `.modpack-local` | Локальная карта, резервные копии и служебные файлы; не хранится в Git. |
+| [`scripts`](scripts) | Переносимая папка: её содержимое копируется в `GTA V/scripts`. |
+| [`docs`](docs) | Инструкции, карта меню, соглашения и история проекта. |
+| [`development`](development) | Исходники загрузчика и инструментов, сборка, тесты, реестр, ресурсы и локальные результаты. |
 
-В корне находятся `modpack.cmd` для команд проекта, `modpack.example.json` как пример настроек и личный `modpack.local.json` с путём к GTA. Папки `.git`, `.github`, `.agents` и `.codex` используются Git, GitHub и инструментами разработки.
+В `development/Loader` находятся исходники `Reloader.dll`; готовый DLL лежит в `scripts`. Скрипты сборки — в `development/build`, машинный реестр — в `development/registry`, исходники Ped Importer и PedToProp — в `scripts/ReloaderPlugins/Tools`. Рабочие ресурсы лежат в `development/assets`, новые неразобранные файлы временно складываются в `development/inbox`. Локальные результаты и личные настройки находятся в `development/.build`, `development/.local` и `development/config`.
 
-Папки игровых меню находятся в `modules/ReloaderPlugins/Plugins`; у каждого меню и подраздела есть README. Проекты сборки и тесты находятся в `development`. Человеческий список модов и клавиш — в [индексе](docs/MODS_RU.md), машинный реестр — в [`catalog/modules.json`](catalog/modules.json). Для поиска по проекту выполните `modpack.cmd Map`.
+В корне остались `README.md`, команда `modpack.cmd` и служебные файлы Git и инструментов разработки. README отдельных игровых модов находятся рядом с их кодом в `scripts/ReloaderPlugins/Plugins`.
 
-`modpack.cmd Check` проверяет код без изменения переносимой папки. `modpack.cmd Build` собирает загрузчик и инструменты в `modules`. `tools/package-release.ps1` создаёт один проверенный ZIP в `dist/releases`; содержимое архива копируется прямо в `GTA V/scripts`. При переходе со старой структуры прочитайте [инструкцию обновления](docs/INSTALL_RU.md): обычное копирование не удаляет старые `.cs`. [Реестр данных и правила доставки](docs/DATA_AND_DELIVERY_RU.md).
-
-Menyoo и AddonPeds — внешние программы; их структура не входит в модпак. Собственные изображения и архивы учтены в [реестре ресурсов](docs/ASSETS_RU.md) и не входят в поставку плагинов.
+`modpack.cmd Check` проверяет код, `modpack.cmd Build` обновляет готовые файлы в `scripts`, `modpack.cmd Map` открывает локальную карту проекта. [Сборка релиза](development/build/package-release.ps1) создаёт проверенный ZIP в `development/.build/releases` из содержимого `scripts`. Menyoo и AddonPeds остаются внешними программами и в модпак не входят.

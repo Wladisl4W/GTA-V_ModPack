@@ -2,7 +2,7 @@
 param([switch]$Simulated)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path (Split-Path (Split-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) -Parent) -Parent) -Parent
-$settings = Get-Content -LiteralPath (Join-Path $repo 'modpack.local.json') -Raw | ConvertFrom-Json
+$settings = Get-Content -LiteralPath (Join-Path $repo 'development/config/modpack.local.json') -Raw | ConvertFrom-Json
 $tool = Join-Path $settings.GameDirectory 'scripts\ReloaderPlugins\Plugins\_System\Diagnostics\Data\Crash\Tools\procdump64.exe'
 if (!$Simulated -and !(Test-Path -LiteralPath $tool)) { throw 'Enable CrashCapture first to install signed ProcDump.' }
 $watcher = Join-Path $repo 'development/Crash\src\bin\Release\net48\CrashWatcher.exe'

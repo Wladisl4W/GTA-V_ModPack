@@ -27,9 +27,9 @@ jobs:
       - name: Verify documentation and data ownership
         shell: pwsh
         run: |
-          python tools/test-docs.py
+          python development/build/test-docs.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tools/test-data-ownership.py
+          python development/build/test-data-ownership.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Prepare pinned loader build references
@@ -56,9 +56,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          & pwsh -NoProfile -File tools/package-release.ps1 -Version ($env:RELEASE_TAG.TrimStart('v'))
+          & pwsh -NoProfile -File development/build/package-release.ps1 -Version ($env:RELEASE_TAG.TrimStart('v'))
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tools/test-assets.py
+          python development/build/test-assets.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish verified archive
@@ -66,7 +66,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $releaseVersion = $env:RELEASE_TAG.TrimStart('v')
-          $archive = "dist/releases/ModPack-$releaseVersion.zip"
+          $archive = "development/.build/releases/ModPack-$releaseVersion.zip"
           if (!(Test-Path -LiteralPath $archive)) { throw "Missing release archive: $archive" }
           $notes = "docs/releases/$env:RELEASE_TAG.md"
           if (!(Test-Path -LiteralPath $notes)) { throw "Missing release notes: $notes" }

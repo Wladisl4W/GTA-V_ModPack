@@ -1,6 +1,6 @@
 # Инвентаризация GTA V ModPack
 
-Исторический снимок перед этапом 3, на 20 ноября 2026 года. **Пути и имена ниже устарели.** Текущая структура описана в [`STRUCTURE_RU.md`](STRUCTURE_RU.md). Машинный реестр: [`catalog/modules.json`](../catalog/modules.json). Предыдущие предложения по именам находятся в [`NAMING_MAP_RU.md`](NAMING_MAP_RU.md).
+Исторический снимок перед этапом 3, на 20 ноября 2026 года. **Пути и имена ниже устарели.** Текущая структура описана в [`STRUCTURE_RU.md`](STRUCTURE_RU.md). Машинный реестр: [`development/registry/modules.json`](../development/registry/modules.json). Предыдущие предложения по именам находятся в [`NAMING_MAP_RU.md`](NAMING_MAP_RU.md).
 
 ## Модули
 
@@ -65,11 +65,11 @@
 | `release-notes`, `README.txt`, `DEVELOPMENT_RU.md`, `MODPACK_DEVELOPMENT.md`, `STRUCTURE_RU.md`, `ROADMAP_RU.md` | Документация разных уровней; свести ссылки и убрать дубли после утверждения канонических мест. |
 | `.github/workflows` | Действующая автоматизация GitHub, должна оставаться в корне репозитория. |
 | `.agents/skills/gta-modpack` | Локальные инструкции работы с проектом; обновлять вместе с реальными путями. |
-| `.modpack-local`, `modpack.local.json`, локальные логи и резервные копии | Данные рабочего ПК, не включать в релиз. `ScriptHookV.log` сейчас виден как локальный неотслеживаемый файл. |
+| `development/.local`, `development/config/modpack.local.json`, локальные логи и резервные копии | Данные рабочего ПК, не включать в релиз. `ScriptHookV.log` сейчас виден как локальный неотслеживаемый файл. |
 
 ## Жёсткие пути и границы
 
-- `tools/modpack.ps1` использует `Ready To Use/ReloaderPlugins/Plugins`; `tools/build-project-map.ps1` — `Source Code/Plugins`; `Source Code/Reloader/PluginCompiler.cs` ищет исходники в корне и `<Module>/Code`. При переносе менять согласованно с тестами.
+- `development/build/modpack.ps1` использует `Ready To Use/ReloaderPlugins/Plugins`; `development/build/build-project-map.ps1` — `Source Code/Plugins`; `Source Code/Reloader/PluginCompiler.cs` ищет исходники в корне и `<Module>/Code`. При переносе менять согласованно с тестами.
 - `.github/workflows/release.yml` сейчас выбирает только файлы непосредственно из корня `Ready To Use/ReloaderPlugins/Plugins`. Вложенные каталоги модулей в релизный архив так не попадут. Исправление и проверка состава ZIP — задача этапа 3 **до публикации**.
 - Старые имена `ModdedCamera`, `RainbowPaint`, `SharkRider`, `RemoveDroppedPeds`, `FrozenDynamic`, `MenyooStreamer`, `Development`, `Logs` обслуживаются `PluginStorage`; переименование этих ключей требует проверки миграции и резервных копий.
 - Menyoo и AddonPeds — внешние программы и данные. Их дерево и файлы не перестраивать. Документировать только интеграцию и изменения, которые инструменты модпака делают по команде пользователя.

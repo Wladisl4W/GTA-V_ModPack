@@ -22,7 +22,7 @@
 
 ## Исходники и проверка
 
-Код: [Reloader.cs](src/Reloader.cs), [PluginCompiler.cs](src/PluginCompiler.cs). Сборка: `tools/build-loader.cmd`; тест: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File development/Loader/tests/test-reloader.ps1`. Проверяйте свежую запись `Reload OK` и число плагинов в журнале игры.
+Код: [Reloader.cs](src/Reloader.cs), [PluginCompiler.cs](src/PluginCompiler.cs). Сборка: `development/build/build-loader.cmd`; тест: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File development/Loader/tests/test-reloader.ps1`. Проверяйте свежую запись `Reload OK` и число плагинов в журнале игры.
 
 ## Обновление и откат
 

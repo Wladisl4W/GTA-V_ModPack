@@ -2,18 +2,18 @@
 
 ## Переносимая папка
 
-Содержимое [modules](../modules) соответствует `GTA V/scripts`: в корне находятся `Reloader.dll`, `README.md` и `ReloaderPlugins`. Папка `ReloaderPlugins/Plugins` содержит меню `Camera`, `Templates`, `Optimization`, `VehiclePaint`, `Misc`, `Animations`, `Prefabs`, `SlowMo`, `Catalog` и служебную `_System`. В `ReloaderPlugins/Tools` находятся Ped Importer и PedToProp. [Карта меню](MENU_CODE_RU.md) показывает клавиши и владельцев кода.
+Содержимое [scripts](../scripts) соответствует `GTA V/scripts`: в корне находятся `Reloader.dll` и `ReloaderPlugins`. Папка `ReloaderPlugins/Plugins` содержит игровые меню и служебную `_System`. В `ReloaderPlugins/Tools` находятся Ped Importer и PedToProp. У каждого инструмента в корне только файл запуска `.cmd` и папка `Files` с `Runtime`, `Source`, `Tests` и инструкциями. [Карта меню](MENU_CODE_RU.md) показывает клавиши и владельцев кода.
 
 Внутри каждого меню `Code` содержит игровые `.cs`. Для сложных меню есть одинаково названные подразделы в `Code` и `Data`: например, `Misc/Code/Wildlife` и игровая `Misc/Data/Wildlife`. Пользовательских настроек, журналов и пролёток в репозитории нет. Папки `Data` создаются в установленной GTA. Сохранённые пролётки находятся в `Camera/Data/Paths`.
 
-Исходники Reloader, проекты сборки, тесты и технические README лежат в [development](../development). Скрипты сборки и проверки — в [tools](../tools), реестр исходников — в [catalog/modules.json](../catalog/modules.json). `dist` и `.modpack-local` — локальные результаты и резервные копии, в Git не входят. Menyoo и AddonPeds находятся вне модпака.
+Исходники Reloader, CrashWatcher, общие тесты и сборочная инфраструктура лежат в [development](../development). Исходники и тесты отдельных программ находятся рядом с ними в `scripts/ReloaderPlugins/Tools`. Скрипты сборки и проверки — в [development/build](../development/build), реестр исходников — в [development/registry/modules.json](../development/registry/modules.json). `development/.build` и `development/.local` — локальные результаты и резервные копии, в Git не входят. Menyoo и AddonPeds находятся вне модпака.
 
 ## Команды
 
 - `modpack.cmd Check` проверяет компиляцию игровых исходников и строит CrashWatcher в `development`, не обновляя переносимую папку.
-- `modpack.cmd Build` после проверки обновляет `modules/Reloader.dll`, оба инструмента и файлы CrashWatcher.
-- `modpack.cmd Map` строит локальную поисковую карту `.modpack-local/project-map.html`.
-- `tools/package-release.ps1` создаёт один ZIP из содержимого `modules`, распаковывает его во временную папку и сравнивает все файлы по SHA-256.
+- `modpack.cmd Build` после проверки обновляет `scripts/Reloader.dll`, оба инструмента и файлы CrashWatcher.
+- `modpack.cmd Map` строит локальную поисковую карту `development/.local/project-map.html`.
+- `development/build/package-release.ps1` создаёт один ZIP из содержимого `scripts`, распаковывает его во временную папку и сравнивает все файлы по SHA-256.
 
 ## Обновление существующей GTA
 

@@ -25,7 +25,7 @@
 
 ## Исходники и проверка
 
-Плагин: [CrashPlugin.cs](../../modules/ReloaderPlugins/Plugins/_System/Diagnostics/Code/Crash/CrashPlugin.cs), наблюдатель: [Program.cs](src/Program.cs). Проверка: `modpack.cmd Check` и профильные тесты в `development/Crash/tests`. Реальный дамп подтверждается только фактическим сбоем и проверкой файлов сессии.
+Плагин: [CrashPlugin.cs](../../scripts/ReloaderPlugins/Plugins/_System/Diagnostics/Code/Crash/CrashPlugin.cs), наблюдатель: [Program.cs](src/Program.cs). Проверка: `modpack.cmd Check` и профильные тесты в `development/Crash/tests`. Реальный дамп подтверждается только фактическим сбоем и проверкой файлов сессии.
 
 ## Обновление и откат
 

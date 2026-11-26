@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ModPackCoreTests.cs" />
+    <Compile Include="../../../scripts/ReloaderPlugins/Plugins/_System/Shared/Code/CoreServices.cs" Link="Core.cs" />
+    <Compile Include="../../../scripts/ReloaderPlugins/Plugins/_System/Shared/Code/ControlSession.cs" Link="Control.cs" />
+    <Compile Include="../../../scripts/ReloaderPlugins/Plugins/_System/Shared/Code/PluginStorage.cs" Link="Storage.cs" />
+  </ItemGroup>
+</Project>
